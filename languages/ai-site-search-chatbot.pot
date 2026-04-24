@@ -1,0 +1,181 @@
+# Copyright (C) 2026 GitHub Copilot, shokun0803
+# This file is distributed under the same license as the AI Site Search Chatbot package.
+msgid ""
+msgstr ""
+"Project-Id-Version: AI Site Search Chatbot 0.1.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-04-24 00:00:00+0000\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: \n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: includes/class-ai-site-search-chatbot.php:26
+msgid "AI Site Search Chatbot"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:27
+msgid "Configure the AI provider and the prompt used when answering visitors with site search results."
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:35
+msgid "AI Provider"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:57
+msgid "API Key"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:65
+msgid "Model"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:66
+msgid "Loading models..."
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:68
+msgid "The AI model to use for generating answers."
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:72
+msgid "System Prompt"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:78
+msgid "The system prompt that instructs the AI on how to behave."
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:82
+msgid "Maximum Sources"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:84
+msgid "Maximum number of search results to use as sources."
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:106
+msgid "How to get your API Key:"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:118
+msgid "Note:"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:138
+msgid "OpenAI"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:139
+msgid "GPT-4, GPT-3.5 Turbo and more"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:143
+msgid "Go to https://platform.openai.com/api-keys"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:144
+msgid "Sign in or create an OpenAI account"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:145
+msgid "Click \"Create new secret key\""
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:146
+msgid "Copy the generated API key and paste it above"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:148
+msgid "Requires a paid OpenAI account with available credits."
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:152
+msgid "Claude (Anthropic)"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:153
+msgid "Claude 3 Opus, Sonnet, Haiku and more"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:157
+msgid "Visit https://console.anthropic.com/"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:158
+msgid "Sign in or create an Anthropic account"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:159
+msgid "Navigate to the API keys section"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:160
+msgid "Generate a new API key"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:191
+#: includes/class-ai-site-search-chatbot.php:161
+msgid "Copy and paste the key above"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:193
+msgid "Gemini 2.0 Flash offers free tier with rate limiting. Check pricing for higher usage."
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:38
+msgid "You are a public website assistant. Answer only from the provided site search results. If the answer is not present, say so clearly and suggest related pages."
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:418
+msgid "Ask about this site"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:419
+msgid "Hi, ask me about this site and I will search the content for you."
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:433
+msgid "Site Assistant"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:437
+msgid "Chat messages"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:440
+msgid "Your question"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:441
+msgid "Ask a question about products, services, or help pages..."
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:442
+msgid "Send"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:634
+msgid "Thinking..."
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:635
+msgid "Sources"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:636
+msgid "The chatbot is temporarily unavailable. Please try again later."
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:860
+msgid "No matching content was found on this site. Try a different keyword or open a more specific page."
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:865
+msgid "I found some related pages on this site:"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:870
+msgid "If you want, I can search again with a narrower keyword."
+msgstr ""

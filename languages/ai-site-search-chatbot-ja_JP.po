@@ -1,0 +1,186 @@
+# Copyright (C) 2026 GitHub Copilot, shokun0803
+# This file is distributed under the same license as the AI Site Search Chatbot package.
+# Translators:
+msgid ""
+msgstr ""
+"Project-Id-Version: AI Site Search Chatbot 0.1.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-04-24 00:00:00+0000\n"
+"PO-Revision-Date: 2026-04-24 00:00:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: Japanese\n"
+"Language: ja\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"X-Generator: Poedit 3.0\n"
+
+#: includes/class-ai-site-search-chatbot.php:26
+msgid "AI Site Search Chatbot"
+msgstr "AI サイト検索チャットボット"
+
+#: includes/class-ai-site-search-chatbot.php:27
+msgid "Configure the AI provider and the prompt used when answering visitors with site search results."
+msgstr "AI プロバイダーと、サイト検索結果を使用して訪問者に答える際に使用するプロンプトを設定します。"
+
+#: includes/class-ai-site-search-chatbot.php:35
+msgid "AI Provider"
+msgstr "AI プロバイダー"
+
+#: includes/class-ai-site-search-chatbot.php:57
+msgid "API Key"
+msgstr "API キー"
+
+#: includes/class-ai-site-search-chatbot.php:65
+msgid "Model"
+msgstr "モデル"
+
+#: includes/class-ai-site-search-chatbot.php:66
+msgid "Loading models..."
+msgstr "モデルを読み込み中..."
+
+#: includes/class-ai-site-search-chatbot.php:68
+msgid "The AI model to use for generating answers."
+msgstr "回答を生成するために使用する AI モデル。"
+
+#: includes/class-ai-site-search-chatbot.php:72
+msgid "System Prompt"
+msgstr "システムプロンプト"
+
+#: includes/class-ai-site-search-chatbot.php:78
+msgid "The system prompt that instructs the AI on how to behave."
+msgstr "AI の動作方法を指示するシステムプロンプト。"
+
+#: includes/class-ai-site-search-chatbot.php:82
+msgid "Maximum Sources"
+msgstr "最大ソース数"
+
+#: includes/class-ai-site-search-chatbot.php:84
+msgid "Maximum number of search results to use as sources."
+msgstr "ソースとして使用する検索結果の最大数。"
+
+#: includes/class-ai-site-search-chatbot.php:106
+msgid "How to get your API Key:"
+msgstr "API キーの取得方法："
+
+#: includes/class-ai-site-search-chatbot.php:118
+msgid "Note:"
+msgstr "注意："
+
+#: includes/class-ai-site-search-chatbot.php:138
+msgid "OpenAI"
+msgstr "OpenAI"
+
+#: includes/class-ai-site-search-chatbot.php:139
+msgid "GPT-4, GPT-3.5 Turbo and more"
+msgstr "GPT-4、GPT-3.5 Turbo など"
+
+#: includes/class-ai-site-search-chatbot.php:143
+msgid "Go to https://platform.openai.com/api-keys"
+msgstr "https://platform.openai.com/api-keys にアクセス"
+
+#: includes/class-ai-site-search-chatbot.php:144
+msgid "Sign in or create an OpenAI account"
+msgstr "OpenAI アカウントにサインインするか、作成する"
+
+#: includes/class-ai-site-search-chatbot.php:145
+msgid "Click \"Create new secret key\""
+msgstr "「新しいシークレット キーを作成」をクリック"
+
+#: includes/class-ai-site-search-chatbot.php:146
+msgid "Copy the generated API key and paste it above"
+msgstr "生成された API キーをコピーして上に貼り付け"
+
+#: includes/class-ai-site-search-chatbot.php:148
+msgid "Requires a paid OpenAI account with available credits."
+msgstr "利用可能なクレジットを持つ有料 OpenAI アカウントが必要です。"
+
+#: includes/class-ai-site-search-chatbot.php:152
+msgid "Claude (Anthropic)"
+msgstr "Claude (Anthropic)"
+
+#: includes/class-ai-site-search-chatbot.php:153
+msgid "Claude 3 Opus, Sonnet, Haiku and more"
+msgstr "Claude 3 Opus、Sonnet、Haiku など"
+
+#: includes/class-ai-site-search-chatbot.php:157
+msgid "Visit https://console.anthropic.com/"
+msgstr "https://console.anthropic.com/ にアクセス"
+
+#: includes/class-ai-site-search-chatbot.php:158
+msgid "Sign in or create an Anthropic account"
+msgstr "Anthropic アカウントにサインインするか、作成する"
+
+#: includes/class-ai-site-search-chatbot.php:159
+msgid "Navigate to the API keys section"
+msgstr "API キーセクションに移動"
+
+#: includes/class-ai-site-search-chatbot.php:160
+msgid "Generate a new API key"
+msgstr "新しい API キーを生成"
+
+#: includes/class-ai-site-search-chatbot.php:191
+#: includes/class-ai-site-search-chatbot.php:161
+msgid "Copy and paste the key above"
+msgstr "キーをコピーして上に貼り付け"
+
+#: includes/class-ai-site-search-chatbot.php:193
+msgid "Gemini 2.0 Flash offers free tier with rate limiting. Check pricing for higher usage."
+msgstr "Gemini 2.0 Flash はレート制限付きの無料ティアを提供しています。より高い使用量については価格を確認してください。"
+
+#: includes/class-ai-site-search-chatbot.php:38
+msgid "You are a public website assistant. Answer only from the provided site search results. If the answer is not present, say so clearly and suggest related pages."
+msgstr "あなたは公開ウェブサイトのアシスタントです。提供されたサイト検索結果からのみ回答してください。答えが存在しない場合は、明確にそう述べ、関連ページを提案してください。"
+
+#: includes/class-ai-site-search-chatbot.php:418
+msgid "Ask about this site"
+msgstr "このサイトについて質問"
+
+#: includes/class-ai-site-search-chatbot.php:419
+msgid "Hi, ask me about this site and I will search the content for you."
+msgstr "こんにちは、このサイトについて質問していただければ、コンテンツを検索します。"
+
+#: includes/class-ai-site-search-chatbot.php:433
+msgid "Site Assistant"
+msgstr "サイトアシスタント"
+
+#: includes/class-ai-site-search-chatbot.php:437
+msgid "Chat messages"
+msgstr "チャットメッセージ"
+
+#: includes/class-ai-site-search-chatbot.php:440
+msgid "Your question"
+msgstr "あなたの質問"
+
+#: includes/class-ai-site-search-chatbot.php:441
+msgid "Ask a question about products, services, or help pages..."
+msgstr "製品、サービス、またはヘルプページについて質問..."
+
+#: includes/class-ai-site-search-chatbot.php:442
+msgid "Send"
+msgstr "送信"
+
+#: includes/class-ai-site-search-chatbot.php:634
+msgid "Thinking..."
+msgstr "考え中..."
+
+#: includes/class-ai-site-search-chatbot.php:635
+msgid "Sources"
+msgstr "ソース"
+
+#: includes/class-ai-site-search-chatbot.php:636
+msgid "The chatbot is temporarily unavailable. Please try again later."
+msgstr "チャットボットは一時的に利用できません。後でもう一度お試しください。"
+
+#: includes/class-ai-site-search-chatbot.php:860
+msgid "No matching content was found on this site. Try a different keyword or open a more specific page."
+msgstr "このサイトでは一致するコンテンツが見つかりません。別のキーワードを試すか、より具体的なページを開いてください。"
+
+#: includes/class-ai-site-search-chatbot.php:865
+msgid "I found some related pages on this site:"
+msgstr "このサイトで関連ページが見つかりました："
+
+#: includes/class-ai-site-search-chatbot.php:870
+msgid "If you want, I can search again with a narrower keyword."
+msgstr "必要に応じて、より絞り込まれたキーワードで再度検索できます。"

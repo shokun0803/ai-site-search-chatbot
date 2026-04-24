@@ -38,7 +38,7 @@ final class AISite_Search_Chatbot {
 			'ai_provider'   => 'openai',
 			'api_key'       => '',
 			'model'         => 'gpt-4o-mini',
-			'system_prompt' => 'You are a public website assistant. Answer only from the provided site search results. If the answer is not present, say so clearly and suggest related pages.',
+			'system_prompt' => __( 'You are a public website assistant. Answer only from the provided site search results. If the answer is not present, say so clearly and suggest related pages.', 'ai-site-search-chatbot' ),
 			'max_sources'   => 5,
 		);
 	}
@@ -100,42 +100,17 @@ final class AISite_Search_Chatbot {
 		}
 
 		$settings = self::get_settings();
-		$providers = array(
-			'openai'         => array(
-				'label'        => 'OpenAI',
-				'description'  => __( 'GPT-4, GPT-3.5 Turbo など', 'ai-site-search-chatbot' ),
-				'models'       => array( 'gpt-4o', 'gpt-4o-mini', 'gpt-4', 'gpt-3.5-turbo' ),
-				'default_model' => 'gpt-4o-mini',
-			),
-			'claude'         => array(
-				'label'        => 'Claude (Anthropic)',
-				'description'  => __( 'Claude 3 Opus, Sonnet, Haiku など', 'ai-site-search-chatbot' ),
-				'models'       => array( 'claude-3-5-sonnet-20241022', 'claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307' ),
-				'default_model' => 'claude-3-5-sonnet-20241022',
-			),
-			'github-copilot' => array(
-				'label'        => 'GitHub Copilot',
-				'description'  => __( 'GitHub Copilot API を使用', 'ai-site-search-chatbot' ),
-				'models'       => array( 'gpt-4', 'gpt-3.5-turbo' ),
-				'default_model' => 'gpt-4',
-			),
-			'gemini'         => array(
-				'label'        => 'Google Gemini',
-				'description'  => __( 'Gemini 2.0 Flash, Gemini 1.5 Pro など', 'ai-site-search-chatbot' ),
-				'models'       => array( 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-1.0-pro' ),
-				'default_model' => 'gemini-2.0-flash',
-			),
-		);
+		$providers = self::get_providers_config();
 		?>
 		<div class="wrap">
-			<h1><?php echo esc_html__( 'AI Site Search Chatbot', 'ai-site-search-chatbot' ); ?></h1>
-			<p><?php echo esc_html__( 'Configure the AI provider and the prompt used when answering visitors with site search results.', 'ai-site-search-chatbot' ); ?></p>
+			<h1><?php echo esc_html( __( 'AI Site Search Chatbot', 'ai-site-search-chatbot' ) ); ?></h1>
+			<p><?php echo esc_html( __( 'Configure the AI provider and the prompt used when answering visitors with site search results.', 'ai-site-search-chatbot' ) ); ?></p>
 			<form method="post" action="options.php" id="aiscb-settings-form">
 				<?php settings_fields( self::OPTION_GROUP ); ?>
 				
 				<!-- AI Provider Selection -->
 				<div class="aiscb-provider-selector" style="margin-bottom: 2rem; padding: 1.5rem; background: #f5f5f5; border-radius: 8px;">
-					<h2 style="margin-top: 0; margin-bottom: 1rem; color: #333;"><?php echo esc_html__( 'AI Provider', 'ai-site-search-chatbot' ); ?></h2>
+					<h2 style="margin-top: 0; margin-bottom: 1rem; color: #333;"><?php echo esc_html( __( 'AI Provider', 'ai-site-search-chatbot' ) ); ?></h2>
 					<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
 						<?php foreach ( $providers as $provider_key => $provider_info ) : ?>
 							<label style="padding: 1rem; background: #fff; border: 2px solid #ddd; border-radius: 8px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 0.75rem;" class="aiscb-provider-option" data-provider="<?php echo esc_attr( $provider_key ); ?>">
@@ -156,35 +131,42 @@ final class AISite_Search_Chatbot {
 					</div>
 				</div>
 
+				<!-- Provider Information Panel -->
+				<div id="aiscb-provider-info" style="margin-bottom: 2rem; padding: 1.5rem; background: #e8f4f8; border-left: 4px solid #0073aa; border-radius: 4px;">
+					<div id="aiscb-provider-info-content"></div>
+				</div>
+
 				<table class="form-table" role="presentation">
 					<tr>
-						<th scope="row"><label for="aiscb_api_key"><?php echo esc_html__( 'API Key', 'ai-site-search-chatbot' ); ?></label></th>
+						<th scope="row"><label for="aiscb_api_key"><?php echo esc_html( __( 'API Key', 'ai-site-search-chatbot' ) ); ?></label></th>
 						<td>
 							<input type="password" class="regular-text" id="aiscb_api_key" name="<?php echo esc_attr( self::OPTION_KEY ); ?>[api_key]" value="<?php echo esc_attr( $settings['api_key'] ); ?>" autocomplete="off" />
 							<p class="description" id="aiscb_api_key_help"></p>
 						</td>
 					</tr>
 					<tr>
-						<th scope="row"><label for="aiscb_model"><?php echo esc_html__( 'Model', 'ai-site-search-chatbot' ); ?></label></th>
+						<th scope="row"><label for="aiscb_model"><?php echo esc_html( __( 'Model', 'ai-site-search-chatbot' ) ); ?></label></th>
 						<td>
 							<div id="aiscb_model_container">
 								<select id="aiscb_model" name="<?php echo esc_attr( self::OPTION_KEY ); ?>[model]" class="regular-text">
-									<option><?php echo esc_html__( 'Loading models...', 'ai-site-search-chatbot' ); ?></option>
+									<option><?php echo esc_html( __( 'Loading models...', 'ai-site-search-chatbot' ) ); ?></option>
 								</select>
-								<p class="description"><?php echo esc_html__( 'The AI model to use for generating answers.', 'ai-site-search-chatbot' ); ?></p>
+								<p class="description"><?php echo esc_html( __( 'The AI model to use for generating answers.', 'ai-site-search-chatbot' ) ); ?></p>
 							</div>
 						</td>
 					</tr>
 					<tr>
-						<th scope="row"><label for="aiscb_system_prompt"><?php echo esc_html__( 'System Prompt', 'ai-site-search-chatbot' ); ?></label></th>
+						<th scope="row"><label for="aiscb_system_prompt"><?php echo esc_html( __( 'System Prompt', 'ai-site-search-chatbot' ) ); ?></label></th>
 						<td>
 							<textarea class="large-text" rows="7" id="aiscb_system_prompt" name="<?php echo esc_attr( self::OPTION_KEY ); ?>[system_prompt]"><?php echo esc_textarea( $settings['system_prompt'] ); ?></textarea>
+							<p class="description"><?php echo esc_html( __( 'The system prompt that instructs the AI on how to behave.', 'ai-site-search-chatbot' ) ); ?></p>
 						</td>
 					</tr>
 					<tr>
-						<th scope="row"><label for="aiscb_max_sources"><?php echo esc_html__( 'Maximum Sources', 'ai-site-search-chatbot' ); ?></label></th>
+						<th scope="row"><label for="aiscb_max_sources"><?php echo esc_html( __( 'Maximum Sources', 'ai-site-search-chatbot' ) ); ?></label></th>
 						<td>
 							<input type="number" min="1" max="10" id="aiscb_max_sources" name="<?php echo esc_attr( self::OPTION_KEY ); ?>[max_sources]" value="<?php echo esc_attr( (string) absint( $settings['max_sources'] ) ); ?>" />
+							<p class="description"><?php echo esc_html( __( 'Maximum number of search results to use as sources.', 'ai-site-search-chatbot' ) ); ?></p>
 						</td>
 					</tr>
 				</table>
@@ -201,13 +183,26 @@ final class AISite_Search_Chatbot {
 				border-color: #0073aa;
 				background-color: #f9f9f9;
 			}
-			.aiscb-provider-option input[type="radio"]:checked + div,
-			.aiscb-provider-option input:checked ~ div {
+			.aiscb-provider-option input[type="radio"]:checked ~ div {
 				color: #0073aa;
 			}
-			.aiscb-provider-option input[type="radio"]:checked ~ * {
-				border-color: #0073aa;
-				box-shadow: 0 0 0 2px rgba(0, 115, 170, 0.1);
+			.aiscb-provider-option input[type="radio"]:checked {
+				outline: 2px solid #0073aa;
+			}
+			.aiscb-provider-info-item {
+				margin-bottom: 1rem;
+			}
+			.aiscb-provider-info-item strong {
+				display: block;
+				margin-bottom: 0.25rem;
+				color: #333;
+			}
+			.aiscb-provider-info-item ul {
+				margin: 0.5rem 0 0 1.5rem;
+				padding: 0;
+			}
+			.aiscb-provider-info-item li {
+				margin-bottom: 0.25rem;
 			}
 		</style>
 
@@ -216,6 +211,46 @@ final class AISite_Search_Chatbot {
 			const providers = <?php echo wp_json_encode( $providers ); ?>;
 			const currentProvider = '<?php echo esc_js( $settings['ai_provider'] ); ?>';
 			const currentModel = '<?php echo esc_js( $settings['model'] ); ?>';
+
+			function formatProviderInfo( provider ) {
+				let html = '';
+				
+				if ( provider.setup_steps ) {
+					html += '<div class="aiscb-provider-info-item">';
+					html += '<strong><?php echo esc_js( __( 'How to get your API Key:', 'ai-site-search-chatbot' ) ); ?></strong>';
+					html += '<ol>';
+					provider.setup_steps.forEach( function( step ) {
+						html += '<li>' + escapeHtml( step ) + '</li>';
+					} );
+					html += '</ol>';
+					html += '</div>';
+				}
+
+				if ( provider.note ) {
+					html += '<div class="aiscb-provider-info-item" style="padding: 1rem; background: #fff; border-radius: 4px; border-left: 3px solid #0073aa;">';
+					html += '<strong><?php echo esc_js( __( 'Note:', 'ai-site-search-chatbot' ) ); ?></strong>';
+					html += '<p style="margin: 0.5rem 0 0 0;">' + escapeHtml( provider.note ) + '</p>';
+					html += '</div>';
+				}
+
+				return html;
+			}
+
+			function escapeHtml( text ) {
+				const div = document.createElement( 'div' );
+				div.textContent = text;
+				return div.innerHTML;
+			}
+
+			function updateProviderInfo() {
+				const selectedProvider = document.querySelector( 'input[name="<?php echo esc_attr( self::OPTION_KEY ); ?>[ai_provider]"]:checked' ).value;
+				const providerInfo = providers[ selectedProvider ];
+				const infoPanel = document.getElementById( 'aiscb-provider-info-content' );
+
+				if ( providerInfo ) {
+					infoPanel.innerHTML = formatProviderInfo( providerInfo );
+				}
+			}
 
 			function updateModelOptions() {
 				const selectedProvider = document.querySelector( 'input[name="<?php echo esc_attr( self::OPTION_KEY ); ?>[ai_provider]"]:checked' ).value;
@@ -235,17 +270,10 @@ final class AISite_Search_Chatbot {
 					} );
 				}
 
-				// Update API key help text
-				const helpText = {
-					'openai': '<?php echo esc_js( __( 'Get your API key from https://platform.openai.com/api-keys', 'ai-site-search-chatbot' ) ); ?>',
-					'claude': '<?php echo esc_js( __( 'Get your API key from https://console.anthropic.com/', 'ai-site-search-chatbot' ) ); ?>',
-					'github-copilot': '<?php echo esc_js( __( 'Use your GitHub personal access token with copilot scope', 'ai-site-search-chatbot' ) ); ?>',
-					'gemini': '<?php echo esc_js( __( 'Get your API key from https://ai.google.dev/api/', 'ai-site-search-chatbot' ) ); ?>'
-				};
-				document.getElementById( 'aiscb_api_key_help' ).textContent = helpText[ selectedProvider ] || '';
+				updateProviderInfo();
 			}
 
-			// Update models on provider change
+			// Update models and info on provider change
 			document.querySelectorAll( 'input[name="<?php echo esc_attr( self::OPTION_KEY ); ?>[ai_provider]"]' ).forEach( function( radio ) {
 				radio.addEventListener( 'change', updateModelOptions );
 			} );
@@ -255,6 +283,66 @@ final class AISite_Search_Chatbot {
 		} )();
 		</script>
 		<?php
+	}
+
+	private static function get_providers_config(): array {
+		return array(
+			'openai'         => array(
+				'label'        => __( 'OpenAI', 'ai-site-search-chatbot' ),
+				'description'  => __( 'GPT-4, GPT-3.5 Turbo and more', 'ai-site-search-chatbot' ),
+				'models'       => array( 'gpt-4o', 'gpt-4o-mini', 'gpt-4', 'gpt-3.5-turbo' ),
+				'default_model' => 'gpt-4o-mini',
+				'setup_steps'  => array(
+					__( 'Go to https://platform.openai.com/api-keys', 'ai-site-search-chatbot' ),
+					__( 'Sign in or create an OpenAI account', 'ai-site-search-chatbot' ),
+					__( 'Click "Create new secret key"', 'ai-site-search-chatbot' ),
+					__( 'Copy the generated API key and paste it above', 'ai-site-search-chatbot' ),
+				),
+				'note'         => __( 'Requires a paid OpenAI account with available credits.', 'ai-site-search-chatbot' ),
+			),
+			'claude'         => array(
+				'label'        => __( 'Claude (Anthropic)', 'ai-site-search-chatbot' ),
+				'description'  => __( 'Claude 3 Opus, Sonnet, Haiku and more', 'ai-site-search-chatbot' ),
+				'models'       => array( 'claude-3-5-sonnet-20241022', 'claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307' ),
+				'default_model' => 'claude-3-5-sonnet-20241022',
+				'setup_steps'  => array(
+					__( 'Visit https://console.anthropic.com/', 'ai-site-search-chatbot' ),
+					__( 'Sign in or create an Anthropic account', 'ai-site-search-chatbot' ),
+					__( 'Navigate to the API keys section', 'ai-site-search-chatbot' ),
+					__( 'Generate a new API key', 'ai-site-search-chatbot' ),
+					__( 'Copy and paste the key above', 'ai-site-search-chatbot' ),
+				),
+				'note'         => __( 'Claude 3.5 Sonnet offers the best balance of performance and cost.', 'ai-site-search-chatbot' ),
+			),
+			'github-copilot' => array(
+				'label'        => __( 'GitHub Copilot', 'ai-site-search-chatbot' ),
+				'description'  => __( 'GitHub Copilot API access', 'ai-site-search-chatbot' ),
+				'models'       => array( 'gpt-4', 'gpt-3.5-turbo' ),
+				'default_model' => 'gpt-4',
+				'setup_steps'  => array(
+					__( 'Visit https://github.com/settings/tokens', 'ai-site-search-chatbot' ),
+					__( 'Click "Generate new token (classic)"', 'ai-site-search-chatbot' ),
+					__( 'Select the "copilot" scope', 'ai-site-search-chatbot' ),
+					__( 'Generate and copy the token', 'ai-site-search-chatbot' ),
+					__( 'Paste it above as your API key', 'ai-site-search-chatbot' ),
+				),
+				'note'         => __( 'Requires an active GitHub Copilot subscription.', 'ai-site-search-chatbot' ),
+			),
+			'gemini'         => array(
+				'label'        => __( 'Google Gemini', 'ai-site-search-chatbot' ),
+				'description'  => __( 'Gemini 2.0 Flash, Gemini 1.5 Pro and more', 'ai-site-search-chatbot' ),
+				'models'       => array( 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-1.0-pro' ),
+				'default_model' => 'gemini-2.0-flash',
+				'setup_steps'  => array(
+					__( 'Go to https://ai.google.dev/api/', 'ai-site-search-chatbot' ),
+					__( 'Click "Get API key"', 'ai-site-search-chatbot' ),
+					__( 'Create a new project or select an existing one', 'ai-site-search-chatbot' ),
+					__( 'Generate an API key for use in the application', 'ai-site-search-chatbot' ),
+					__( 'Copy and paste the key above', 'ai-site-search-chatbot' ),
+				),
+				'note'         => __( 'Gemini 2.0 Flash offers free tier with rate limiting. Check pricing for higher usage.', 'ai-site-search-chatbot' ),
+			),
+		);
 	}
 
 	public static function register_rest_routes(): void {
