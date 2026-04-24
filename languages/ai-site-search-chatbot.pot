@@ -169,6 +169,62 @@ msgstr ""
 msgid "Google Gemini model documentation"
 msgstr ""
 
+#: includes/class-ai-site-search-chatbot.php
+msgid "Admin Chat Test"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php
+msgid "Test a real chatbot reply in the admin screen with the current API key, model, and system prompt before exposing it publicly."
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php
+msgid "Enter a sample visitor question to test the chatbot."
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php
+msgid "Run Admin Chat Test"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php
+msgid "Enter an API key and model ID before running the admin chat test."
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php
+msgid "Enter a test question before running the admin chat test."
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php
+msgid "Running admin chat test..."
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php
+msgid "Admin chat test succeeded."
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php
+msgid "The admin chat test failed."
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php
+msgid "The admin chat test request failed. Please try again."
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php
+msgid "Assistant Reply"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php
+msgid "Referenced Sources"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php
+msgid "You convert a visitor question into WordPress site-search queries. Return only a JSON array of 3 to 8 short search phrases. Keep the phrases in the same language as the visitor question. Prefer words likely to appear in page titles, menu labels, headings, form labels, and short content snippets. Order the array from the most specific phrase to broader fallback phrases. Do not include explanations, markdown, or any text outside the JSON array."
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php
+msgid "Visitor question:\n%s\n\nReturn JSON only. Example output: [\"contact\", \"contact page\", \"inquiry\"]"
+msgstr ""
+
 #: includes/class-ai-site-search-chatbot.php:159
 msgid "System Prompt"
 msgstr ""

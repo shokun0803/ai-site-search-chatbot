@@ -203,6 +203,16 @@ final class AISite_Search_Chatbot {
 									<button type="button" class="button button-secondary" id="aiscb_validate_button"><?php echo esc_html( __( 'Validate API Key and Model', 'ai-site-search-chatbot' ) ); ?></button>
 								</p>
 								<div id="aiscb_validation_result" class="notice inline" style="display:none; margin: 12px 0 0; padding: 10px 12px;"></div>
+								<div style="margin-top:16px; padding-top:16px; border-top:1px solid #dcdcde;">
+									<strong style="display:block; margin-bottom:8px;"><?php echo esc_html( __( 'Admin Chat Test', 'ai-site-search-chatbot' ) ); ?></strong>
+									<p class="description" style="margin-top:0;"><?php echo esc_html( __( 'Test a real chatbot reply in the admin screen with the current API key, model, and system prompt before exposing it publicly.', 'ai-site-search-chatbot' ) ); ?></p>
+									<textarea class="large-text" rows="4" id="aiscb_test_message" placeholder="<?php echo esc_attr( __( 'Enter a sample visitor question to test the chatbot.', 'ai-site-search-chatbot' ) ); ?>"></textarea>
+									<p>
+										<button type="button" class="button button-secondary" id="aiscb_test_chat_button"><?php echo esc_html( __( 'Run Admin Chat Test', 'ai-site-search-chatbot' ) ); ?></button>
+									</p>
+									<div id="aiscb_test_result" class="notice inline" style="display:none; margin: 12px 0 0; padding: 10px 12px;"></div>
+									<div id="aiscb_test_answer" style="display:none; margin-top:12px; padding:12px; background:#fff; border:1px solid #dcdcde; border-radius:4px;"></div>
+								</div>
 							</div>
 						</td>
 					</tr>
@@ -264,12 +274,22 @@ final class AISite_Search_Chatbot {
 			#aiscb_validation_result.notice-warning {
 				border-left: 4px solid #dba617;
 			}
+			#aiscb_test_result.notice-success {
+				border-left: 4px solid #00a32a;
+			}
+			#aiscb_test_result.notice-error {
+				border-left: 4px solid #d63638;
+			}
+			#aiscb_test_result.notice-warning {
+				border-left: 4px solid #dba617;
+			}
 		</style>
 
 		<script>
 		( function() {
 			const providers = <?php echo wp_json_encode( $providers ); ?>;
 			const validateEndpoint = '<?php echo esc_js( rest_url( self::REST_NAMESPACE . '/validate' ) ); ?>';
+			const testChatEndpoint = '<?php echo esc_js( rest_url( self::REST_NAMESPACE . '/test-chat' ) ); ?>';
 			const restNonce = '<?php echo esc_js( wp_create_nonce( 'wp_rest' ) ); ?>';
 
 			function formatProviderInfo( provider ) {
@@ -351,6 +371,59 @@ final class AISite_Search_Chatbot {
 				result.style.display = 'block';
 			}
 
+			function showAdminTestResult( type, message ) {
+				const result = document.getElementById( 'aiscb_test_result' );
+				result.className = 'notice inline notice-' + type;
+				result.textContent = message;
+				result.style.display = 'block';
+			}
+
+			function renderAdminTestAnswer( data ) {
+				const container = document.getElementById( 'aiscb_test_answer' );
+				container.innerHTML = '';
+
+				if ( ! data || ! data.answer ) {
+					container.style.display = 'none';
+					return;
+				}
+
+				const answerTitle = document.createElement( 'strong' );
+				answerTitle.textContent = '<?php echo esc_js( __( 'Assistant Reply', 'ai-site-search-chatbot' ) ); ?>';
+				container.appendChild( answerTitle );
+
+				const answerBody = document.createElement( 'div' );
+				answerBody.style.marginTop = '8px';
+				answerBody.style.whiteSpace = 'pre-wrap';
+				answerBody.textContent = data.answer;
+				container.appendChild( answerBody );
+
+				if ( Array.isArray( data.sources ) && data.sources.length ) {
+					const sourceTitle = document.createElement( 'strong' );
+					sourceTitle.style.display = 'block';
+					sourceTitle.style.marginTop = '12px';
+					sourceTitle.textContent = '<?php echo esc_js( __( 'Referenced Sources', 'ai-site-search-chatbot' ) ); ?>';
+					container.appendChild( sourceTitle );
+
+					const sourceList = document.createElement( 'ul' );
+					sourceList.style.margin = '8px 0 0 18px';
+
+					data.sources.forEach( function( source ) {
+						const item = document.createElement( 'li' );
+						const link = document.createElement( 'a' );
+						link.href = source.url;
+						link.target = '_blank';
+						link.rel = 'noopener noreferrer';
+						link.textContent = source.title;
+						item.appendChild( link );
+						sourceList.appendChild( item );
+					} );
+
+					container.appendChild( sourceList );
+				}
+
+				container.style.display = 'block';
+			}
+
 			async function validateSettings() {
 				const button = document.getElementById( 'aiscb_validate_button' );
 				const provider = document.querySelector( 'input[name="<?php echo esc_attr( self::OPTION_KEY ); ?>[ai_provider]"]:checked' );
@@ -396,12 +469,73 @@ final class AISite_Search_Chatbot {
 				}
 			}
 
+			async function runAdminChatTest() {
+				const button = document.getElementById( 'aiscb_test_chat_button' );
+				const provider = document.querySelector( 'input[name="<?php echo esc_attr( self::OPTION_KEY ); ?>[ai_provider]"]:checked' );
+				const apiKey = document.getElementById( 'aiscb_api_key' );
+				const model = document.getElementById( 'aiscb_model' );
+				const systemPrompt = document.getElementById( 'aiscb_system_prompt' );
+				const maxSources = document.getElementById( 'aiscb_max_sources' );
+				const message = document.getElementById( 'aiscb_test_message' );
+
+				if ( ! provider || ! apiKey.value.trim() || ! model.value.trim() ) {
+					showAdminTestResult( 'warning', '<?php echo esc_js( __( 'Enter an API key and model ID before running the admin chat test.', 'ai-site-search-chatbot' ) ); ?>' );
+					renderAdminTestAnswer( null );
+					return;
+				}
+
+				if ( ! message.value.trim() ) {
+					showAdminTestResult( 'warning', '<?php echo esc_js( __( 'Enter a test question before running the admin chat test.', 'ai-site-search-chatbot' ) ); ?>' );
+					renderAdminTestAnswer( null );
+					return;
+				}
+
+				button.disabled = true;
+				showAdminTestResult( 'warning', '<?php echo esc_js( __( 'Running admin chat test...', 'ai-site-search-chatbot' ) ); ?>' );
+				renderAdminTestAnswer( null );
+
+				try {
+					const response = await fetch( testChatEndpoint, {
+						method: 'POST',
+						headers: {
+							'Content-Type': 'application/json',
+							'X-WP-Nonce': restNonce
+						},
+						body: JSON.stringify( {
+							ai_provider: provider.value,
+							api_key: apiKey.value,
+							model: model.value,
+							system_prompt: systemPrompt.value,
+							max_sources: maxSources.value,
+							message: message.value
+						} )
+					} );
+
+					const data = await response.json();
+
+					if ( response.ok && data.success ) {
+						showAdminTestResult( 'success', '<?php echo esc_js( __( 'Admin chat test succeeded.', 'ai-site-search-chatbot' ) ); ?>' );
+						renderAdminTestAnswer( data );
+						return;
+					}
+
+					showAdminTestResult( 'error', ( data && data.message ) ? data.message : '<?php echo esc_js( __( 'The admin chat test failed.', 'ai-site-search-chatbot' ) ); ?>' );
+					renderAdminTestAnswer( null );
+				} catch ( error ) {
+					showAdminTestResult( 'error', '<?php echo esc_js( __( 'The admin chat test request failed. Please try again.', 'ai-site-search-chatbot' ) ); ?>' );
+					renderAdminTestAnswer( null );
+				} finally {
+					button.disabled = false;
+				}
+			}
+
 			// Update models and info on provider change
 			document.querySelectorAll( 'input[name="<?php echo esc_attr( self::OPTION_KEY ); ?>[ai_provider]"]' ).forEach( function( radio ) {
 				radio.addEventListener( 'change', updateModelOptions );
 			} );
 
 			document.getElementById( 'aiscb_validate_button' ).addEventListener( 'click', validateSettings );
+			document.getElementById( 'aiscb_test_chat_button' ).addEventListener( 'click', runAdminChatTest );
 
 			// Initialize on page load
 			updateModelOptions();
@@ -516,6 +650,18 @@ final class AISite_Search_Chatbot {
 				},
 			)
 		);
+
+		register_rest_route(
+			self::REST_NAMESPACE,
+			'/test-chat',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'handle_test_chat_request' ),
+				'permission_callback' => function () {
+					return current_user_can( 'manage_options' );
+				},
+			)
+		);
 	}
 
 	public static function handle_validate_request( WP_REST_Request $request ) {
@@ -546,6 +692,64 @@ final class AISite_Search_Chatbot {
 		return new WP_REST_Response( $result, $status );
 	}
 
+	public static function handle_test_chat_request( WP_REST_Request $request ) {
+		$settings = array(
+			'ai_provider'   => sanitize_text_field( (string) $request->get_param( 'ai_provider' ) ),
+			'api_key'       => sanitize_text_field( (string) $request->get_param( 'api_key' ) ),
+			'model'         => sanitize_text_field( (string) $request->get_param( 'model' ) ),
+			'system_prompt' => sanitize_textarea_field( (string) $request->get_param( 'system_prompt' ) ),
+			'max_sources'   => max( 1, min( 10, absint( $request->get_param( 'max_sources' ) ) ) ),
+		);
+
+		$settings = wp_parse_args( $settings, self::default_settings() );
+		$message = self::sanitize_message( (string) $request->get_param( 'message' ) );
+
+		if ( '' === trim( $settings['api_key'] ) || '' === trim( $settings['model'] ) ) {
+			return new WP_REST_Response(
+				array(
+					'success' => false,
+					'message' => __( 'Enter an API key and model ID before running the admin chat test.', 'ai-site-search-chatbot' ),
+				),
+				400
+			);
+		}
+
+		if ( '' === $message ) {
+			return new WP_REST_Response(
+				array(
+					'success' => false,
+					'message' => __( 'Enter a test question before running the admin chat test.', 'ai-site-search-chatbot' ),
+				),
+				400
+			);
+		}
+
+		$results = self::search_site_content( $message, $settings );
+		$response_data = self::request_ai_answer( $settings, $message, $results );
+
+		if ( ! empty( $response_data['success'] ) ) {
+			return new WP_REST_Response(
+				array(
+					'success'  => true,
+					'answer'   => $response_data['content'],
+					'used_ai'  => true,
+					'sources'  => self::build_sources( $results, (int) $settings['max_sources'] ),
+					'searches' => $results,
+				),
+				200
+			);
+		}
+
+		return new WP_REST_Response(
+			array(
+				'success'  => false,
+				'message'  => ! empty( $response_data['message'] ) ? $response_data['message'] : __( 'The admin chat test failed.', 'ai-site-search-chatbot' ),
+				'searches' => $results,
+			),
+			400
+		);
+	}
+
 	public static function handle_chat_request( WP_REST_Request $request ) {
 		if ( self::is_rate_limited() ) {
 			return new WP_REST_Response(
@@ -567,7 +771,8 @@ final class AISite_Search_Chatbot {
 			);
 		}
 
-		$results = self::search_site_content( $message );
+		$settings = self::get_settings();
+		$results = self::search_site_content( $message, $settings );
 		$answer = self::generate_answer( $message, $results );
 
 		return rest_ensure_response(
@@ -896,45 +1101,372 @@ JS;
 		return $state['count'] > 30;
 	}
 
-	private static function search_site_content( string $message ): array {
+	private static function search_site_content( string $message, array $settings = array() ): array {
 		$post_types = get_post_types( array( 'public' => true ), 'names' );
 		unset( $post_types['attachment'] );
+		$post_types = array_values( $post_types );
+		$queries = self::build_search_queries( $message, $settings );
+		$results = self::search_site_content_by_queries( $queries, $post_types );
 
-		$query = new WP_Query(
-			array(
-				's'                   => $message,
-				'post_type'           => array_values( $post_types ),
-				'post_status'         => 'publish',
-				'posts_per_page'      => 10,
-				'ignore_sticky_posts' => true,
-				'no_found_rows'       => true,
-			)
-		);
+		if ( ! empty( $results ) ) {
+			return $results;
+		}
 
+		return self::search_site_content_by_like_matching( $queries, $post_types );
+	}
+
+	private static function search_site_content_by_queries( array $queries, array $post_types ): array {
 		$results = array();
+		$seen_ids = array();
 
-		foreach ( $query->posts as $post ) {
-			if ( ! $post instanceof WP_Post ) {
-				continue;
+		foreach ( $queries as $query_string ) {
+			if ( count( $results ) >= 10 ) {
+				break;
 			}
 
-			$excerpt = get_the_excerpt( $post );
-
-			if ( '' === trim( $excerpt ) ) {
-				$excerpt = wp_strip_all_tags( wp_trim_words( $post->post_content, 36 ) );
-			}
-
-			$results[] = array(
-				'id'      => (int) $post->ID,
-				'title'   => get_the_title( $post ),
-				'url'     => get_permalink( $post ),
-				'excerpt' => wp_strip_all_tags( $excerpt ),
+			$query = new WP_Query(
+				array(
+					's'                   => $query_string,
+					'post_type'           => $post_types,
+					'post_status'         => 'publish',
+					'posts_per_page'      => 10,
+					'ignore_sticky_posts' => true,
+					'no_found_rows'       => true,
+				)
 			);
+
+			foreach ( $query->posts as $post ) {
+				if ( ! $post instanceof WP_Post ) {
+					continue;
+				}
+
+				$post_id = (int) $post->ID;
+
+				if ( isset( $seen_ids[ $post_id ] ) ) {
+					continue;
+				}
+
+				$seen_ids[ $post_id ] = true;
+				$results[] = self::build_search_result_item( $post );
+
+				if ( count( $results ) >= 10 ) {
+					break;
+				}
+			}
 		}
 
 		wp_reset_postdata();
 
 		return $results;
+	}
+
+	private static function build_search_queries( string $message, array $settings = array() ): array {
+		$queries = array_merge(
+			self::extract_search_queries_with_ai( $message, $settings ),
+			self::build_rule_based_search_queries( $message )
+		);
+
+		return self::normalize_search_queries( $queries );
+	}
+
+	private static function build_rule_based_search_queries( string $message ): array {
+		$queries = array();
+		$normalized = trim( preg_replace( '/\s+/u', ' ', wp_strip_all_tags( $message ) ) );
+		$normalized = trim( preg_replace( '/[?？!！。．、,，]+/u', ' ', $normalized ) );
+
+		if ( '' === $normalized ) {
+			return $queries;
+		}
+
+		$queries[] = $normalized;
+
+		$trimmed_question = preg_replace(
+			'/\s*(を教えてください|を教えて|について教えてください|について教えて|について知りたい|はありますか|ありますか|ですか|でしょうか|とは何ですか|とは|はどこですか|はどこ|はあります|って何ですか|って何)\s*$/u',
+			'',
+			$normalized
+		);
+
+		if ( is_string( $trimmed_question ) ) {
+			$trimmed_question = trim( $trimmed_question, " \t\n\r\0\x0B?？!！。.,、" );
+
+			if ( '' !== $trimmed_question ) {
+				$queries[] = $trimmed_question;
+
+				$without_generic_suffix = preg_replace( '/(ページ|記事|フォーム|内容|情報|方法|場所)$/u', '', $trimmed_question );
+				if ( is_string( $without_generic_suffix ) ) {
+					$without_generic_suffix = trim( $without_generic_suffix );
+
+					if ( '' !== $without_generic_suffix && $without_generic_suffix !== $trimmed_question ) {
+						$queries[] = $without_generic_suffix;
+					}
+				}
+			}
+		}
+
+		preg_match_all( '/[\p{Han}\p{Hiragana}\p{Katakana}A-Za-z0-9_-]+/u', $normalized, $matches );
+
+		foreach ( $matches[0] as $token ) {
+			$token = trim( (string) $token );
+
+			if ( self::unicode_length( $token ) < 2 ) {
+				continue;
+			}
+
+			$queries[] = $token;
+
+			$without_suffix = preg_replace( '/(ページ|記事|フォーム|内容|情報|方法|場所|ありますか|ですか|でしょうか)$/u', '', $token );
+			if ( is_string( $without_suffix ) ) {
+				$without_suffix = trim( $without_suffix );
+
+				if ( '' !== $without_suffix && $without_suffix !== $token ) {
+					$queries[] = $without_suffix;
+				}
+			}
+
+			if ( 0 === strpos( $token, 'お問い合わせ' ) ) {
+				$queries[] = str_replace( 'お問い合わせ', '問い合わせ', $token );
+			}
+		}
+
+		return $queries;
+	}
+
+	private static function extract_search_queries_with_ai( string $message, array $settings ): array {
+		if ( empty( $settings['api_key'] ) || empty( $settings['model'] ) ) {
+			return array();
+		}
+
+		$response = self::request_ai_search_queries( $settings, $message );
+
+		if ( empty( $response['success'] ) || empty( $response['content'] ) ) {
+			return array();
+		}
+
+		return self::parse_ai_search_queries( (string) $response['content'], $message );
+	}
+
+	private static function request_ai_search_queries( array $settings, string $message ): array {
+		$system_prompt = self::get_search_query_system_prompt();
+		$user_prompt = self::build_search_query_prompt( $message );
+		$provider = $settings['ai_provider'] ?? 'openai';
+
+		switch ( $provider ) {
+			case 'claude':
+				return self::call_claude_api(
+					$settings,
+					$message,
+					array(),
+					array(
+						'system_prompt' => $system_prompt,
+						'user_prompt'   => $user_prompt,
+					)
+				);
+			case 'github-copilot':
+				return self::call_github_copilot_api(
+					$settings,
+					$message,
+					array(),
+					array(
+						'system_prompt' => $system_prompt,
+						'user_prompt'   => $user_prompt,
+					)
+				);
+			case 'gemini':
+				return self::call_gemini_api(
+					$settings,
+					$message,
+					array(),
+					array(
+						'system_prompt' => $system_prompt,
+						'user_prompt'   => $user_prompt,
+					)
+				);
+			case 'openai':
+			default:
+				return self::call_openai_api(
+					$settings,
+					$message,
+					array(),
+					array(
+						'system_prompt' => $system_prompt,
+						'user_prompt'   => $user_prompt,
+					)
+				);
+		}
+	}
+
+	private static function get_search_query_system_prompt(): string {
+		return __( 'You convert a visitor question into WordPress site-search queries. Return only a JSON array of 3 to 8 short search phrases. Keep the phrases in the same language as the visitor question. Prefer words likely to appear in page titles, menu labels, headings, form labels, and short content snippets. Order the array from the most specific phrase to broader fallback phrases. Do not include explanations, markdown, or any text outside the JSON array.', 'ai-site-search-chatbot' );
+	}
+
+	private static function build_search_query_prompt( string $message ): string {
+		return sprintf(
+			/* translators: %s: visitor question */
+			__( "Visitor question:\n%s\n\nReturn JSON only. Example output: [\"contact\", \"contact page\", \"inquiry\"]", 'ai-site-search-chatbot' ),
+			$message
+		);
+	}
+
+	private static function parse_ai_search_queries( string $content, string $message ): array {
+		$queries = array();
+		$trimmed = trim( $content );
+
+		if ( preg_match( '/\[[\s\S]*\]/', $trimmed, $matches ) ) {
+			$decoded = json_decode( $matches[0], true );
+
+			if ( is_array( $decoded ) ) {
+				foreach ( $decoded as $item ) {
+					if ( is_string( $item ) ) {
+						$queries[] = $item;
+					}
+				}
+			}
+		}
+
+		if ( empty( $queries ) ) {
+			$parts = preg_split( '/[\r\n,、]+/u', $trimmed );
+
+			if ( is_array( $parts ) ) {
+				foreach ( $parts as $part ) {
+					$part = trim( (string) $part, " \t\n\r\0\x0B\"'-*•[]" );
+
+					if ( '' !== $part ) {
+						$queries[] = $part;
+					}
+				}
+			}
+		}
+
+		$queries = self::filter_queries_by_message_language( $queries, $message );
+
+		return self::normalize_search_queries( $queries );
+	}
+
+	private static function filter_queries_by_message_language( array $queries, string $message ): array {
+		if ( ! preg_match( '/[\p{Han}\p{Hiragana}\p{Katakana}]/u', $message ) ) {
+			return $queries;
+		}
+
+		$filtered_queries = array();
+
+		foreach ( $queries as $query ) {
+			if ( ! is_string( $query ) ) {
+				continue;
+			}
+
+			if ( preg_match( '/[\p{Han}\p{Hiragana}\p{Katakana}]/u', $query ) ) {
+				$filtered_queries[] = $query;
+				continue;
+			}
+
+			if ( ! preg_match( '/[A-Za-z]/', $query ) ) {
+				$filtered_queries[] = $query;
+			}
+		}
+
+		return empty( $filtered_queries ) ? $queries : $filtered_queries;
+	}
+
+	private static function normalize_search_queries( array $queries ): array {
+		$normalized_queries = array();
+
+		foreach ( $queries as $query ) {
+			if ( ! is_string( $query ) ) {
+				continue;
+			}
+
+			$query = trim( preg_replace( '/\s+/u', ' ', wp_strip_all_tags( $query ) ) );
+			$query = trim( preg_replace( '/[?？!！。．、,，]+/u', ' ', $query ) );
+
+			if ( '' === $query ) {
+				continue;
+			}
+
+			$normalized_queries[] = $query;
+		}
+
+		$normalized_queries = array_values( array_unique( $normalized_queries ) );
+
+		usort(
+			$normalized_queries,
+			static function ( string $left, string $right ): int {
+				return self::unicode_length( $right ) <=> self::unicode_length( $left );
+			}
+		);
+
+		return $normalized_queries;
+	}
+
+	private static function search_site_content_by_like_matching( array $queries, array $post_types ): array {
+		global $wpdb;
+
+		if ( empty( $queries ) || empty( $post_types ) ) {
+			return array();
+		}
+
+		$type_placeholders = implode( ', ', array_fill( 0, count( $post_types ), '%s' ) );
+		$score_parts = array();
+		$where_parts = array();
+		$params = $post_types;
+
+		foreach ( $queries as $query_string ) {
+			$like = '%' . $wpdb->esc_like( $query_string ) . '%';
+
+			$score_parts[] = '(CASE WHEN post_title LIKE %s THEN 12 ELSE 0 END + CASE WHEN post_excerpt LIKE %s THEN 6 ELSE 0 END + CASE WHEN post_content LIKE %s THEN 3 ELSE 0 END)';
+			$params[] = $like;
+			$params[] = $like;
+			$params[] = $like;
+
+			$where_parts[] = '(post_title LIKE %s OR post_excerpt LIKE %s OR post_content LIKE %s)';
+			$params[] = $like;
+			$params[] = $like;
+			$params[] = $like;
+		}
+
+		$sql = "SELECT ID, (" . implode( ' + ', $score_parts ) . ") AS relevance_score FROM {$wpdb->posts} WHERE post_type IN ({$type_placeholders}) AND post_status = 'publish' AND (" . implode( ' OR ', $where_parts ) . ") ORDER BY relevance_score DESC, post_modified_gmt DESC LIMIT 10";
+		$prepared_sql = $wpdb->prepare( $sql, $params );
+		$post_rows = $wpdb->get_results( $prepared_sql );
+
+		if ( empty( $post_rows ) ) {
+			return array();
+		}
+
+		$results = array();
+
+		foreach ( $post_rows as $post_row ) {
+			$post = get_post( (int) $post_row->ID );
+
+			if ( ! $post instanceof WP_Post ) {
+				continue;
+			}
+
+			$results[] = self::build_search_result_item( $post );
+		}
+
+		return $results;
+	}
+
+	private static function unicode_length( string $value ): int {
+		if ( '' === $value ) {
+			return 0;
+		}
+
+		return preg_match_all( '/./u', $value );
+	}
+
+	private static function build_search_result_item( WP_Post $post ): array {
+		$excerpt = get_the_excerpt( $post );
+
+		if ( '' === trim( $excerpt ) ) {
+			$excerpt = wp_strip_all_tags( wp_trim_words( $post->post_content, 36 ) );
+		}
+
+		return array(
+			'id'      => (int) $post->ID,
+			'title'   => get_the_title( $post ),
+			'url'     => get_permalink( $post ),
+			'excerpt' => wp_strip_all_tags( $excerpt ),
+		);
 	}
 
 	private static function generate_answer( string $message, array $results ): array {
@@ -948,23 +1480,7 @@ JS;
 			);
 		}
 
-		$provider = $settings['ai_provider'] ?? 'openai';
-
-		// Call appropriate provider API
-		switch ( $provider ) {
-			case 'claude':
-				$response_data = self::call_claude_api( $settings, $message, $results );
-				break;
-			case 'github-copilot':
-				$response_data = self::call_github_copilot_api( $settings, $message, $results );
-				break;
-			case 'gemini':
-				$response_data = self::call_gemini_api( $settings, $message, $results );
-				break;
-			case 'openai':
-			default:
-				$response_data = self::call_openai_api( $settings, $message, $results );
-		}
+		$response_data = self::request_ai_answer( $settings, $message, $results );
 
 		if ( is_wp_error( $response_data ) || ! $response_data['success'] ) {
 			return array(
@@ -979,6 +1495,22 @@ JS;
 			'used_ai' => true,
 			'sources' => self::build_sources( $results, (int) $settings['max_sources'] ),
 		);
+	}
+
+	private static function request_ai_answer( array $settings, string $message, array $results ): array {
+		$provider = $settings['ai_provider'] ?? 'openai';
+
+		switch ( $provider ) {
+			case 'claude':
+				return self::call_claude_api( $settings, $message, $results );
+			case 'github-copilot':
+				return self::call_github_copilot_api( $settings, $message, $results );
+			case 'gemini':
+				return self::call_gemini_api( $settings, $message, $results );
+			case 'openai':
+			default:
+				return self::call_openai_api( $settings, $message, $results );
+		}
 	}
 
 	private static function validate_provider_settings( array $settings ): array {
@@ -1005,7 +1537,15 @@ JS;
 				$result = self::call_claude_api( $settings, $probe_message, $probe_results );
 				break;
 			case 'github-copilot':
-					$result = self::call_github_copilot_api( $settings, $probe_message, $probe_results, true );
+					$result = self::call_github_copilot_api(
+						$settings,
+						$probe_message,
+						$probe_results,
+						array(
+							'system_prompt' => '',
+							'user_prompt'   => $probe_message,
+						)
+					);
 				break;
 			case 'gemini':
 				$result = self::call_gemini_api( $settings, $probe_message, $probe_results );
@@ -1250,14 +1790,15 @@ JS;
 		return '';
 	}
 
-	private static function call_openai_api( array $settings, string $message, array $results ): array {
-		$prompt = self::build_ai_prompt( $message, $results, (int) $settings['max_sources'] );
+	private static function call_openai_api( array $settings, string $message, array $results, array $options = array() ): array {
+		$prompt = isset( $options['user_prompt'] ) ? (string) $options['user_prompt'] : self::build_ai_prompt( $message, $results, (int) $settings['max_sources'] );
+		$system_prompt = array_key_exists( 'system_prompt', $options ) ? (string) $options['system_prompt'] : (string) $settings['system_prompt'];
 		$payload = array(
 			'model'       => $settings['model'],
 			'messages'    => array(
 				array(
 					'role'    => 'system',
-					'content' => $settings['system_prompt'],
+					'content' => $system_prompt,
 				),
 				array(
 					'role'    => 'user',
@@ -1307,12 +1848,13 @@ JS;
 		);
 	}
 
-	private static function call_claude_api( array $settings, string $message, array $results ): array {
-		$prompt = self::build_ai_prompt( $message, $results, (int) $settings['max_sources'] );
+	private static function call_claude_api( array $settings, string $message, array $results, array $options = array() ): array {
+		$prompt = isset( $options['user_prompt'] ) ? (string) $options['user_prompt'] : self::build_ai_prompt( $message, $results, (int) $settings['max_sources'] );
+		$system_prompt = array_key_exists( 'system_prompt', $options ) ? (string) $options['system_prompt'] : (string) $settings['system_prompt'];
 		$payload = array(
 			'model'       => $settings['model'],
 			'max_tokens'  => 1024,
-			'system'      => $settings['system_prompt'],
+			'system'      => $system_prompt,
 			'messages'    => array(
 				array(
 					'role'    => 'user',
@@ -1363,8 +1905,9 @@ JS;
 		);
 	}
 
-	private static function call_github_copilot_api( array $settings, string $message, array $results, bool $is_validation = false ): array {
-		$prompt = $is_validation ? $message : self::build_ai_prompt( $message, $results, (int) $settings['max_sources'] );
+	private static function call_github_copilot_api( array $settings, string $message, array $results, array $options = array() ): array {
+		$prompt = isset( $options['user_prompt'] ) ? (string) $options['user_prompt'] : self::build_ai_prompt( $message, $results, (int) $settings['max_sources'] );
+		$system_prompt = array_key_exists( 'system_prompt', $options ) ? (string) $options['system_prompt'] : (string) $settings['system_prompt'];
 		$messages = array(
 			array(
 				'role'    => 'user',
@@ -1372,12 +1915,12 @@ JS;
 			),
 		);
 
-		if ( ! $is_validation && '' !== trim( (string) $settings['system_prompt'] ) ) {
+		if ( '' !== trim( $system_prompt ) ) {
 			array_unshift(
 				$messages,
 				array(
 					'role'    => 'system',
-					'content' => $settings['system_prompt'],
+					'content' => $system_prompt,
 				)
 			);
 		}
@@ -1430,8 +1973,9 @@ JS;
 		);
 	}
 
-	private static function call_gemini_api( array $settings, string $message, array $results ): array {
-		$prompt = self::build_ai_prompt( $message, $results, (int) $settings['max_sources'] );
+	private static function call_gemini_api( array $settings, string $message, array $results, array $options = array() ): array {
+		$prompt = isset( $options['user_prompt'] ) ? (string) $options['user_prompt'] : self::build_ai_prompt( $message, $results, (int) $settings['max_sources'] );
+		$system_prompt = array_key_exists( 'system_prompt', $options ) ? (string) $options['system_prompt'] : (string) $settings['system_prompt'];
 		$model = str_replace( '/', '%2F', $settings['model'] );
 
 		$payload = array(
@@ -1439,7 +1983,7 @@ JS;
 				array(
 					'parts' => array(
 						array(
-							'text' => $settings['system_prompt'] . "\n\n" . $prompt,
+							'text' => $system_prompt . "\n\n" . $prompt,
 						),
 					),
 				),
