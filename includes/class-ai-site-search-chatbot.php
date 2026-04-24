@@ -64,8 +64,25 @@ final class AISite_Search_Chatbot {
 			'ai_provider'   => 'openai',
 			'api_key'       => '',
 			'model'         => '',
-			'system_prompt' => __( 'You are a public website assistant. Answer only from the provided site search results. If the answer is not present, say so clearly and suggest related pages.', 'ai-site-search-chatbot' ),
+			'system_prompt' => self::get_default_system_prompt(),
 			'max_sources'   => 5,
+		);
+	}
+
+	private static function get_default_system_prompt(): string {
+		return __( 'You are a WordPress site search assistant. Answer the visitor using only the provided site search results. Give a concise, helpful answer based on the most relevant result snippets. If the answer is not clearly present in the results, say that you could not find enough information in the site search results, do not guess, and suggest a relevant page or search keyword.', 'ai-site-search-chatbot' );
+	}
+
+	private static function get_legacy_default_system_prompts(): array {
+		$legacy_prompt = 'You are a public website assistant. Answer only from the provided site search results. If the answer is not present, say so clearly and suggest related pages.';
+
+		return array_unique(
+			array_filter(
+				array(
+					$legacy_prompt,
+					__( $legacy_prompt, 'ai-site-search-chatbot' ),
+				)
+			)
 		);
 	}
 
@@ -74,6 +91,10 @@ final class AISite_Search_Chatbot {
 
 		if ( ! is_array( $settings ) ) {
 			$settings = array();
+		}
+
+		if ( ! isset( $settings['system_prompt'] ) || '' === trim( (string) $settings['system_prompt'] ) || in_array( (string) $settings['system_prompt'], self::get_legacy_default_system_prompts(), true ) ) {
+			$settings['system_prompt'] = self::get_default_system_prompt();
 		}
 
 		return wp_parse_args( $settings, self::default_settings() );
@@ -395,7 +416,7 @@ final class AISite_Search_Chatbot {
 				'label'        => __( 'OpenAI', 'ai-site-search-chatbot' ),
 				'description'  => __( 'GPT-4, GPT-3.5 Turbo and more', 'ai-site-search-chatbot' ),
 				'example_model' => 'gpt-4o-mini',
-				'model_docs_url' => 'https://platform.openai.com/docs/models',
+				'model_docs_url' => 'https://developers.openai.com/api/docs/models',
 				'model_docs_label' => __( 'OpenAI models documentation', 'ai-site-search-chatbot' ),
 				'setup_steps'  => array(
 					__( 'Go to https://platform.openai.com/api-keys', 'ai-site-search-chatbot' ),
@@ -407,18 +428,18 @@ final class AISite_Search_Chatbot {
 			),
 			'claude'         => array(
 				'label'        => __( 'Claude (Anthropic)', 'ai-site-search-chatbot' ),
-				'description'  => __( 'Claude 3 Opus, Sonnet, Haiku and more', 'ai-site-search-chatbot' ),
-				'example_model' => 'claude-3-5-sonnet-20241022',
-				'model_docs_url' => 'https://docs.anthropic.com/en/docs/about-claude/models',
+				'description'  => __( 'Claude Sonnet, Opus, Haiku and more', 'ai-site-search-chatbot' ),
+				'example_model' => 'claude-sonnet-4-6',
+				'model_docs_url' => 'https://platform.claude.com/docs/en/docs/about-claude/models',
 				'model_docs_label' => __( 'Anthropic model documentation', 'ai-site-search-chatbot' ),
 				'setup_steps'  => array(
-					__( 'Visit https://console.anthropic.com/', 'ai-site-search-chatbot' ),
+					__( 'Visit https://platform.claude.com/settings/keys', 'ai-site-search-chatbot' ),
 					__( 'Sign in or create an Anthropic account', 'ai-site-search-chatbot' ),
 					__( 'Navigate to the API keys section', 'ai-site-search-chatbot' ),
 					__( 'Generate a new API key', 'ai-site-search-chatbot' ),
 					__( 'Copy and paste the key above', 'ai-site-search-chatbot' ),
 				),
-				'note'         => __( 'Claude 3.5 Sonnet offers the best balance of performance and cost.', 'ai-site-search-chatbot' ),
+				'note'         => __( 'Claude Sonnet is usually the best balance of performance and cost. You can also use the Anthropic Models API to inspect currently available model IDs.', 'ai-site-search-chatbot' ),
 			),
 			'github-copilot' => array(
 				'label'        => __( 'GitHub Models', 'ai-site-search-chatbot' ),
@@ -437,18 +458,18 @@ final class AISite_Search_Chatbot {
 			),
 			'gemini'         => array(
 				'label'        => __( 'Google Gemini', 'ai-site-search-chatbot' ),
-				'description'  => __( 'Gemini 2.0 Flash, Gemini 1.5 Pro and more', 'ai-site-search-chatbot' ),
-				'example_model' => 'gemini-2.0-flash',
+				'description'  => __( 'Gemini 2.5 Flash, Gemini 2.5 Pro and more', 'ai-site-search-chatbot' ),
+				'example_model' => 'gemini-2.5-flash',
 				'model_docs_url' => 'https://ai.google.dev/gemini-api/docs/models',
 				'model_docs_label' => __( 'Google Gemini model documentation', 'ai-site-search-chatbot' ),
 				'setup_steps'  => array(
-					__( 'Go to https://ai.google.dev/api/', 'ai-site-search-chatbot' ),
+					__( 'Go to https://aistudio.google.com/app/apikey', 'ai-site-search-chatbot' ),
 					__( 'Click "Get API key"', 'ai-site-search-chatbot' ),
 					__( 'Create a new project or select an existing one', 'ai-site-search-chatbot' ),
 					__( 'Generate an API key for use in the application', 'ai-site-search-chatbot' ),
 					__( 'Copy and paste the key above', 'ai-site-search-chatbot' ),
 				),
-				'note'         => __( 'Gemini 2.0 Flash offers free tier with rate limiting. Check pricing for higher usage.', 'ai-site-search-chatbot' ),
+				'note'         => __( 'Use a current stable Gemini model such as gemini-2.5-flash. Older Gemini 2.0 model IDs are being deprecated.', 'ai-site-search-chatbot' ),
 			),
 		);
 	}
@@ -1243,7 +1264,6 @@ JS;
 					'content' => $prompt,
 				),
 			),
-			'temperature' => 0.2,
 		);
 
 		$response = wp_remote_post(
@@ -1423,9 +1443,6 @@ JS;
 						),
 					),
 				),
-			),
-			'generationConfig' => array(
-				'temperature' => 0.2,
 			),
 		);
 

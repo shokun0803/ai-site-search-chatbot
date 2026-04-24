@@ -11,8 +11,8 @@ msgstr ""
 "Language: \n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: includes/class-ai-site-search-chatbot.php:41
-msgid "You are a public website assistant. Answer only from the provided site search results. If the answer is not present, say so clearly and suggest related pages."
+#: includes/class-ai-site-search-chatbot.php:67
+msgid "You are a WordPress site search assistant. Answer the visitor using only the provided site search results. Give a concise, helpful answer based on the most relevant result snippets. If the answer is not clearly present in the results, say that you could not find enough information in the site search results, do not guess, and suggest a relevant page or search keyword."
 msgstr ""
 
 #: includes/class-ai-site-search-chatbot.php:89
@@ -226,11 +226,11 @@ msgid "Claude (Anthropic)"
 msgstr ""
 
 #: includes/class-ai-site-search-chatbot.php:305
-msgid "Claude 3 Opus, Sonnet, Haiku and more"
+msgid "Claude Sonnet, Opus, Haiku and more"
 msgstr ""
 
 #: includes/class-ai-site-search-chatbot.php:309
-msgid "Visit https://console.anthropic.com/"
+msgid "Visit https://platform.claude.com/settings/keys"
 msgstr ""
 
 #: includes/class-ai-site-search-chatbot.php:310
@@ -251,7 +251,7 @@ msgid "Copy and paste the key above"
 msgstr ""
 
 #: includes/class-ai-site-search-chatbot.php:315
-msgid "Claude 3.5 Sonnet offers the best balance of performance and cost."
+msgid "Claude Sonnet is usually the best balance of performance and cost. You can also use the Anthropic Models API to inspect currently available model IDs."
 msgstr ""
 
 #: includes/class-ai-site-search-chatbot.php:424
@@ -291,11 +291,11 @@ msgid "Google Gemini"
 msgstr ""
 
 #: includes/class-ai-site-search-chatbot.php:333
-msgid "Gemini 2.0 Flash, Gemini 1.5 Pro and more"
+msgid "Gemini 2.5 Flash, Gemini 2.5 Pro and more"
 msgstr ""
 
 #: includes/class-ai-site-search-chatbot.php:337
-msgid "Go to https://ai.google.dev/api/"
+msgid "Go to https://aistudio.google.com/app/apikey"
 msgstr ""
 
 #: includes/class-ai-site-search-chatbot.php:338
@@ -311,7 +311,7 @@ msgid "Generate an API key for use in the application"
 msgstr ""
 
 #: includes/class-ai-site-search-chatbot.php:343
-msgid "Gemini 2.0 Flash offers free tier with rate limiting. Check pricing for higher usage."
+msgid "Use a current stable Gemini model such as gemini-2.5-flash. Older Gemini 2.0 model IDs are being deprecated."
 msgstr ""
 
 #: includes/class-ai-site-search-chatbot.php:384

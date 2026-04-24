@@ -16,9 +16,9 @@ msgstr ""
 "Plural-Forms: nplurals=1; plural=0;\n"
 "X-Generator: Poedit 3.0\n"
 
-#: includes/class-ai-site-search-chatbot.php:41
-msgid "You are a public website assistant. Answer only from the provided site search results. If the answer is not present, say so clearly and suggest related pages."
-msgstr "あなたは公開ウェブサイトのアシスタントです。提供されたサイト検索結果からのみ回答してください。答えが存在しない場合は、明確にそう伝え、関連ページを案内してください。"
+#: includes/class-ai-site-search-chatbot.php:67
+msgid "You are a WordPress site search assistant. Answer the visitor using only the provided site search results. Give a concise, helpful answer based on the most relevant result snippets. If the answer is not clearly present in the results, say that you could not find enough information in the site search results, do not guess, and suggest a relevant page or search keyword."
+msgstr "あなたは WordPress サイト内検索アシスタントです。提供されたサイト検索結果だけを使って利用者に回答してください。最も関連性の高い結果の抜粋をもとに、簡潔で分かりやすい回答を返してください。結果内に答えが明確に見つからない場合は、サイト内検索結果だけでは十分な情報が見つからなかったと明示し、推測で補わず、関連するページや検索キーワードを案内してください。"
 
 #: includes/class-ai-site-search-chatbot.php:89
 #: includes/class-ai-site-search-chatbot.php:90
@@ -231,12 +231,12 @@ msgid "Claude (Anthropic)"
 msgstr "Claude (Anthropic)"
 
 #: includes/class-ai-site-search-chatbot.php:305
-msgid "Claude 3 Opus, Sonnet, Haiku and more"
-msgstr "Claude 3 Opus、Sonnet、Haiku など"
+msgid "Claude Sonnet, Opus, Haiku and more"
+msgstr "Claude Sonnet、Opus、Haiku など"
 
 #: includes/class-ai-site-search-chatbot.php:309
-msgid "Visit https://console.anthropic.com/"
-msgstr "https://console.anthropic.com/ にアクセスします。"
+msgid "Visit https://platform.claude.com/settings/keys"
+msgstr "https://platform.claude.com/settings/keys にアクセスします。"
 
 #: includes/class-ai-site-search-chatbot.php:310
 msgid "Sign in or create an Anthropic account"
@@ -256,8 +256,8 @@ msgid "Copy and paste the key above"
 msgstr "キーをコピーして上の欄に貼り付けます。"
 
 #: includes/class-ai-site-search-chatbot.php:315
-msgid "Claude 3.5 Sonnet offers the best balance of performance and cost."
-msgstr "Claude 3.5 Sonnet は性能とコストのバランスが良好です。"
+msgid "Claude Sonnet is usually the best balance of performance and cost. You can also use the Anthropic Models API to inspect currently available model IDs."
+msgstr "Claude Sonnet は通常、性能とコストのバランスが良好です。現在利用可能なモデル ID は Anthropic Models API でも確認できます。"
 
 #: includes/class-ai-site-search-chatbot.php:424
 msgid "GitHub Models"
@@ -296,12 +296,12 @@ msgid "Google Gemini"
 msgstr "Google Gemini"
 
 #: includes/class-ai-site-search-chatbot.php:333
-msgid "Gemini 2.0 Flash, Gemini 1.5 Pro and more"
-msgstr "Gemini 2.0 Flash、Gemini 1.5 Pro など"
+msgid "Gemini 2.5 Flash, Gemini 2.5 Pro and more"
+msgstr "Gemini 2.5 Flash、Gemini 2.5 Pro など"
 
 #: includes/class-ai-site-search-chatbot.php:337
-msgid "Go to https://ai.google.dev/api/"
-msgstr "https://ai.google.dev/api/ にアクセスします。"
+msgid "Go to https://aistudio.google.com/app/apikey"
+msgstr "https://aistudio.google.com/app/apikey にアクセスします。"
 
 #: includes/class-ai-site-search-chatbot.php:338
 msgid "Click \"Get API key\""
@@ -316,8 +316,8 @@ msgid "Generate an API key for use in the application"
 msgstr "このアプリケーション用の API キーを生成します。"
 
 #: includes/class-ai-site-search-chatbot.php:343
-msgid "Gemini 2.0 Flash offers free tier with rate limiting. Check pricing for higher usage."
-msgstr "Gemini 2.0 Flash にはレート制限付きの無料枠があります。高頻度利用時は料金を確認してください。"
+msgid "Use a current stable Gemini model such as gemini-2.5-flash. Older Gemini 2.0 model IDs are being deprecated."
+msgstr "gemini-2.5-flash のような現在の安定版 Gemini モデルを使用してください。古い Gemini 2.0 系のモデル ID は非推奨化が進んでいます。"
 
 #: includes/class-ai-site-search-chatbot.php:384
 msgid "Too many requests. Please wait a moment and try again."
