@@ -11,8 +11,6 @@ final class AISite_Search_Chatbot {
 	const REST_NAMESPACE = 'ai-site-search-chatbot/v1';
 	const SHORTCODE = 'ai_site_search_chatbot';
 
-	private static $assets_enqueued = false;
-
 	public static function activate(): void {
 		if ( false !== get_option( self::OPTION_KEY, false ) ) {
 			return;
@@ -24,9 +22,9 @@ final class AISite_Search_Chatbot {
 	public static function init(): void {
 		self::load_textdomain();
 		add_action( 'admin_init', array( __CLASS__, 'register_settings' ) );
-		add_action( 'admin_menu', array( __CLASS__, 'register_admin_menu' ) );
 		add_action( 'rest_api_init', array( __CLASS__, 'register_rest_routes' ) );
-		add_shortcode( self::SHORTCODE, array( __CLASS__, 'render_shortcode' ) );
+		AISite_Search_Chatbot_Admin::init();
+		AISite_Search_Chatbot_Frontend::init();
 	}
 
 	public static function load_textdomain(): void {
@@ -66,6 +64,7 @@ final class AISite_Search_Chatbot {
 			'model'         => '',
 			'system_prompt' => self::get_default_system_prompt(),
 			'max_sources'   => 5,
+			'widget_theme'  => 'business',
 		);
 	}
 
@@ -110,12 +109,18 @@ final class AISite_Search_Chatbot {
 			$provider = $defaults['ai_provider'];
 		}
 
+		$widget_theme = isset( $input['widget_theme'] ) ? sanitize_key( wp_unslash( $input['widget_theme'] ) ) : $defaults['widget_theme'];
+		if ( ! array_key_exists( $widget_theme, self::get_widget_themes() ) ) {
+			$widget_theme = $defaults['widget_theme'];
+		}
+
 		return array(
 			'ai_provider'   => $provider,
 			'api_key'       => isset( $input['api_key'] ) ? sanitize_text_field( wp_unslash( $input['api_key'] ) ) : $defaults['api_key'],
 			'model'         => isset( $input['model'] ) ? sanitize_text_field( wp_unslash( $input['model'] ) ) : $defaults['model'],
 			'system_prompt' => isset( $input['system_prompt'] ) ? sanitize_textarea_field( wp_unslash( $input['system_prompt'] ) ) : $defaults['system_prompt'],
 			'max_sources'   => isset( $input['max_sources'] ) ? max( 1, min( 10, absint( $input['max_sources'] ) ) ) : $defaults['max_sources'],
+			'widget_theme'  => $widget_theme,
 		);
 	}
 
@@ -131,420 +136,7 @@ final class AISite_Search_Chatbot {
 		);
 	}
 
-	public static function register_admin_menu(): void {
-		add_options_page(
-			__( 'AI Site Search Chatbot', 'ai-site-search-chatbot' ),
-			__( 'AI Site Search Chatbot', 'ai-site-search-chatbot' ),
-			'manage_options',
-			'ai-site-search-chatbot',
-			array( __CLASS__, 'render_settings_page' )
-		);
-	}
-
-	public static function render_settings_page(): void {
-		if ( ! current_user_can( 'manage_options' ) ) {
-			return;
-		}
-
-		$settings = self::get_settings();
-		$providers = self::get_providers_config();
-		?>
-		<div class="wrap">
-			<h1><?php echo esc_html( __( 'AI Site Search Chatbot', 'ai-site-search-chatbot' ) ); ?></h1>
-			<p><?php echo esc_html( __( 'Configure the AI provider and the prompt used when answering visitors with site search results.', 'ai-site-search-chatbot' ) ); ?></p>
-			<form method="post" action="options.php" id="aiscb-settings-form">
-				<?php settings_fields( self::OPTION_GROUP ); ?>
-				
-				<!-- AI Provider Selection -->
-				<div class="aiscb-provider-selector" style="margin-bottom: 2rem; padding: 1.5rem; background: #f5f5f5; border-radius: 8px;">
-					<h2 style="margin-top: 0; margin-bottom: 1rem; color: #333;"><?php echo esc_html( __( 'AI Provider', 'ai-site-search-chatbot' ) ); ?></h2>
-					<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
-						<?php foreach ( $providers as $provider_key => $provider_info ) : ?>
-							<label style="padding: 1rem; background: #fff; border: 2px solid #ddd; border-radius: 8px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 0.75rem;" class="aiscb-provider-option" data-provider="<?php echo esc_attr( $provider_key ); ?>">
-								<input 
-									type="radio" 
-									name="<?php echo esc_attr( self::OPTION_KEY ); ?>[ai_provider]" 
-									value="<?php echo esc_attr( $provider_key ); ?>" 
-									<?php checked( $settings['ai_provider'], $provider_key ); ?>
-									class="aiscb-provider-radio"
-									style="width: 18px; height: 18px; cursor: pointer;"
-								/>
-								<div style="flex: 1;">
-									<strong style="display: block; color: #333;"><?php echo esc_html( $provider_info['label'] ); ?></strong>
-									<small style="color: #666;"><?php echo esc_html( $provider_info['description'] ); ?></small>
-								</div>
-							</label>
-						<?php endforeach; ?>
-					</div>
-				</div>
-
-				<!-- Provider Information Panel -->
-				<div id="aiscb-provider-info" style="margin-bottom: 2rem; padding: 1.5rem; background: #e8f4f8; border-left: 4px solid #0073aa; border-radius: 4px;">
-					<div id="aiscb-provider-info-content"></div>
-				</div>
-
-				<table class="form-table" role="presentation">
-					<tr>
-						<th scope="row"><label for="aiscb_api_key"><?php echo esc_html( __( 'API Key', 'ai-site-search-chatbot' ) ); ?></label></th>
-						<td>
-							<input type="password" class="regular-text" id="aiscb_api_key" name="<?php echo esc_attr( self::OPTION_KEY ); ?>[api_key]" value="<?php echo esc_attr( $settings['api_key'] ); ?>" autocomplete="off" />
-							<p class="description" id="aiscb_api_key_help"></p>
-						</td>
-					</tr>
-					<tr>
-						<th scope="row"><label for="aiscb_model"><?php echo esc_html( __( 'Model', 'ai-site-search-chatbot' ) ); ?></label></th>
-						<td>
-							<div id="aiscb_model_container">
-								<input type="text" class="regular-text code" id="aiscb_model" name="<?php echo esc_attr( self::OPTION_KEY ); ?>[model]" value="<?php echo esc_attr( $settings['model'] ); ?>" spellcheck="false" autocomplete="off" />
-								<p class="description"><?php echo esc_html( __( 'The AI model to use for generating answers.', 'ai-site-search-chatbot' ) ); ?></p>
-								<p class="description" id="aiscb_model_help"></p>
-								<p class="description" id="aiscb_model_reference"></p>
-								<p>
-									<button type="button" class="button button-secondary" id="aiscb_validate_button"><?php echo esc_html( __( 'Validate API Key and Model', 'ai-site-search-chatbot' ) ); ?></button>
-								</p>
-								<div id="aiscb_validation_result" class="notice inline" style="display:none; margin: 12px 0 0; padding: 10px 12px;"></div>
-								<div style="margin-top:16px; padding-top:16px; border-top:1px solid #dcdcde;">
-									<strong style="display:block; margin-bottom:8px;"><?php echo esc_html( __( 'Admin Chat Test', 'ai-site-search-chatbot' ) ); ?></strong>
-									<p class="description" style="margin-top:0;"><?php echo esc_html( __( 'Test a real chatbot reply in the admin screen with the current API key, model, and system prompt before exposing it publicly.', 'ai-site-search-chatbot' ) ); ?></p>
-									<textarea class="large-text" rows="4" id="aiscb_test_message" placeholder="<?php echo esc_attr( __( 'Enter a sample visitor question to test the chatbot.', 'ai-site-search-chatbot' ) ); ?>"></textarea>
-									<p>
-										<button type="button" class="button button-secondary" id="aiscb_test_chat_button"><?php echo esc_html( __( 'Run Admin Chat Test', 'ai-site-search-chatbot' ) ); ?></button>
-									</p>
-									<div id="aiscb_test_result" class="notice inline" style="display:none; margin: 12px 0 0; padding: 10px 12px;"></div>
-									<div id="aiscb_test_answer" style="display:none; margin-top:12px; padding:12px; background:#fff; border:1px solid #dcdcde; border-radius:4px;"></div>
-								</div>
-							</div>
-						</td>
-					</tr>
-					<tr>
-						<th scope="row"><label for="aiscb_system_prompt"><?php echo esc_html( __( 'System Prompt', 'ai-site-search-chatbot' ) ); ?></label></th>
-						<td>
-							<textarea class="large-text" rows="7" id="aiscb_system_prompt" name="<?php echo esc_attr( self::OPTION_KEY ); ?>[system_prompt]"><?php echo esc_textarea( $settings['system_prompt'] ); ?></textarea>
-							<p class="description"><?php echo esc_html( __( 'The system prompt that instructs the AI on how to behave.', 'ai-site-search-chatbot' ) ); ?></p>
-						</td>
-					</tr>
-					<tr>
-						<th scope="row"><label for="aiscb_max_sources"><?php echo esc_html( __( 'Maximum Sources', 'ai-site-search-chatbot' ) ); ?></label></th>
-						<td>
-							<input type="number" min="1" max="10" id="aiscb_max_sources" name="<?php echo esc_attr( self::OPTION_KEY ); ?>[max_sources]" value="<?php echo esc_attr( (string) absint( $settings['max_sources'] ) ); ?>" />
-							<p class="description"><?php echo esc_html( __( 'Maximum number of search results to use as sources.', 'ai-site-search-chatbot' ) ); ?></p>
-						</td>
-					</tr>
-				</table>
-				<?php submit_button(); ?>
-			</form>
-		</div>
-
-		<style>
-			.aiscb-provider-option {
-				border: 2px solid #ddd;
-				transition: all 0.2s ease;
-			}
-			.aiscb-provider-option:hover {
-				border-color: #0073aa;
-				background-color: #f9f9f9;
-			}
-			.aiscb-provider-option input[type="radio"]:checked ~ div {
-				color: #0073aa;
-			}
-			.aiscb-provider-option input[type="radio"]:checked {
-				outline: 2px solid #0073aa;
-			}
-			.aiscb-provider-info-item {
-				margin-bottom: 1rem;
-			}
-			.aiscb-provider-info-item strong {
-				display: block;
-				margin-bottom: 0.25rem;
-				color: #333;
-			}
-			.aiscb-provider-info-item ul {
-				margin: 0.5rem 0 0 1.5rem;
-				padding: 0;
-			}
-			.aiscb-provider-info-item li {
-				margin-bottom: 0.25rem;
-			}
-			#aiscb_validation_result.notice-success {
-				border-left: 4px solid #00a32a;
-			}
-			#aiscb_validation_result.notice-error {
-				border-left: 4px solid #d63638;
-			}
-			#aiscb_validation_result.notice-warning {
-				border-left: 4px solid #dba617;
-			}
-			#aiscb_test_result.notice-success {
-				border-left: 4px solid #00a32a;
-			}
-			#aiscb_test_result.notice-error {
-				border-left: 4px solid #d63638;
-			}
-			#aiscb_test_result.notice-warning {
-				border-left: 4px solid #dba617;
-			}
-		</style>
-
-		<script>
-		( function() {
-			const providers = <?php echo wp_json_encode( $providers ); ?>;
-			const validateEndpoint = '<?php echo esc_js( rest_url( self::REST_NAMESPACE . '/validate' ) ); ?>';
-			const testChatEndpoint = '<?php echo esc_js( rest_url( self::REST_NAMESPACE . '/test-chat' ) ); ?>';
-			const restNonce = '<?php echo esc_js( wp_create_nonce( 'wp_rest' ) ); ?>';
-
-			function formatProviderInfo( provider ) {
-				let html = '';
-				
-				if ( provider.setup_steps ) {
-					html += '<div class="aiscb-provider-info-item">';
-					html += '<strong><?php echo esc_js( __( 'How to get your API Key:', 'ai-site-search-chatbot' ) ); ?></strong>';
-					html += '<ol>';
-					provider.setup_steps.forEach( function( step ) {
-						html += '<li>' + linkifyText( step ) + '</li>';
-					} );
-					html += '</ol>';
-					html += '</div>';
-				}
-
-				if ( provider.note ) {
-					html += '<div class="aiscb-provider-info-item" style="padding: 1rem; background: #fff; border-radius: 4px; border-left: 3px solid #0073aa;">';
-					html += '<strong><?php echo esc_js( __( 'Note:', 'ai-site-search-chatbot' ) ); ?></strong>';
-					html += '<p style="margin: 0.5rem 0 0 0;">' + escapeHtml( provider.note ) + '</p>';
-					html += '</div>';
-				}
-
-				return html;
-			}
-
-			function escapeHtml( text ) {
-				const div = document.createElement( 'div' );
-				div.textContent = text;
-				return div.innerHTML;
-			}
-
-			function linkifyText( text ) {
-				const escapedText = escapeHtml( text );
-				return escapedText.replace(
-					/(https?:\/\/[^\s<]+)/g,
-					function( url ) {
-						return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + url + '</a>';
-					}
-				);
-			}
-
-			function updateProviderInfo() {
-				const selectedProvider = document.querySelector( 'input[name="<?php echo esc_attr( self::OPTION_KEY ); ?>[ai_provider]"]:checked' ).value;
-				const providerInfo = providers[ selectedProvider ];
-				const infoPanel = document.getElementById( 'aiscb-provider-info-content' );
-
-				if ( providerInfo ) {
-					infoPanel.innerHTML = formatProviderInfo( providerInfo );
-				}
-			}
-
-			function updateModelOptions() {
-				const selectedProvider = document.querySelector( 'input[name="<?php echo esc_attr( self::OPTION_KEY ); ?>[ai_provider]"]:checked' ).value;
-				const modelHelp = document.getElementById( 'aiscb_model_help' );
-				const modelReference = document.getElementById( 'aiscb_model_reference' );
-				const providerInfo = providers[ selectedProvider ];
-
-				if ( providerInfo ) {
-					modelHelp.textContent = '<?php echo esc_js( __( 'Enter the exact model ID. Example:', 'ai-site-search-chatbot' ) ); ?> ' + ( providerInfo.example_model || '' );
-
-					if ( providerInfo.model_docs_url ) {
-						modelReference.innerHTML = '<?php echo esc_js( __( 'Model ID reference:', 'ai-site-search-chatbot' ) ); ?> ' + '<a href="' + escapeHtml( providerInfo.model_docs_url ) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml( providerInfo.model_docs_label || providerInfo.model_docs_url ) + '</a>';
-					} else {
-						modelReference.textContent = '';
-					}
-				} else {
-					modelHelp.textContent = '';
-					modelReference.textContent = '';
-				}
-
-				updateProviderInfo();
-			}
-
-			function showValidationResult( type, message ) {
-				const result = document.getElementById( 'aiscb_validation_result' );
-				result.className = 'notice inline notice-' + type;
-				result.textContent = message;
-				result.style.display = 'block';
-			}
-
-			function showAdminTestResult( type, message ) {
-				const result = document.getElementById( 'aiscb_test_result' );
-				result.className = 'notice inline notice-' + type;
-				result.textContent = message;
-				result.style.display = 'block';
-			}
-
-			function renderAdminTestAnswer( data ) {
-				const container = document.getElementById( 'aiscb_test_answer' );
-				container.innerHTML = '';
-
-				if ( ! data || ! data.answer ) {
-					container.style.display = 'none';
-					return;
-				}
-
-				const answerTitle = document.createElement( 'strong' );
-				answerTitle.textContent = '<?php echo esc_js( __( 'Assistant Reply', 'ai-site-search-chatbot' ) ); ?>';
-				container.appendChild( answerTitle );
-
-				const answerBody = document.createElement( 'div' );
-				answerBody.style.marginTop = '8px';
-				answerBody.style.whiteSpace = 'pre-wrap';
-				answerBody.textContent = data.answer;
-				container.appendChild( answerBody );
-
-				if ( Array.isArray( data.sources ) && data.sources.length ) {
-					const sourceTitle = document.createElement( 'strong' );
-					sourceTitle.style.display = 'block';
-					sourceTitle.style.marginTop = '12px';
-					sourceTitle.textContent = '<?php echo esc_js( __( 'Referenced Sources', 'ai-site-search-chatbot' ) ); ?>';
-					container.appendChild( sourceTitle );
-
-					const sourceList = document.createElement( 'ul' );
-					sourceList.style.margin = '8px 0 0 18px';
-
-					data.sources.forEach( function( source ) {
-						const item = document.createElement( 'li' );
-						const link = document.createElement( 'a' );
-						link.href = source.url;
-						link.target = '_blank';
-						link.rel = 'noopener noreferrer';
-						link.textContent = source.title;
-						item.appendChild( link );
-						sourceList.appendChild( item );
-					} );
-
-					container.appendChild( sourceList );
-				}
-
-				container.style.display = 'block';
-			}
-
-			async function validateSettings() {
-				const button = document.getElementById( 'aiscb_validate_button' );
-				const provider = document.querySelector( 'input[name="<?php echo esc_attr( self::OPTION_KEY ); ?>[ai_provider]"]:checked' );
-				const apiKey = document.getElementById( 'aiscb_api_key' );
-				const model = document.getElementById( 'aiscb_model' );
-				const systemPrompt = document.getElementById( 'aiscb_system_prompt' );
-
-				if ( ! provider || ! apiKey.value.trim() || ! model.value.trim() ) {
-					showValidationResult( 'warning', '<?php echo esc_js( __( 'Enter an API key and model ID before running validation.', 'ai-site-search-chatbot' ) ); ?>' );
-					return;
-				}
-
-				button.disabled = true;
-				showValidationResult( 'warning', '<?php echo esc_js( __( 'Validating connection...', 'ai-site-search-chatbot' ) ); ?>' );
-
-				try {
-					const response = await fetch( validateEndpoint, {
-						method: 'POST',
-						headers: {
-							'Content-Type': 'application/json',
-							'X-WP-Nonce': restNonce
-						},
-						body: JSON.stringify( {
-							ai_provider: provider.value,
-							api_key: apiKey.value,
-							model: model.value,
-							system_prompt: systemPrompt.value
-						} )
-					} );
-
-					const data = await response.json();
-
-					if ( response.ok && data.success ) {
-						showValidationResult( 'success', data.message || '<?php echo esc_js( __( 'Validation succeeded.', 'ai-site-search-chatbot' ) ); ?>' );
-						return;
-					}
-
-					showValidationResult( 'error', ( data && data.message ) ? data.message : '<?php echo esc_js( __( 'Validation failed.', 'ai-site-search-chatbot' ) ); ?>' );
-				} catch ( error ) {
-					showValidationResult( 'error', '<?php echo esc_js( __( 'Validation request failed. Please try again.', 'ai-site-search-chatbot' ) ); ?>' );
-				} finally {
-					button.disabled = false;
-				}
-			}
-
-			async function runAdminChatTest() {
-				const button = document.getElementById( 'aiscb_test_chat_button' );
-				const provider = document.querySelector( 'input[name="<?php echo esc_attr( self::OPTION_KEY ); ?>[ai_provider]"]:checked' );
-				const apiKey = document.getElementById( 'aiscb_api_key' );
-				const model = document.getElementById( 'aiscb_model' );
-				const systemPrompt = document.getElementById( 'aiscb_system_prompt' );
-				const maxSources = document.getElementById( 'aiscb_max_sources' );
-				const message = document.getElementById( 'aiscb_test_message' );
-
-				if ( ! provider || ! apiKey.value.trim() || ! model.value.trim() ) {
-					showAdminTestResult( 'warning', '<?php echo esc_js( __( 'Enter an API key and model ID before running the admin chat test.', 'ai-site-search-chatbot' ) ); ?>' );
-					renderAdminTestAnswer( null );
-					return;
-				}
-
-				if ( ! message.value.trim() ) {
-					showAdminTestResult( 'warning', '<?php echo esc_js( __( 'Enter a test question before running the admin chat test.', 'ai-site-search-chatbot' ) ); ?>' );
-					renderAdminTestAnswer( null );
-					return;
-				}
-
-				button.disabled = true;
-				showAdminTestResult( 'warning', '<?php echo esc_js( __( 'Running admin chat test...', 'ai-site-search-chatbot' ) ); ?>' );
-				renderAdminTestAnswer( null );
-
-				try {
-					const response = await fetch( testChatEndpoint, {
-						method: 'POST',
-						headers: {
-							'Content-Type': 'application/json',
-							'X-WP-Nonce': restNonce
-						},
-						body: JSON.stringify( {
-							ai_provider: provider.value,
-							api_key: apiKey.value,
-							model: model.value,
-							system_prompt: systemPrompt.value,
-							max_sources: maxSources.value,
-							message: message.value
-						} )
-					} );
-
-					const data = await response.json();
-
-					if ( response.ok && data.success ) {
-						showAdminTestResult( 'success', '<?php echo esc_js( __( 'Admin chat test succeeded.', 'ai-site-search-chatbot' ) ); ?>' );
-						renderAdminTestAnswer( data );
-						return;
-					}
-
-					showAdminTestResult( 'error', ( data && data.message ) ? data.message : '<?php echo esc_js( __( 'The admin chat test failed.', 'ai-site-search-chatbot' ) ); ?>' );
-					renderAdminTestAnswer( null );
-				} catch ( error ) {
-					showAdminTestResult( 'error', '<?php echo esc_js( __( 'The admin chat test request failed. Please try again.', 'ai-site-search-chatbot' ) ); ?>' );
-					renderAdminTestAnswer( null );
-				} finally {
-					button.disabled = false;
-				}
-			}
-
-			// Update models and info on provider change
-			document.querySelectorAll( 'input[name="<?php echo esc_attr( self::OPTION_KEY ); ?>[ai_provider]"]' ).forEach( function( radio ) {
-				radio.addEventListener( 'change', updateModelOptions );
-			} );
-
-			document.getElementById( 'aiscb_validate_button' ).addEventListener( 'click', validateSettings );
-			document.getElementById( 'aiscb_test_chat_button' ).addEventListener( 'click', runAdminChatTest );
-
-			// Initialize on page load
-			updateModelOptions();
-		} )();
-		</script>
-		<?php
-	}
-
-	private static function get_providers_config(): array {
+	public static function get_providers_config(): array {
 		return array(
 			'openai'         => array(
 				'label'        => __( 'OpenAI', 'ai-site-search-chatbot' ),
@@ -604,6 +196,19 @@ final class AISite_Search_Chatbot {
 					__( 'Copy and paste the key above', 'ai-site-search-chatbot' ),
 				),
 				'note'         => __( 'Use a current stable Gemini model such as gemini-2.5-flash. Older Gemini 2.0 model IDs are being deprecated.', 'ai-site-search-chatbot' ),
+			),
+		);
+	}
+
+	public static function get_widget_themes(): array {
+		return array(
+			'business' => array(
+				'label'       => __( 'Business', 'ai-site-search-chatbot' ),
+				'description' => __( 'Clean and trustworthy styling for company sites, support pages, and professional services.', 'ai-site-search-chatbot' ),
+			),
+			'cute'     => array(
+				'label'       => __( 'Cute', 'ai-site-search-chatbot' ),
+				'description' => __( 'Soft colors and rounded shapes for friendly brands, salons, schools, and personal sites.', 'ai-site-search-chatbot' ),
 			),
 		);
 	}
@@ -786,291 +391,6 @@ final class AISite_Search_Chatbot {
 		);
 	}
 
-	public static function render_shortcode( $atts = array() ): string {
-		self::enqueue_assets();
-
-		$atts = shortcode_atts(
-			array(
-				'title'   => __( 'Ask about this site', 'ai-site-search-chatbot' ),
-				'greeting' => __( 'Hi, ask me about this site and I will search the content for you.', 'ai-site-search-chatbot' ),
-			),
-			$atts,
-			self::SHORTCODE
-		);
-
-		ob_start();
-		?>
-		<div
-			class="aiscb-widget"
-			data-endpoint="<?php echo esc_url( rest_url( self::REST_NAMESPACE . '/chat' ) ); ?>"
-			data-greeting="<?php echo esc_attr( $atts['greeting'] ); ?>"
-			data-thinking-label="<?php echo esc_attr__( 'Thinking...', 'ai-site-search-chatbot' ); ?>"
-			data-source-label="<?php echo esc_attr__( 'Sources', 'ai-site-search-chatbot' ); ?>"
-			data-error-label="<?php echo esc_attr__( 'The chatbot is temporarily unavailable. Please try again later.', 'ai-site-search-chatbot' ); ?>"
-		>
-			<div class="aiscb-widget__shell">
-				<div class="aiscb-widget__header">
-					<div class="aiscb-widget__eyebrow"><?php echo esc_html__( 'Site Assistant', 'ai-site-search-chatbot' ); ?></div>
-					<h3 class="aiscb-widget__title"><?php echo esc_html( $atts['title'] ); ?></h3>
-				</div>
-				<div class="aiscb-widget__messages" aria-live="polite" aria-label="<?php echo esc_attr__( 'Chat messages', 'ai-site-search-chatbot' ); ?>"></div>
-				<form class="aiscb-widget__form">
-					<label class="screen-reader-text" for="aiscb-message"><?php echo esc_html__( 'Your question', 'ai-site-search-chatbot' ); ?></label>
-					<textarea id="aiscb-message" class="aiscb-widget__input" rows="3" placeholder="<?php echo esc_attr__( 'Ask a question about products, services, or help pages...', 'ai-site-search-chatbot' ); ?>"></textarea>
-					<button type="submit" class="aiscb-widget__submit"><?php echo esc_html__( 'Send', 'ai-site-search-chatbot' ); ?></button>
-				</form>
-			</div>
-		</div>
-		<?php
-		return (string) ob_get_clean();
-	}
-
-	private static function enqueue_assets(): void {
-		if ( self::$assets_enqueued ) {
-			return;
-		}
-
-		self::$assets_enqueued = true;
-
-		wp_register_style( 'aiscb-frontend', false, array(), self::VERSION );
-		wp_enqueue_style( 'aiscb-frontend' );
-		wp_add_inline_style( 'aiscb-frontend', self::inline_css() );
-
-		wp_register_script( 'aiscb-frontend', false, array(), self::VERSION, true );
-		wp_enqueue_script( 'aiscb-frontend' );
-		wp_add_inline_script( 'aiscb-frontend', self::inline_js() );
-	}
-
-	private static function inline_css(): string {
-		return <<<'CSS'
-.aiscb-widget {
-		max-width: 760px;
-		margin: 2rem auto;
-		padding: 0;
-	}
-
-.aiscb-widget__shell {
-		border: 1px solid rgba(15, 23, 42, 0.12);
-		border-radius: 24px;
-		background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-		box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
-		overflow: hidden;
-	}
-
-.aiscb-widget__header {
-		padding: 1.5rem 1.5rem 1rem;
-		background: linear-gradient(135deg, #0f172a 0%, #1f2937 100%);
-		color: #ffffff;
-	}
-
-.aiscb-widget__eyebrow {
-		text-transform: uppercase;
-		letter-spacing: 0.12em;
-		font-size: 0.72rem;
-		opacity: 0.8;
-		margin-bottom: 0.25rem;
-	}
-
-.aiscb-widget__title {
-		margin: 0;
-		font-size: 1.35rem;
-		line-height: 1.3;
-	}
-
-.aiscb-widget__messages {
-		padding: 1.25rem 1.5rem;
-		min-height: 240px;
-		display: flex;
-		flex-direction: column;
-		gap: 0.85rem;
-	}
-
-.aiscb-widget__message {
-		max-width: 88%;
-		padding: 0.9rem 1rem;
-		border-radius: 18px;
-		line-height: 1.6;
-		white-space: pre-wrap;
-		word-break: break-word;
-	}
-
-.aiscb-widget__message--assistant {
-		background: #e2e8f0;
-		color: #0f172a;
-	}
-
-.aiscb-widget__message--user {
-		align-self: flex-end;
-		background: #2563eb;
-		color: #ffffff;
-	}
-
-.aiscb-widget__sources {
-		margin-top: 0.75rem;
-		padding-top: 0.75rem;
-		border-top: 1px solid rgba(15, 23, 42, 0.1);
-	}
-
-.aiscb-widget__sources-title {
-		font-size: 0.82rem;
-		font-weight: 700;
-		margin-bottom: 0.35rem;
-	}
-
-.aiscb-widget__source-list {
-		margin: 0;
-		padding-left: 1.1rem;
-	}
-
-.aiscb-widget__form {
-		display: grid;
-		gap: 0.75rem;
-		padding: 1.25rem 1.5rem 1.5rem;
-		background: rgba(148, 163, 184, 0.12);
-	}
-
-.aiscb-widget__input {
-		width: 100%;
-		min-height: 96px;
-		padding: 0.9rem 1rem;
-		border-radius: 16px;
-		border: 1px solid rgba(15, 23, 42, 0.15);
-		background: #ffffff;
-		resize: vertical;
-	}
-
-.aiscb-widget__submit {
-		justify-self: end;
-		padding: 0.75rem 1.15rem;
-		border: 0;
-		border-radius: 999px;
-		background: #0f172a;
-		color: #ffffff;
-		font-weight: 700;
-		cursor: pointer;
-	}
-
-.aiscb-widget__submit:disabled {
-		opacity: 0.6;
-		cursor: progress;
-	}
-
-@media (max-width: 640px) {
-	.aiscb-widget__message {
-		max-width: 100%;
-	}
-
-	.aiscb-widget__header,
-	.aiscb-widget__messages,
-	.aiscb-widget__form {
-		padding-left: 1rem;
-		padding-right: 1rem;
-	}
-}
-CSS;
-	}
-
-	private static function inline_js(): string {
-		return <<<'JS'
-( function () {
-	function addMessage( container, role, text, sources ) {
-		var bubble = document.createElement( 'div' );
-		bubble.className = 'aiscb-widget__message aiscb-widget__message--' + role;
-		bubble.textContent = text;
-
-		if ( Array.isArray( sources ) && sources.length ) {
-			var sourceWrap = document.createElement( 'div' );
-			sourceWrap.className = 'aiscb-widget__sources';
-
-			var sourceTitle = document.createElement( 'div' );
-			sourceTitle.className = 'aiscb-widget__sources-title';
-			sourceTitle.textContent = container.closest( '.aiscb-widget' ).dataset.sourceLabel || 'Sources';
-			sourceWrap.appendChild( sourceTitle );
-
-			var list = document.createElement( 'ul' );
-			list.className = 'aiscb-widget__source-list';
-
-			sources.forEach( function ( source ) {
-				var item = document.createElement( 'li' );
-				var link = document.createElement( 'a' );
-				link.href = source.url;
-				link.target = '_blank';
-				link.rel = 'noopener noreferrer';
-				link.textContent = source.title;
-				item.appendChild( link );
-				list.appendChild( item );
-			} );
-
-			sourceWrap.appendChild( list );
-			bubble.appendChild( sourceWrap );
-		}
-
-		container.appendChild( bubble );
-		container.scrollTop = container.scrollHeight;
-	}
-
-	document.addEventListener( 'DOMContentLoaded', function () {
-		var widgets = document.querySelectorAll( '.aiscb-widget' );
-
-		widgets.forEach( function ( widget ) {
-			var endpoint = widget.dataset.endpoint;
-			var greeting = widget.dataset.greeting || 'Hi, ask me a question about this site.';
-			var thinkingLabel = widget.dataset.thinkingLabel || 'Thinking...';
-			var errorLabel = widget.dataset.errorLabel || 'The chatbot is temporarily unavailable. Please try again later.';
-			var messages = widget.querySelector( '.aiscb-widget__messages' );
-			var form = widget.querySelector( '.aiscb-widget__form' );
-			var input = widget.querySelector( '.aiscb-widget__input' );
-			var submit = widget.querySelector( '.aiscb-widget__submit' );
-
-			addMessage( messages, 'assistant', greeting );
-
-			form.addEventListener( 'submit', async function ( event ) {
-				event.preventDefault();
-
-				var value = input.value.trim();
-
-				if ( ! value ) {
-					return;
-				}
-
-				addMessage( messages, 'user', value );
-				input.value = '';
-				submit.disabled = true;
-				input.disabled = true;
-
-				var pending = document.createElement( 'div' );
-				pending.className = 'aiscb-widget__message aiscb-widget__message--assistant';
-				pending.textContent = thinkingLabel;
-				messages.appendChild( pending );
-
-				try {
-					var response = await fetch( endpoint, {
-						method: 'POST',
-						headers: {
-							'Content-Type': 'application/json'
-						},
-						body: JSON.stringify( {
-							message: value
-						} )
-					} );
-
-					var data = await response.json();
-					messages.removeChild( pending );
-					addMessage( messages, 'assistant', data.answer || 'No answer was returned.', data.sources || [] );
-				} catch ( error ) {
-					messages.removeChild( pending );
-					addMessage( messages, 'assistant', errorLabel );
-				} finally {
-					submit.disabled = false;
-					input.disabled = false;
-					input.focus();
-				}
-			} );
-		} );
-	} );
-} )();
-JS;
-	}
 
 	private static function sanitize_message( string $message ): string {
 		$message = trim( wp_strip_all_tags( $message ) );
@@ -2040,12 +1360,11 @@ JS;
 
 		foreach ( array_slice( $results, 0, $max_sources ) as $result ) {
 			$lines[] = sprintf( '- %s', $result['title'] );
-			$lines[] = sprintf( '  URL: %s', $result['url'] );
 			$lines[] = sprintf( '  Excerpt: %s', $result['excerpt'] );
 		}
 
 		$lines[] = '';
-		$lines[] = 'Instructions: answer in a helpful, concise tone. Use only the site results above. If no result is relevant, say that the site does not currently contain a clear answer and suggest a related page or keyword.';
+		$lines[] = 'Instructions: answer in a helpful, concise tone. Use only the site results above. Do not output raw URLs, domains, permalink strings, or markdown links in the answer. If you need to mention a source, refer to it only by its page title. If no result is relevant, say that the site does not currently contain a clear answer and suggest a related page or keyword.';
 
 		return implode( "\n", $lines );
 	}

@@ -238,6 +238,30 @@ msgstr "システムプロンプト"
 msgid "The system prompt that instructs the AI on how to behave."
 msgstr "AI の振る舞いを指示するシステムプロンプトです。"
 
+#: includes/class-ai-site-search-chatbot.php:206
+msgid "Business"
+msgstr "ビジネス"
+
+#: includes/class-ai-site-search-chatbot.php:207
+msgid "Clean and trustworthy styling for company sites, support pages, and professional services."
+msgstr "企業サイト、サポートページ、業務向けサービスに適した、信頼感のあるすっきりしたデザインです。"
+
+#: includes/class-ai-site-search-chatbot.php:210
+msgid "Cute"
+msgstr "かわいい"
+
+#: includes/class-ai-site-search-chatbot.php:211
+msgid "Soft colors and rounded shapes for friendly brands, salons, schools, and personal sites."
+msgstr "親しみやすいブランド、サロン、学校、個人サイトに合う、やわらかな色合いと丸みのあるデザインです。"
+
+#: includes/class-ai-site-search-chatbot-admin.php:164
+msgid "Chatbot Design"
+msgstr "チャットボットデザイン"
+
+#: includes/class-ai-site-search-chatbot-admin.php:171
+msgid "Choose the floating chatbot design shown at the bottom right of the public site."
+msgstr "公開サイトの右下に表示するフローティングチャットボットのデザインを選択します。"
+
 #: includes/class-ai-site-search-chatbot.php:166
 msgid "Maximum Sources"
 msgstr "最大ソース数"

@@ -23,6 +23,8 @@ if ( ! defined( 'AISCB_DIR' ) ) {
 }
 
 require_once AISCB_DIR . 'includes/class-ai-site-search-chatbot.php';
+require_once AISCB_DIR . 'includes/class-ai-site-search-chatbot-admin.php';
+require_once AISCB_DIR . 'includes/class-ai-site-search-chatbot-frontend.php';
 
 register_activation_hook( AISCB_FILE, array( 'AISite_Search_Chatbot', 'activate' ) );
 add_action( 'plugins_loaded', array( 'AISite_Search_Chatbot', 'init' ) );
