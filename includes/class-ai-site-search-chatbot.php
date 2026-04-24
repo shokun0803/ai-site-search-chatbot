@@ -35,6 +35,7 @@ final class AISite_Search_Chatbot {
 
 	public static function default_settings(): array {
 		return array(
+			'ai_provider'   => 'openai',
 			'api_key'       => '',
 			'model'         => 'gpt-4o-mini',
 			'system_prompt' => 'You are a public website assistant. Answer only from the provided site search results. If the answer is not present, say so clearly and suggest related pages.',
@@ -56,7 +57,14 @@ final class AISite_Search_Chatbot {
 		$defaults = self::default_settings();
 		$input = is_array( $input ) ? $input : array();
 
+		$provider = isset( $input['ai_provider'] ) ? sanitize_text_field( wp_unslash( $input['ai_provider'] ) ) : $defaults['ai_provider'];
+		$valid_providers = array( 'openai', 'claude', 'github-copilot' );
+		if ( ! in_array( $provider, $valid_providers, true ) ) {
+			$provider = $defaults['ai_provider'];
+		}
+
 		return array(
+			'ai_provider'   => $provider,
 			'api_key'       => isset( $input['api_key'] ) ? sanitize_text_field( wp_unslash( $input['api_key'] ) ) : $defaults['api_key'],
 			'model'         => isset( $input['model'] ) ? sanitize_text_field( wp_unslash( $input['model'] ) ) : $defaults['model'],
 			'system_prompt' => isset( $input['system_prompt'] ) ? sanitize_textarea_field( wp_unslash( $input['system_prompt'] ) ) : $defaults['system_prompt'],
@@ -92,24 +100,73 @@ final class AISite_Search_Chatbot {
 		}
 
 		$settings = self::get_settings();
+		$providers = array(
+			'openai'         => array(
+				'label'        => 'OpenAI',
+				'description'  => __( 'GPT-4, GPT-3.5 Turbo など', 'ai-site-search-chatbot' ),
+				'models'       => array( 'gpt-4o', 'gpt-4o-mini', 'gpt-4', 'gpt-3.5-turbo' ),
+				'default_model' => 'gpt-4o-mini',
+			),
+			'claude'         => array(
+				'label'        => 'Claude (Anthropic)',
+				'description'  => __( 'Claude 3 Opus, Sonnet, Haiku など', 'ai-site-search-chatbot' ),
+				'models'       => array( 'claude-3-5-sonnet-20241022', 'claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307' ),
+				'default_model' => 'claude-3-5-sonnet-20241022',
+			),
+			'github-copilot' => array(
+				'label'        => 'GitHub Copilot',
+				'description'  => __( 'GitHub Copilot API を使用', 'ai-site-search-chatbot' ),
+				'models'       => array( 'gpt-4', 'gpt-3.5-turbo' ),
+				'default_model' => 'gpt-4',
+			),
+		);
 		?>
 		<div class="wrap">
 			<h1><?php echo esc_html__( 'AI Site Search Chatbot', 'ai-site-search-chatbot' ); ?></h1>
 			<p><?php echo esc_html__( 'Configure the AI provider and the prompt used when answering visitors with site search results.', 'ai-site-search-chatbot' ); ?></p>
-			<form method="post" action="options.php">
+			<form method="post" action="options.php" id="aiscb-settings-form">
 				<?php settings_fields( self::OPTION_GROUP ); ?>
+				
+				<!-- AI Provider Selection -->
+				<div class="aiscb-provider-selector" style="margin-bottom: 2rem; padding: 1.5rem; background: #f5f5f5; border-radius: 8px;">
+					<h2 style="margin-top: 0; margin-bottom: 1rem; color: #333;"><?php echo esc_html__( 'AI Provider', 'ai-site-search-chatbot' ); ?></h2>
+					<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+						<?php foreach ( $providers as $provider_key => $provider_info ) : ?>
+							<label style="padding: 1rem; background: #fff; border: 2px solid #ddd; border-radius: 8px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 0.75rem;" class="aiscb-provider-option" data-provider="<?php echo esc_attr( $provider_key ); ?>">
+								<input 
+									type="radio" 
+									name="<?php echo esc_attr( self::OPTION_KEY ); ?>[ai_provider]" 
+									value="<?php echo esc_attr( $provider_key ); ?>" 
+									<?php checked( $settings['ai_provider'], $provider_key ); ?>
+									class="aiscb-provider-radio"
+									style="width: 18px; height: 18px; cursor: pointer;"
+								/>
+								<div style="flex: 1;">
+									<strong style="display: block; color: #333;"><?php echo esc_html( $provider_info['label'] ); ?></strong>
+									<small style="color: #666;"><?php echo esc_html( $provider_info['description'] ); ?></small>
+								</div>
+							</label>
+						<?php endforeach; ?>
+					</div>
+				</div>
+
 				<table class="form-table" role="presentation">
 					<tr>
 						<th scope="row"><label for="aiscb_api_key"><?php echo esc_html__( 'API Key', 'ai-site-search-chatbot' ); ?></label></th>
 						<td>
 							<input type="password" class="regular-text" id="aiscb_api_key" name="<?php echo esc_attr( self::OPTION_KEY ); ?>[api_key]" value="<?php echo esc_attr( $settings['api_key'] ); ?>" autocomplete="off" />
-							<p class="description"><?php echo esc_html__( 'Leave blank to run without AI and return search-driven answers only.', 'ai-site-search-chatbot' ); ?></p>
+							<p class="description" id="aiscb_api_key_help"></p>
 						</td>
 					</tr>
 					<tr>
 						<th scope="row"><label for="aiscb_model"><?php echo esc_html__( 'Model', 'ai-site-search-chatbot' ); ?></label></th>
 						<td>
-							<input type="text" class="regular-text" id="aiscb_model" name="<?php echo esc_attr( self::OPTION_KEY ); ?>[model]" value="<?php echo esc_attr( $settings['model'] ); ?>" />
+							<div id="aiscb_model_container">
+								<select id="aiscb_model" name="<?php echo esc_attr( self::OPTION_KEY ); ?>[model]" class="regular-text">
+									<option><?php echo esc_html__( 'Loading models...', 'ai-site-search-chatbot' ); ?></option>
+								</select>
+								<p class="description"><?php echo esc_html__( 'The AI model to use for generating answers.', 'ai-site-search-chatbot' ); ?></p>
+							</div>
 						</td>
 					</tr>
 					<tr>
@@ -128,6 +185,68 @@ final class AISite_Search_Chatbot {
 				<?php submit_button(); ?>
 			</form>
 		</div>
+
+		<style>
+			.aiscb-provider-option {
+				border: 2px solid #ddd;
+				transition: all 0.2s ease;
+			}
+			.aiscb-provider-option:hover {
+				border-color: #0073aa;
+				background-color: #f9f9f9;
+			}
+			.aiscb-provider-option input[type="radio"]:checked + div,
+			.aiscb-provider-option input:checked ~ div {
+				color: #0073aa;
+			}
+			.aiscb-provider-option input[type="radio"]:checked ~ * {
+				border-color: #0073aa;
+				box-shadow: 0 0 0 2px rgba(0, 115, 170, 0.1);
+			}
+		</style>
+
+		<script>
+		( function() {
+			const providers = <?php echo wp_json_encode( $providers ); ?>;
+			const currentProvider = '<?php echo esc_js( $settings['ai_provider'] ); ?>';
+			const currentModel = '<?php echo esc_js( $settings['model'] ); ?>';
+
+			function updateModelOptions() {
+				const selectedProvider = document.querySelector( 'input[name="<?php echo esc_attr( self::OPTION_KEY ); ?>[ai_provider]"]:checked' ).value;
+				const modelSelect = document.getElementById( 'aiscb_model' );
+				const providerInfo = providers[ selectedProvider ];
+
+				if ( providerInfo && Array.isArray( providerInfo.models ) ) {
+					modelSelect.innerHTML = '';
+					providerInfo.models.forEach( function( model ) {
+						const option = document.createElement( 'option' );
+						option.value = model;
+						option.textContent = model;
+						if ( model === currentModel || ( model === providerInfo.default_model && ! currentModel ) ) {
+							option.selected = true;
+						}
+						modelSelect.appendChild( option );
+					} );
+				}
+
+				// Update API key help text
+				const helpText = {
+					'openai': '<?php echo esc_js( __( 'Get your API key from https://platform.openai.com/api-keys', 'ai-site-search-chatbot' ) ); ?>',
+					'claude': '<?php echo esc_js( __( 'Get your API key from https://console.anthropic.com/', 'ai-site-search-chatbot' ) ); ?>',
+					'github-copilot': '<?php echo esc_js( __( 'Use your GitHub personal access token with copilot scope', 'ai-site-search-chatbot' ) ); ?>'
+				};
+				document.getElementById( 'aiscb_api_key_help' ).textContent = helpText[ selectedProvider ] || '';
+			}
+
+			// Update models on provider change
+			document.querySelectorAll( 'input[name="<?php echo esc_attr( self::OPTION_KEY ); ?>[ai_provider]"]' ).forEach( function( radio ) {
+				radio.addEventListener( 'change', updateModelOptions );
+			} );
+
+			// Initialize on page load
+			updateModelOptions();
+		} )();
+		</script>
 		<?php
 	}
 
@@ -565,6 +684,37 @@ JS;
 			);
 		}
 
+		$provider = $settings['ai_provider'] ?? 'openai';
+
+		// Call appropriate provider API
+		switch ( $provider ) {
+			case 'claude':
+				$response_data = self::call_claude_api( $settings, $message, $results );
+				break;
+			case 'github-copilot':
+				$response_data = self::call_github_copilot_api( $settings, $message, $results );
+				break;
+			case 'openai':
+			default:
+				$response_data = self::call_openai_api( $settings, $message, $results );
+		}
+
+		if ( is_wp_error( $response_data ) || ! $response_data['success'] ) {
+			return array(
+				'answer'  => self::build_fallback_answer( $message, $results ),
+				'used_ai' => false,
+				'sources' => self::build_sources( $results, (int) $settings['max_sources'] ),
+			);
+		}
+
+		return array(
+			'answer'  => $response_data['content'],
+			'used_ai' => true,
+			'sources' => self::build_sources( $results, (int) $settings['max_sources'] ),
+		);
+	}
+
+	private static function call_openai_api( array $settings, string $message, array $results ): array {
 		$prompt = self::build_ai_prompt( $message, $results, (int) $settings['max_sources'] );
 		$payload = array(
 			'model'       => $settings['model'],
@@ -594,21 +744,12 @@ JS;
 		);
 
 		if ( is_wp_error( $response ) ) {
-			return array(
-				'answer'  => self::build_fallback_answer( $message, $results ),
-				'used_ai' => false,
-				'sources' => self::build_sources( $results, (int) $settings['max_sources'] ),
-			);
+			return array( 'success' => false );
 		}
 
 		$status_code = (int) wp_remote_retrieve_response_code( $response );
-
 		if ( $status_code < 200 || $status_code >= 300 ) {
-			return array(
-				'answer'  => self::build_fallback_answer( $message, $results ),
-				'used_ai' => false,
-				'sources' => self::build_sources( $results, (int) $settings['max_sources'] ),
-			);
+			return array( 'success' => false );
 		}
 
 		$body = json_decode( (string) wp_remote_retrieve_body( $response ), true );
@@ -619,13 +760,120 @@ JS;
 		}
 
 		if ( '' === $content ) {
-			$content = self::build_fallback_answer( $message, $results );
+			return array( 'success' => false );
 		}
 
 		return array(
-			'answer'  => $content,
-			'used_ai' => true,
-			'sources' => self::build_sources( $results, (int) $settings['max_sources'] ),
+			'success' => true,
+			'content' => $content,
+		);
+	}
+
+	private static function call_claude_api( array $settings, string $message, array $results ): array {
+		$prompt = self::build_ai_prompt( $message, $results, (int) $settings['max_sources'] );
+		$payload = array(
+			'model'       => $settings['model'],
+			'max_tokens'  => 1024,
+			'system'      => $settings['system_prompt'],
+			'messages'    => array(
+				array(
+					'role'    => 'user',
+					'content' => $prompt,
+				),
+			),
+		);
+
+		$response = wp_remote_post(
+			'https://api.anthropic.com/v1/messages',
+			array(
+				'timeout' => 20,
+				'headers' => array(
+					'x-api-key'       => $settings['api_key'],
+					'anthropic-version' => '2023-06-01',
+					'Content-Type'    => 'application/json',
+				),
+				'body'    => wp_json_encode( $payload ),
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return array( 'success' => false );
+		}
+
+		$status_code = (int) wp_remote_retrieve_response_code( $response );
+		if ( $status_code < 200 || $status_code >= 300 ) {
+			return array( 'success' => false );
+		}
+
+		$body = json_decode( (string) wp_remote_retrieve_body( $response ), true );
+		$content = '';
+
+		if ( isset( $body['content'][0]['text'] ) ) {
+			$content = trim( (string) $body['content'][0]['text'] );
+		}
+
+		if ( '' === $content ) {
+			return array( 'success' => false );
+		}
+
+		return array(
+			'success' => true,
+			'content' => $content,
+		);
+	}
+
+	private static function call_github_copilot_api( array $settings, string $message, array $results ): array {
+		$prompt = self::build_ai_prompt( $message, $results, (int) $settings['max_sources'] );
+		$payload = array(
+			'model'    => $settings['model'],
+			'messages' => array(
+				array(
+					'role'    => 'system',
+					'content' => $settings['system_prompt'],
+				),
+				array(
+					'role'    => 'user',
+					'content' => $prompt,
+				),
+			),
+			'temperature' => 0.2,
+		);
+
+		$response = wp_remote_post(
+			'https://api.githubcopilot.com/chat/completions',
+			array(
+				'timeout' => 20,
+				'headers' => array(
+					'Authorization' => 'Bearer ' . $settings['api_key'],
+					'Content-Type'  => 'application/json',
+				),
+				'body'    => wp_json_encode( $payload ),
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return array( 'success' => false );
+		}
+
+		$status_code = (int) wp_remote_retrieve_response_code( $response );
+		if ( $status_code < 200 || $status_code >= 300 ) {
+			return array( 'success' => false );
+		}
+
+		$body = json_decode( (string) wp_remote_retrieve_body( $response ), true );
+		$content = '';
+
+		if ( isset( $body['choices'][0]['message']['content'] ) ) {
+			$content = trim( (string) $body['choices'][0]['message']['content'] );
+		}
+
+		if ( '' === $content ) {
+			return array( 'success' => false );
+		}
+
+		return array(
+			'success' => true,
+			'content' => $content,
 		);
 	}
 
