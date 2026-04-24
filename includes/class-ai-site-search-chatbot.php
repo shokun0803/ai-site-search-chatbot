@@ -30,14 +30,40 @@ final class AISite_Search_Chatbot {
 	}
 
 	public static function load_textdomain(): void {
-		load_plugin_textdomain( 'ai-site-search-chatbot', false, dirname( plugin_basename( AISCB_FILE ) ) . '/languages' );
+		$domain = 'ai-site-search-chatbot';
+		$language_dir = trailingslashit( AISCB_DIR . 'languages' );
+
+		load_plugin_textdomain( $domain, false, dirname( plugin_basename( AISCB_FILE ) ) . '/languages' );
+
+		if ( is_textdomain_loaded( $domain ) ) {
+			return;
+		}
+
+		$locales = array_filter(
+			array_unique(
+				array(
+					determine_locale(),
+					get_locale(),
+					substr( (string) determine_locale(), 0, 2 ),
+					substr( (string) get_locale(), 0, 2 ),
+				)
+			)
+		);
+
+		foreach ( $locales as $locale ) {
+			$mofile = $language_dir . $domain . '-' . $locale . '.mo';
+
+			if ( file_exists( $mofile ) && load_textdomain( $domain, $mofile ) ) {
+				return;
+			}
+		}
 	}
 
 	public static function default_settings(): array {
 		return array(
 			'ai_provider'   => 'openai',
 			'api_key'       => '',
-			'model'         => 'gpt-4o-mini',
+			'model'         => '',
 			'system_prompt' => __( 'You are a public website assistant. Answer only from the provided site search results. If the answer is not present, say so clearly and suggest related pages.', 'ai-site-search-chatbot' ),
 			'max_sources'   => 5,
 		);
@@ -148,10 +174,14 @@ final class AISite_Search_Chatbot {
 						<th scope="row"><label for="aiscb_model"><?php echo esc_html( __( 'Model', 'ai-site-search-chatbot' ) ); ?></label></th>
 						<td>
 							<div id="aiscb_model_container">
-								<select id="aiscb_model" name="<?php echo esc_attr( self::OPTION_KEY ); ?>[model]" class="regular-text">
-									<option><?php echo esc_html( __( 'Loading models...', 'ai-site-search-chatbot' ) ); ?></option>
-								</select>
+								<input type="text" class="regular-text code" id="aiscb_model" name="<?php echo esc_attr( self::OPTION_KEY ); ?>[model]" value="<?php echo esc_attr( $settings['model'] ); ?>" spellcheck="false" autocomplete="off" />
 								<p class="description"><?php echo esc_html( __( 'The AI model to use for generating answers.', 'ai-site-search-chatbot' ) ); ?></p>
+								<p class="description" id="aiscb_model_help"></p>
+								<p class="description" id="aiscb_model_reference"></p>
+								<p>
+									<button type="button" class="button button-secondary" id="aiscb_validate_button"><?php echo esc_html( __( 'Validate API Key and Model', 'ai-site-search-chatbot' ) ); ?></button>
+								</p>
+								<div id="aiscb_validation_result" class="notice inline" style="display:none; margin: 12px 0 0; padding: 10px 12px;"></div>
 							</div>
 						</td>
 					</tr>
@@ -204,13 +234,22 @@ final class AISite_Search_Chatbot {
 			.aiscb-provider-info-item li {
 				margin-bottom: 0.25rem;
 			}
+			#aiscb_validation_result.notice-success {
+				border-left: 4px solid #00a32a;
+			}
+			#aiscb_validation_result.notice-error {
+				border-left: 4px solid #d63638;
+			}
+			#aiscb_validation_result.notice-warning {
+				border-left: 4px solid #dba617;
+			}
 		</style>
 
 		<script>
 		( function() {
 			const providers = <?php echo wp_json_encode( $providers ); ?>;
-			const currentProvider = '<?php echo esc_js( $settings['ai_provider'] ); ?>';
-			const currentModel = '<?php echo esc_js( $settings['model'] ); ?>';
+			const validateEndpoint = '<?php echo esc_js( rest_url( self::REST_NAMESPACE . '/validate' ) ); ?>';
+			const restNonce = '<?php echo esc_js( wp_create_nonce( 'wp_rest' ) ); ?>';
 
 			function formatProviderInfo( provider ) {
 				let html = '';
@@ -220,7 +259,7 @@ final class AISite_Search_Chatbot {
 					html += '<strong><?php echo esc_js( __( 'How to get your API Key:', 'ai-site-search-chatbot' ) ); ?></strong>';
 					html += '<ol>';
 					provider.setup_steps.forEach( function( step ) {
-						html += '<li>' + escapeHtml( step ) + '</li>';
+						html += '<li>' + linkifyText( step ) + '</li>';
 					} );
 					html += '</ol>';
 					html += '</div>';
@@ -242,6 +281,16 @@ final class AISite_Search_Chatbot {
 				return div.innerHTML;
 			}
 
+			function linkifyText( text ) {
+				const escapedText = escapeHtml( text );
+				return escapedText.replace(
+					/(https?:\/\/[^\s<]+)/g,
+					function( url ) {
+						return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + url + '</a>';
+					}
+				);
+			}
+
 			function updateProviderInfo() {
 				const selectedProvider = document.querySelector( 'input[name="<?php echo esc_attr( self::OPTION_KEY ); ?>[ai_provider]"]:checked' ).value;
 				const providerInfo = providers[ selectedProvider ];
@@ -254,29 +303,84 @@ final class AISite_Search_Chatbot {
 
 			function updateModelOptions() {
 				const selectedProvider = document.querySelector( 'input[name="<?php echo esc_attr( self::OPTION_KEY ); ?>[ai_provider]"]:checked' ).value;
-				const modelSelect = document.getElementById( 'aiscb_model' );
+				const modelHelp = document.getElementById( 'aiscb_model_help' );
+				const modelReference = document.getElementById( 'aiscb_model_reference' );
 				const providerInfo = providers[ selectedProvider ];
 
-				if ( providerInfo && Array.isArray( providerInfo.models ) ) {
-					modelSelect.innerHTML = '';
-					providerInfo.models.forEach( function( model ) {
-						const option = document.createElement( 'option' );
-						option.value = model;
-						option.textContent = model;
-						if ( model === currentModel || ( model === providerInfo.default_model && ! currentModel ) ) {
-							option.selected = true;
-						}
-						modelSelect.appendChild( option );
-					} );
+				if ( providerInfo ) {
+					modelHelp.textContent = '<?php echo esc_js( __( 'Enter the exact model ID. Example:', 'ai-site-search-chatbot' ) ); ?> ' + ( providerInfo.example_model || '' );
+
+					if ( providerInfo.model_docs_url ) {
+						modelReference.innerHTML = '<?php echo esc_js( __( 'Model ID reference:', 'ai-site-search-chatbot' ) ); ?> ' + '<a href="' + escapeHtml( providerInfo.model_docs_url ) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml( providerInfo.model_docs_label || providerInfo.model_docs_url ) + '</a>';
+					} else {
+						modelReference.textContent = '';
+					}
+				} else {
+					modelHelp.textContent = '';
+					modelReference.textContent = '';
 				}
 
 				updateProviderInfo();
+			}
+
+			function showValidationResult( type, message ) {
+				const result = document.getElementById( 'aiscb_validation_result' );
+				result.className = 'notice inline notice-' + type;
+				result.textContent = message;
+				result.style.display = 'block';
+			}
+
+			async function validateSettings() {
+				const button = document.getElementById( 'aiscb_validate_button' );
+				const provider = document.querySelector( 'input[name="<?php echo esc_attr( self::OPTION_KEY ); ?>[ai_provider]"]:checked' );
+				const apiKey = document.getElementById( 'aiscb_api_key' );
+				const model = document.getElementById( 'aiscb_model' );
+				const systemPrompt = document.getElementById( 'aiscb_system_prompt' );
+
+				if ( ! provider || ! apiKey.value.trim() || ! model.value.trim() ) {
+					showValidationResult( 'warning', '<?php echo esc_js( __( 'Enter an API key and model ID before running validation.', 'ai-site-search-chatbot' ) ); ?>' );
+					return;
+				}
+
+				button.disabled = true;
+				showValidationResult( 'warning', '<?php echo esc_js( __( 'Validating connection...', 'ai-site-search-chatbot' ) ); ?>' );
+
+				try {
+					const response = await fetch( validateEndpoint, {
+						method: 'POST',
+						headers: {
+							'Content-Type': 'application/json',
+							'X-WP-Nonce': restNonce
+						},
+						body: JSON.stringify( {
+							ai_provider: provider.value,
+							api_key: apiKey.value,
+							model: model.value,
+							system_prompt: systemPrompt.value
+						} )
+					} );
+
+					const data = await response.json();
+
+					if ( response.ok && data.success ) {
+						showValidationResult( 'success', data.message || '<?php echo esc_js( __( 'Validation succeeded.', 'ai-site-search-chatbot' ) ); ?>' );
+						return;
+					}
+
+					showValidationResult( 'error', ( data && data.message ) ? data.message : '<?php echo esc_js( __( 'Validation failed.', 'ai-site-search-chatbot' ) ); ?>' );
+				} catch ( error ) {
+					showValidationResult( 'error', '<?php echo esc_js( __( 'Validation request failed. Please try again.', 'ai-site-search-chatbot' ) ); ?>' );
+				} finally {
+					button.disabled = false;
+				}
 			}
 
 			// Update models and info on provider change
 			document.querySelectorAll( 'input[name="<?php echo esc_attr( self::OPTION_KEY ); ?>[ai_provider]"]' ).forEach( function( radio ) {
 				radio.addEventListener( 'change', updateModelOptions );
 			} );
+
+			document.getElementById( 'aiscb_validate_button' ).addEventListener( 'click', validateSettings );
 
 			// Initialize on page load
 			updateModelOptions();
@@ -290,8 +394,9 @@ final class AISite_Search_Chatbot {
 			'openai'         => array(
 				'label'        => __( 'OpenAI', 'ai-site-search-chatbot' ),
 				'description'  => __( 'GPT-4, GPT-3.5 Turbo and more', 'ai-site-search-chatbot' ),
-				'models'       => array( 'gpt-4o', 'gpt-4o-mini', 'gpt-4', 'gpt-3.5-turbo' ),
-				'default_model' => 'gpt-4o-mini',
+				'example_model' => 'gpt-4o-mini',
+				'model_docs_url' => 'https://platform.openai.com/docs/models',
+				'model_docs_label' => __( 'OpenAI models documentation', 'ai-site-search-chatbot' ),
 				'setup_steps'  => array(
 					__( 'Go to https://platform.openai.com/api-keys', 'ai-site-search-chatbot' ),
 					__( 'Sign in or create an OpenAI account', 'ai-site-search-chatbot' ),
@@ -303,8 +408,9 @@ final class AISite_Search_Chatbot {
 			'claude'         => array(
 				'label'        => __( 'Claude (Anthropic)', 'ai-site-search-chatbot' ),
 				'description'  => __( 'Claude 3 Opus, Sonnet, Haiku and more', 'ai-site-search-chatbot' ),
-				'models'       => array( 'claude-3-5-sonnet-20241022', 'claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307' ),
-				'default_model' => 'claude-3-5-sonnet-20241022',
+				'example_model' => 'claude-3-5-sonnet-20241022',
+				'model_docs_url' => 'https://docs.anthropic.com/en/docs/about-claude/models',
+				'model_docs_label' => __( 'Anthropic model documentation', 'ai-site-search-chatbot' ),
 				'setup_steps'  => array(
 					__( 'Visit https://console.anthropic.com/', 'ai-site-search-chatbot' ),
 					__( 'Sign in or create an Anthropic account', 'ai-site-search-chatbot' ),
@@ -315,24 +421,26 @@ final class AISite_Search_Chatbot {
 				'note'         => __( 'Claude 3.5 Sonnet offers the best balance of performance and cost.', 'ai-site-search-chatbot' ),
 			),
 			'github-copilot' => array(
-				'label'        => __( 'GitHub Copilot', 'ai-site-search-chatbot' ),
-				'description'  => __( 'GitHub Copilot API access', 'ai-site-search-chatbot' ),
-				'models'       => array( 'gpt-4', 'gpt-3.5-turbo' ),
-				'default_model' => 'gpt-4',
+				'label'        => __( 'GitHub Models', 'ai-site-search-chatbot' ),
+				'description'  => __( 'GitHub Models API with a token that has models:read permission', 'ai-site-search-chatbot' ),
+				'example_model' => 'openai/gpt-4.1',
+				'model_docs_url' => 'https://github.com/marketplace/models',
+				'model_docs_label' => __( 'GitHub Models catalog', 'ai-site-search-chatbot' ),
 				'setup_steps'  => array(
 					__( 'Visit https://github.com/settings/tokens', 'ai-site-search-chatbot' ),
-					__( 'Click "Generate new token (classic)"', 'ai-site-search-chatbot' ),
-					__( 'Select the "copilot" scope', 'ai-site-search-chatbot' ),
+					__( 'Create a fine-grained personal access token or a token that supports the models:read permission', 'ai-site-search-chatbot' ),
+					__( 'Grant the token the "models:read" permission', 'ai-site-search-chatbot' ),
 					__( 'Generate and copy the token', 'ai-site-search-chatbot' ),
 					__( 'Paste it above as your API key', 'ai-site-search-chatbot' ),
 				),
-				'note'         => __( 'Requires an active GitHub Copilot subscription.', 'ai-site-search-chatbot' ),
+				'note'         => __( 'Use GitHub Models for external API access. Personal access tokens are not supported on the internal Copilot endpoint. For Japanese site content, a multilingual model such as openai/gpt-4.1 is recommended over openai/gpt-5-nano.', 'ai-site-search-chatbot' ),
 			),
 			'gemini'         => array(
 				'label'        => __( 'Google Gemini', 'ai-site-search-chatbot' ),
 				'description'  => __( 'Gemini 2.0 Flash, Gemini 1.5 Pro and more', 'ai-site-search-chatbot' ),
-				'models'       => array( 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-1.0-pro' ),
-				'default_model' => 'gemini-2.0-flash',
+				'example_model' => 'gemini-2.0-flash',
+				'model_docs_url' => 'https://ai.google.dev/gemini-api/docs/models',
+				'model_docs_label' => __( 'Google Gemini model documentation', 'ai-site-search-chatbot' ),
 				'setup_steps'  => array(
 					__( 'Go to https://ai.google.dev/api/', 'ai-site-search-chatbot' ),
 					__( 'Click "Get API key"', 'ai-site-search-chatbot' ),
@@ -375,6 +483,46 @@ final class AISite_Search_Chatbot {
 				),
 			)
 		);
+
+		register_rest_route(
+			self::REST_NAMESPACE,
+			'/validate',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'handle_validate_request' ),
+				'permission_callback' => function () {
+					return current_user_can( 'manage_options' );
+				},
+			)
+		);
+	}
+
+	public static function handle_validate_request( WP_REST_Request $request ) {
+		$settings = array(
+			'ai_provider'   => sanitize_text_field( (string) $request->get_param( 'ai_provider' ) ),
+			'api_key'       => sanitize_text_field( (string) $request->get_param( 'api_key' ) ),
+			'model'         => sanitize_text_field( (string) $request->get_param( 'model' ) ),
+			'system_prompt' => sanitize_textarea_field( (string) $request->get_param( 'system_prompt' ) ),
+			'max_sources'   => 1,
+		);
+
+		$settings = wp_parse_args( $settings, self::default_settings() );
+
+		if ( '' === trim( $settings['api_key'] ) || '' === trim( $settings['model'] ) ) {
+			return new WP_REST_Response(
+				array(
+					'success' => false,
+					'message' => __( 'Enter an API key and model ID before running validation.', 'ai-site-search-chatbot' ),
+				),
+				400
+			);
+		}
+
+		$result = self::validate_provider_settings( $settings );
+
+		$status = ! empty( $result['success'] ) ? 200 : 400;
+
+		return new WP_REST_Response( $result, $status );
 	}
 
 	public static function handle_chat_request( WP_REST_Request $request ) {
@@ -812,6 +960,275 @@ JS;
 		);
 	}
 
+	private static function validate_provider_settings( array $settings ): array {
+		if ( 'github-copilot' === $settings['ai_provider'] && false === strpos( (string) $settings['model'], '/' ) ) {
+			return array(
+				'success' => false,
+				'message' => __( 'For GitHub Models, enter the model ID in the format publisher/model_name, for example openai/gpt-5-nano.', 'ai-site-search-chatbot' ),
+			);
+		}
+
+		if ( 'github-copilot' === $settings['ai_provider'] ) {
+			$model_check = self::validate_github_models_catalog( $settings );
+
+			if ( ! empty( $model_check ) ) {
+				return $model_check;
+			}
+		}
+
+		$probe_message = 'Reply with OK only.';
+		$probe_results = array();
+
+		switch ( $settings['ai_provider'] ) {
+			case 'claude':
+				$result = self::call_claude_api( $settings, $probe_message, $probe_results );
+				break;
+			case 'github-copilot':
+					$result = self::call_github_copilot_api( $settings, $probe_message, $probe_results, true );
+				break;
+			case 'gemini':
+				$result = self::call_gemini_api( $settings, $probe_message, $probe_results );
+				break;
+			case 'openai':
+			default:
+				$result = self::call_openai_api( $settings, $probe_message, $probe_results );
+				break;
+		}
+
+		if ( ! empty( $result['success'] ) ) {
+			return array(
+				'success' => true,
+				'message' => sprintf(
+					/* translators: 1: provider name, 2: model id */
+					__( 'Validation succeeded for %1$s using model %2$s.', 'ai-site-search-chatbot' ),
+					self::get_provider_label( (string) $settings['ai_provider'] ),
+					(string) $settings['model']
+				),
+			);
+		}
+
+		return array(
+			'success' => false,
+			'message' => ! empty( $result['message'] ) ? $result['message'] : __( 'Validation failed.', 'ai-site-search-chatbot' ),
+		);
+	}
+
+	private static function get_provider_label( string $provider ): string {
+		$config = self::get_providers_config();
+
+		if ( isset( $config[ $provider ]['label'] ) ) {
+			return (string) $config[ $provider ]['label'];
+		}
+
+		return $provider;
+	}
+
+	private static function build_api_error_result( $response, string $fallback_message ): array {
+		if ( is_wp_error( $response ) ) {
+			return array(
+				'success' => false,
+				'message' => self::append_response_request_id(
+					sprintf(
+					/* translators: 1: fallback message, 2: detailed error message */
+					__( '%1$s Details: %2$s', 'ai-site-search-chatbot' ),
+					$fallback_message,
+					$response->get_error_message()
+					),
+					$response
+				),
+			);
+		}
+
+		$status_code = (int) wp_remote_retrieve_response_code( $response );
+		$response_message = (string) wp_remote_retrieve_response_message( $response );
+		$raw_body = (string) wp_remote_retrieve_body( $response );
+		$body = json_decode( $raw_body, true );
+		$detail = self::extract_api_error_detail( $body, $raw_body );
+
+		if ( '' === $detail ) {
+			$detail = $response_message;
+		}
+
+		if ( '' !== $detail && 0 < $status_code ) {
+			$message = sprintf(
+				/* translators: 1: fallback message, 2: HTTP status code, 3: detailed error message */
+				__( '%1$s HTTP %2$d: %3$s', 'ai-site-search-chatbot' ),
+				$fallback_message,
+				$status_code,
+				$detail
+			);
+		} elseif ( '' !== $detail ) {
+			$message = sprintf(
+				/* translators: 1: fallback message, 2: detailed error message */
+				__( '%1$s Details: %2$s', 'ai-site-search-chatbot' ),
+				$fallback_message,
+				$detail
+			);
+		} elseif ( 0 < $status_code ) {
+			$message = sprintf(
+				/* translators: 1: fallback message, 2: HTTP status code */
+				__( '%1$s HTTP %2$d', 'ai-site-search-chatbot' ),
+				$fallback_message,
+				$status_code
+			);
+		} else {
+			$message = $fallback_message;
+		}
+
+		return array(
+			'success' => false,
+			'message' => self::append_response_request_id( $message, $response ),
+		);
+	}
+
+	private static function append_response_request_id( string $message, $response ): string {
+		$request_id = '';
+
+		if ( ! is_wp_error( $response ) ) {
+			$request_id = (string) wp_remote_retrieve_header( $response, 'x-request-id' );
+
+			if ( '' === $request_id ) {
+				$request_id = (string) wp_remote_retrieve_header( $response, 'x-github-request-id' );
+			}
+		}
+
+		if ( '' === trim( $request_id ) ) {
+			return $message;
+		}
+
+		return sprintf(
+			/* translators: 1: message, 2: upstream request id */
+			__( '%1$s Request ID: %2$s', 'ai-site-search-chatbot' ),
+			$message,
+			trim( $request_id )
+		);
+	}
+
+	private static function build_github_models_inference_error_result( $response ): array {
+		$message = self::build_api_error_result( $response, __( 'GitHub Models validation failed.', 'ai-site-search-chatbot' ) );
+		$status_code = (int) wp_remote_retrieve_response_code( $response );
+
+		if ( 500 !== $status_code || empty( $message['message'] ) ) {
+			return $message;
+		}
+
+		$message['message'] .= ' ' . __( 'The request reached GitHub Models, but the inference endpoint returned an internal error. This usually indicates a temporary provider-side issue or a model-specific availability problem. Try another GitHub Models model such as openai/gpt-4.1, or retry later.', 'ai-site-search-chatbot' );
+
+		return $message;
+	}
+
+	private static function validate_github_models_catalog( array $settings ): array {
+		$response = wp_remote_get(
+			'https://models.github.ai/catalog/models',
+			array(
+				'timeout' => 20,
+				'headers' => array(
+					'Authorization'         => 'Bearer ' . $settings['api_key'],
+					'Accept'                => 'application/vnd.github+json',
+					'X-GitHub-Api-Version'  => '2026-03-10',
+				),
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return array(
+				'success' => false,
+				'message' => sprintf(
+					/* translators: 1: fallback message, 2: detailed error message */
+					__( '%1$s Details: %2$s', 'ai-site-search-chatbot' ),
+					__( 'GitHub Models catalog check failed.', 'ai-site-search-chatbot' ),
+					$response->get_error_message()
+				),
+			);
+		}
+
+		$status_code = (int) wp_remote_retrieve_response_code( $response );
+		if ( $status_code < 200 || $status_code >= 300 ) {
+			return self::build_api_error_result( $response, __( 'GitHub Models catalog check failed.', 'ai-site-search-chatbot' ) );
+		}
+
+		$body = json_decode( (string) wp_remote_retrieve_body( $response ), true );
+		if ( ! is_array( $body ) ) {
+			return array(
+				'success' => false,
+				'message' => __( 'GitHub Models catalog check failed. The catalog response could not be parsed.', 'ai-site-search-chatbot' ),
+			);
+		}
+
+		foreach ( $body as $model ) {
+			if ( is_array( $model ) && isset( $model['id'] ) && (string) $model['id'] === (string) $settings['model'] ) {
+				return array();
+			}
+		}
+
+		return array(
+			'success' => false,
+			'message' => sprintf(
+				/* translators: %s: model id */
+				__( 'The model %s was not found in the GitHub Models catalog for this token. Open the model catalog reference and choose a model ID listed there.', 'ai-site-search-chatbot' ),
+				(string) $settings['model']
+			),
+		);
+	}
+
+	private static function extract_api_error_detail( $body, string $raw_body ): string {
+		$candidates = array();
+
+		if ( is_array( $body ) ) {
+			$paths = array(
+				array( 'error', 'message' ),
+				array( 'error', 'status' ),
+				array( 'error', 'type' ),
+				array( 'message' ),
+				array( 'detail' ),
+				array( 'error_description' ),
+				array( 'details' ),
+				array( 'errors', 0, 'message' ),
+				array( 'errors', 0, 'detail' ),
+				array( 'error' ),
+			);
+
+			foreach ( $paths as $path ) {
+				$value = $body;
+
+				foreach ( $path as $segment ) {
+					if ( is_array( $value ) && isset( $value[ $segment ] ) ) {
+						$value = $value[ $segment ];
+					} else {
+						$value = null;
+						break;
+					}
+				}
+
+				if ( is_string( $value ) && '' !== trim( $value ) ) {
+					$candidates[] = trim( $value );
+				} elseif ( is_array( $value ) ) {
+					$flattened = wp_json_encode( $value );
+
+					if ( is_string( $flattened ) && '' !== trim( $flattened ) ) {
+						$candidates[] = trim( $flattened );
+					}
+				}
+			}
+		}
+
+		if ( empty( $candidates ) ) {
+			$stripped_body = trim( wp_strip_all_tags( $raw_body ) );
+
+			if ( '' !== $stripped_body ) {
+				$candidates[] = preg_replace( '/\s+/', ' ', $stripped_body );
+			}
+		}
+
+		foreach ( $candidates as $candidate ) {
+			if ( '' !== $candidate ) {
+				return mb_substr( $candidate, 0, 220 );
+			}
+		}
+
+		return '';
+	}
+
 	private static function call_openai_api( array $settings, string $message, array $results ): array {
 		$prompt = self::build_ai_prompt( $message, $results, (int) $settings['max_sources'] );
 		$payload = array(
@@ -842,12 +1259,12 @@ JS;
 		);
 
 		if ( is_wp_error( $response ) ) {
-			return array( 'success' => false );
+			return self::build_api_error_result( $response, __( 'OpenAI validation failed.', 'ai-site-search-chatbot' ) );
 		}
 
 		$status_code = (int) wp_remote_retrieve_response_code( $response );
 		if ( $status_code < 200 || $status_code >= 300 ) {
-			return array( 'success' => false );
+			return self::build_api_error_result( $response, __( 'OpenAI validation failed.', 'ai-site-search-chatbot' ) );
 		}
 
 		$body = json_decode( (string) wp_remote_retrieve_body( $response ), true );
@@ -858,7 +1275,10 @@ JS;
 		}
 
 		if ( '' === $content ) {
-			return array( 'success' => false );
+			return array(
+				'success' => false,
+				'message' => __( 'OpenAI returned an empty response.', 'ai-site-search-chatbot' ),
+			);
 		}
 
 		return array(
@@ -895,12 +1315,12 @@ JS;
 		);
 
 		if ( is_wp_error( $response ) ) {
-			return array( 'success' => false );
+			return self::build_api_error_result( $response, __( 'Claude validation failed.', 'ai-site-search-chatbot' ) );
 		}
 
 		$status_code = (int) wp_remote_retrieve_response_code( $response );
 		if ( $status_code < 200 || $status_code >= 300 ) {
-			return array( 'success' => false );
+			return self::build_api_error_result( $response, __( 'Claude validation failed.', 'ai-site-search-chatbot' ) );
 		}
 
 		$body = json_decode( (string) wp_remote_retrieve_body( $response ), true );
@@ -911,7 +1331,10 @@ JS;
 		}
 
 		if ( '' === $content ) {
-			return array( 'success' => false );
+			return array(
+				'success' => false,
+				'message' => __( 'Claude returned an empty response.', 'ai-site-search-chatbot' ),
+			);
 		}
 
 		return array(
@@ -920,29 +1343,38 @@ JS;
 		);
 	}
 
-	private static function call_github_copilot_api( array $settings, string $message, array $results ): array {
-		$prompt = self::build_ai_prompt( $message, $results, (int) $settings['max_sources'] );
-		$payload = array(
-			'model'    => $settings['model'],
-			'messages' => array(
+	private static function call_github_copilot_api( array $settings, string $message, array $results, bool $is_validation = false ): array {
+		$prompt = $is_validation ? $message : self::build_ai_prompt( $message, $results, (int) $settings['max_sources'] );
+		$messages = array(
+			array(
+				'role'    => 'user',
+				'content' => $prompt,
+			),
+		);
+
+		if ( ! $is_validation && '' !== trim( (string) $settings['system_prompt'] ) ) {
+			array_unshift(
+				$messages,
 				array(
 					'role'    => 'system',
 					'content' => $settings['system_prompt'],
-				),
-				array(
-					'role'    => 'user',
-					'content' => $prompt,
-				),
-			),
-			'temperature' => 0.2,
+				)
+			);
+		}
+
+		$payload = array(
+			'model'    => $settings['model'],
+			'messages' => $messages,
 		);
 
 		$response = wp_remote_post(
-			'https://api.githubcopilot.com/chat/completions',
+			'https://models.github.ai/inference/chat/completions',
 			array(
-				'timeout' => 20,
+				'timeout' => 45,
 				'headers' => array(
 					'Authorization' => 'Bearer ' . $settings['api_key'],
+					'Accept'        => 'application/vnd.github+json',
+					'X-GitHub-Api-Version' => '2026-03-10',
 					'Content-Type'  => 'application/json',
 				),
 				'body'    => wp_json_encode( $payload ),
@@ -950,12 +1382,12 @@ JS;
 		);
 
 		if ( is_wp_error( $response ) ) {
-			return array( 'success' => false );
+			return self::build_github_models_inference_error_result( $response );
 		}
 
 		$status_code = (int) wp_remote_retrieve_response_code( $response );
 		if ( $status_code < 200 || $status_code >= 300 ) {
-			return array( 'success' => false );
+			return self::build_github_models_inference_error_result( $response );
 		}
 
 		$body = json_decode( (string) wp_remote_retrieve_body( $response ), true );
@@ -966,7 +1398,10 @@ JS;
 		}
 
 		if ( '' === $content ) {
-			return array( 'success' => false );
+			return array(
+				'success' => false,
+				'message' => __( 'GitHub Models returned an empty response.', 'ai-site-search-chatbot' ),
+			);
 		}
 
 		return array(
@@ -1006,12 +1441,12 @@ JS;
 		);
 
 		if ( is_wp_error( $response ) ) {
-			return array( 'success' => false );
+			return self::build_api_error_result( $response, __( 'Gemini validation failed.', 'ai-site-search-chatbot' ) );
 		}
 
 		$status_code = (int) wp_remote_retrieve_response_code( $response );
 		if ( $status_code < 200 || $status_code >= 300 ) {
-			return array( 'success' => false );
+			return self::build_api_error_result( $response, __( 'Gemini validation failed.', 'ai-site-search-chatbot' ) );
 		}
 
 		$body = json_decode( (string) wp_remote_retrieve_body( $response ), true );
@@ -1022,7 +1457,10 @@ JS;
 		}
 
 		if ( '' === $content ) {
-			return array( 'success' => false );
+			return array(
+				'success' => false,
+				'message' => __( 'Gemini returned an empty response.', 'ai-site-search-chatbot' ),
+			);
 		}
 
 		return array(
