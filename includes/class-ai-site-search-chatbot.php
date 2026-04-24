@@ -58,7 +58,7 @@ final class AISite_Search_Chatbot {
 		$input = is_array( $input ) ? $input : array();
 
 		$provider = isset( $input['ai_provider'] ) ? sanitize_text_field( wp_unslash( $input['ai_provider'] ) ) : $defaults['ai_provider'];
-		$valid_providers = array( 'openai', 'claude', 'github-copilot' );
+		$valid_providers = array( 'openai', 'claude', 'github-copilot', 'gemini' );
 		if ( ! in_array( $provider, $valid_providers, true ) ) {
 			$provider = $defaults['ai_provider'];
 		}
@@ -118,6 +118,12 @@ final class AISite_Search_Chatbot {
 				'description'  => __( 'GitHub Copilot API を使用', 'ai-site-search-chatbot' ),
 				'models'       => array( 'gpt-4', 'gpt-3.5-turbo' ),
 				'default_model' => 'gpt-4',
+			),
+			'gemini'         => array(
+				'label'        => 'Google Gemini',
+				'description'  => __( 'Gemini 2.0 Flash, Gemini 1.5 Pro など', 'ai-site-search-chatbot' ),
+				'models'       => array( 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-1.0-pro' ),
+				'default_model' => 'gemini-2.0-flash',
 			),
 		);
 		?>
@@ -233,7 +239,8 @@ final class AISite_Search_Chatbot {
 				const helpText = {
 					'openai': '<?php echo esc_js( __( 'Get your API key from https://platform.openai.com/api-keys', 'ai-site-search-chatbot' ) ); ?>',
 					'claude': '<?php echo esc_js( __( 'Get your API key from https://console.anthropic.com/', 'ai-site-search-chatbot' ) ); ?>',
-					'github-copilot': '<?php echo esc_js( __( 'Use your GitHub personal access token with copilot scope', 'ai-site-search-chatbot' ) ); ?>'
+					'github-copilot': '<?php echo esc_js( __( 'Use your GitHub personal access token with copilot scope', 'ai-site-search-chatbot' ) ); ?>',
+					'gemini': '<?php echo esc_js( __( 'Get your API key from https://ai.google.dev/api/', 'ai-site-search-chatbot' ) ); ?>'
 				};
 				document.getElementById( 'aiscb_api_key_help' ).textContent = helpText[ selectedProvider ] || '';
 			}
@@ -694,6 +701,9 @@ JS;
 			case 'github-copilot':
 				$response_data = self::call_github_copilot_api( $settings, $message, $results );
 				break;
+			case 'gemini':
+				$response_data = self::call_gemini_api( $settings, $message, $results );
+				break;
 			case 'openai':
 			default:
 				$response_data = self::call_openai_api( $settings, $message, $results );
@@ -865,6 +875,62 @@ JS;
 
 		if ( isset( $body['choices'][0]['message']['content'] ) ) {
 			$content = trim( (string) $body['choices'][0]['message']['content'] );
+		}
+
+		if ( '' === $content ) {
+			return array( 'success' => false );
+		}
+
+		return array(
+			'success' => true,
+			'content' => $content,
+		);
+	}
+
+	private static function call_gemini_api( array $settings, string $message, array $results ): array {
+		$prompt = self::build_ai_prompt( $message, $results, (int) $settings['max_sources'] );
+		$model = str_replace( '/', '%2F', $settings['model'] );
+
+		$payload = array(
+			'contents' => array(
+				array(
+					'parts' => array(
+						array(
+							'text' => $settings['system_prompt'] . "\n\n" . $prompt,
+						),
+					),
+				),
+			),
+			'generationConfig' => array(
+				'temperature' => 0.2,
+			),
+		);
+
+		$response = wp_remote_post(
+			'https://generativelanguage.googleapis.com/v1beta/models/' . $model . ':generateContent?key=' . $settings['api_key'],
+			array(
+				'timeout' => 20,
+				'headers' => array(
+					'Content-Type' => 'application/json',
+				),
+				'body'    => wp_json_encode( $payload ),
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return array( 'success' => false );
+		}
+
+		$status_code = (int) wp_remote_retrieve_response_code( $response );
+		if ( $status_code < 200 || $status_code >= 300 ) {
+			return array( 'success' => false );
+		}
+
+		$body = json_decode( (string) wp_remote_retrieve_body( $response ), true );
+		$content = '';
+
+		if ( isset( $body['candidates'][0]['content']['parts'][0]['text'] ) ) {
+			$content = trim( (string) $body['candidates'][0]['content']['parts'][0]['text'] );
 		}
 
 		if ( '' === $content ) {
