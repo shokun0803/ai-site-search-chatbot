@@ -4,6 +4,8 @@
 
 WordPress サイト訪問者向けに、サイト内検索と生成 AI を組み合わせたチャットボットを提供するプラグインです。
 
+※ 現時点で動作検証済みなのは GitHub Models のみです。OpenAI、Claude、Google Gemini は未検証のためご注意ください。
+
 ## 現在実装済み
 
 - 公開 REST API: POST /wp-json/ai-site-search-chatbot/v1/chat
