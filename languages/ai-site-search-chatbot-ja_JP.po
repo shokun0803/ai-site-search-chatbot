@@ -262,6 +262,58 @@ msgstr "チャットボットデザイン"
 msgid "Choose the floating chatbot design shown at the bottom right of the public site."
 msgstr "公開サイトの右下に表示するフローティングチャットボットのデザインを選択します。"
 
+#: includes/class-ai-site-search-chatbot-admin.php:164
+msgid "Chatbot Display"
+msgstr "チャットボット表示"
+
+#: includes/class-ai-site-search-chatbot-admin.php:168
+msgid "Enable chatbot display on the public site"
+msgstr "公開サイトでチャットボットを表示する"
+
+#: includes/class-ai-site-search-chatbot-admin.php:170
+msgid "The chatbot is not shown on the public site until this setting is enabled."
+msgstr "この設定を有効にするまで、チャットボットは公開サイトに表示されません。"
+
+#: includes/class-ai-site-search-chatbot-admin.php:175
+msgid "Display Location"
+msgstr "表示場所"
+
+#: includes/class-ai-site-search-chatbot.php:224
+msgid "Display on all pages"
+msgstr "すべてのページに表示"
+
+#: includes/class-ai-site-search-chatbot.php:225
+msgid "Automatically show the chatbot on every public page."
+msgstr "公開サイトのすべてのページにチャットボットを自動表示します。"
+
+#: includes/class-ai-site-search-chatbot.php:228
+msgid "Display only on the site top page"
+msgstr "サイトトップのみに表示"
+
+#: includes/class-ai-site-search-chatbot.php:229
+msgid "Automatically show the chatbot only on the top page of the site."
+msgstr "サイトのトップページにのみチャットボットを自動表示します。"
+
+#: includes/class-ai-site-search-chatbot.php:232
+msgid "Display only where the shortcode is placed"
+msgstr "ショートコード配置箇所のみに表示"
+
+#: includes/class-ai-site-search-chatbot.php:233
+msgid "Show the chatbot only on pages where the shortcode is inserted."
+msgstr "ショートコードを挿入したページにのみチャットボットを表示します。"
+
+#: includes/class-ai-site-search-chatbot.php:232
+msgid "Show the chatbot only on pages where the shortcode or dedicated block is inserted."
+msgstr "ショートコードまたは専用ブロックを挿入したページにのみチャットボットを表示します。"
+
+#: includes/class-ai-site-search-chatbot-block.php:28
+msgid "Place the site search chatbot without typing the shortcode manually."
+msgstr "ショートコードを手入力せずに、サイト内検索チャットボットを配置できます。"
+
+#: includes/class-ai-site-search-chatbot-block.php:29
+msgid "This block displays the chatbot on the public site. Enable the chatbot and choose the shortcode display mode in the plugin settings before publishing."
+msgstr "このブロックは公開サイトにチャットボットを表示します。公開前に、プラグイン設定でチャットボットを有効化し、表示方法をショートコード表示に設定してください。"
+
 #: includes/class-ai-site-search-chatbot.php:166
 msgid "Maximum Sources"
 msgstr "最大ソース数"

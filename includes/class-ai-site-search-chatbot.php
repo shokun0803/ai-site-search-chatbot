@@ -24,6 +24,7 @@ final class AISite_Search_Chatbot {
 		add_action( 'admin_init', array( __CLASS__, 'register_settings' ) );
 		add_action( 'rest_api_init', array( __CLASS__, 'register_rest_routes' ) );
 		AISite_Search_Chatbot_Admin::init();
+		AISite_Search_Chatbot_Block::init();
 		AISite_Search_Chatbot_Frontend::init();
 	}
 
@@ -64,6 +65,8 @@ final class AISite_Search_Chatbot {
 			'model'         => '',
 			'system_prompt' => self::get_default_system_prompt(),
 			'max_sources'   => 5,
+			'widget_enabled' => 0,
+			'widget_display_mode' => 'all-pages',
 			'widget_theme'  => 'business',
 		);
 	}
@@ -114,12 +117,19 @@ final class AISite_Search_Chatbot {
 			$widget_theme = $defaults['widget_theme'];
 		}
 
+		$widget_display_mode = isset( $input['widget_display_mode'] ) ? sanitize_key( wp_unslash( $input['widget_display_mode'] ) ) : $defaults['widget_display_mode'];
+		if ( ! array_key_exists( $widget_display_mode, self::get_widget_display_modes() ) ) {
+			$widget_display_mode = $defaults['widget_display_mode'];
+		}
+
 		return array(
 			'ai_provider'   => $provider,
 			'api_key'       => isset( $input['api_key'] ) ? sanitize_text_field( wp_unslash( $input['api_key'] ) ) : $defaults['api_key'],
 			'model'         => isset( $input['model'] ) ? sanitize_text_field( wp_unslash( $input['model'] ) ) : $defaults['model'],
 			'system_prompt' => isset( $input['system_prompt'] ) ? sanitize_textarea_field( wp_unslash( $input['system_prompt'] ) ) : $defaults['system_prompt'],
 			'max_sources'   => isset( $input['max_sources'] ) ? max( 1, min( 10, absint( $input['max_sources'] ) ) ) : $defaults['max_sources'],
+			'widget_enabled' => isset( $input['widget_enabled'] ) ? 1 : 0,
+			'widget_display_mode' => $widget_display_mode,
 			'widget_theme'  => $widget_theme,
 		);
 	}
@@ -209,6 +219,23 @@ final class AISite_Search_Chatbot {
 			'cute'     => array(
 				'label'       => __( 'Cute', 'ai-site-search-chatbot' ),
 				'description' => __( 'Soft colors and rounded shapes for friendly brands, salons, schools, and personal sites.', 'ai-site-search-chatbot' ),
+			),
+		);
+	}
+
+	public static function get_widget_display_modes(): array {
+		return array(
+			'all-pages' => array(
+				'label' => __( 'Display on all pages', 'ai-site-search-chatbot' ),
+				'description' => __( 'Automatically show the chatbot on every public page.', 'ai-site-search-chatbot' ),
+			),
+			'front-page' => array(
+				'label' => __( 'Display only on the site top page', 'ai-site-search-chatbot' ),
+				'description' => __( 'Automatically show the chatbot only on the top page of the site.', 'ai-site-search-chatbot' ),
+			),
+			'shortcode' => array(
+				'label' => __( 'Display only where the shortcode is placed', 'ai-site-search-chatbot' ),
+				'description' => __( 'Show the chatbot only on pages where the shortcode or dedicated block is inserted.', 'ai-site-search-chatbot' ),
 			),
 		);
 	}

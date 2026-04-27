@@ -32,6 +32,10 @@ final class AISite_Search_Chatbot_Frontend {
 	}
 
 	public static function render_shortcode( $atts = array() ): string {
+		if ( ! self::should_render_shortcode() ) {
+			return '';
+		}
+
 		self::enqueue_assets();
 		self::$floating_widget_rendered = true;
 
@@ -51,7 +55,7 @@ final class AISite_Search_Chatbot_Frontend {
 	}
 
 	public static function render_floating_widget(): void {
-		if ( is_admin() || self::$floating_widget_rendered ) {
+		if ( is_admin() || self::$floating_widget_rendered || ! self::should_render_automatic_widget() ) {
 			return;
 		}
 
@@ -76,6 +80,36 @@ final class AISite_Search_Chatbot_Frontend {
 
 		wp_enqueue_style( 'aiscb-frontend' );
 		wp_enqueue_script( 'aiscb-frontend' );
+	}
+
+	private static function should_render_shortcode(): bool {
+		$settings = AISite_Search_Chatbot::get_settings();
+
+		if ( empty( $settings['widget_enabled'] ) ) {
+			return false;
+		}
+
+		return 'shortcode' === (string) $settings['widget_display_mode'];
+	}
+
+	private static function should_render_automatic_widget(): bool {
+		$settings = AISite_Search_Chatbot::get_settings();
+
+		if ( empty( $settings['widget_enabled'] ) ) {
+			return false;
+		}
+
+		$display_mode = isset( $settings['widget_display_mode'] ) ? (string) $settings['widget_display_mode'] : 'all-pages';
+
+		if ( 'all-pages' === $display_mode ) {
+			return true;
+		}
+
+		if ( 'front-page' === $display_mode ) {
+			return is_front_page();
+		}
+
+		return false;
 	}
 
 	private static function get_widget_markup( array $args ): string {

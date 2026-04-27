@@ -82,6 +82,7 @@ final class AISite_Search_Chatbot_Admin {
 		$settings = AISite_Search_Chatbot::get_settings();
 		$providers = AISite_Search_Chatbot::get_providers_config();
 		$widget_themes = AISite_Search_Chatbot::get_widget_themes();
+		$widget_display_modes = AISite_Search_Chatbot::get_widget_display_modes();
 		?>
 		<div class="wrap aiscb-admin">
 			<h1><?php echo esc_html( __( 'AI Site Search Chatbot', 'ai-site-search-chatbot' ) ); ?></h1>
@@ -158,6 +159,31 @@ final class AISite_Search_Chatbot_Admin {
 						<td>
 							<input type="number" min="1" max="10" id="aiscb_max_sources" name="<?php echo esc_attr( AISite_Search_Chatbot::OPTION_KEY ); ?>[max_sources]" value="<?php echo esc_attr( (string) absint( $settings['max_sources'] ) ); ?>" />
 							<p class="description"><?php echo esc_html( __( 'Maximum number of search results to use as sources.', 'ai-site-search-chatbot' ) ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php echo esc_html( __( 'Chatbot Display', 'ai-site-search-chatbot' ) ); ?></th>
+						<td>
+							<label for="aiscb_widget_enabled">
+								<input type="checkbox" id="aiscb_widget_enabled" name="<?php echo esc_attr( AISite_Search_Chatbot::OPTION_KEY ); ?>[widget_enabled]" value="1" <?php checked( ! empty( $settings['widget_enabled'] ) ); ?> />
+								<?php echo esc_html( __( 'Enable chatbot display on the public site', 'ai-site-search-chatbot' ) ); ?>
+							</label>
+							<p class="description"><?php echo esc_html( __( 'The chatbot is not shown on the public site until this setting is enabled.', 'ai-site-search-chatbot' ) ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="aiscb_widget_display_mode"><?php echo esc_html( __( 'Display Location', 'ai-site-search-chatbot' ) ); ?></label></th>
+						<td>
+							<select id="aiscb_widget_display_mode" name="<?php echo esc_attr( AISite_Search_Chatbot::OPTION_KEY ); ?>[widget_display_mode]">
+								<?php foreach ( $widget_display_modes as $mode_key => $mode_info ) : ?>
+									<option value="<?php echo esc_attr( $mode_key ); ?>" <?php selected( $settings['widget_display_mode'], $mode_key ); ?>><?php echo esc_html( $mode_info['label'] ); ?></option>
+								<?php endforeach; ?>
+							</select>
+							<div class="aiscb-theme-descriptions">
+								<?php foreach ( $widget_display_modes as $mode_info ) : ?>
+									<p class="description"><?php echo esc_html( $mode_info['label'] . ': ' . $mode_info['description'] ); ?></p>
+								<?php endforeach; ?>
+							</div>
 						</td>
 					</tr>
 					<tr>
