@@ -274,6 +274,90 @@ msgstr "AI 応答上限（1 時間）"
 msgid "Cap the total AI replies allowed from the same connection within 1 hour. Use this to suppress prolonged back-and-forth play while keeping normal customer use available. Set this higher than the 10-minute limit; a practical starting point is around 20 to 40."
 msgstr "同一接続から 1 時間以内に許可する AI 応答の合計回数を制限します。通常の利用は維持しつつ、長時間のやり取りによる過剰利用を抑えるために使います。10 分上限より大きい値に設定し、初期目安は 20 回から 40 回程度です。"
 
+#: includes/class-ai-site-search-chatbot-admin.php:235
+msgid "Recent Visitor Chat Logs"
+msgstr "最近の訪問者チャットログ"
+
+#: includes/class-ai-site-search-chatbot-admin.php:236
+msgid "The latest %d public chat interactions are stored here so you can review visitor questions and how the chatbot responded."
+msgstr "最新 %d 件の公開チャット履歴を保存し、訪問者の質問内容とチャットボットの返答内容を確認できます。"
+
+#: includes/class-ai-site-search-chatbot-admin.php:238
+msgid "%d entries"
+msgstr "%d 件"
+
+#: includes/class-ai-site-search-chatbot-admin.php:241
+msgid "Chat log status legend"
+msgstr "チャットログ状態の凡例"
+
+#: includes/class-ai-site-search-chatbot-admin.php:251
+msgid "No public chat logs have been recorded yet."
+msgstr "まだ公開チャットログは記録されていません。"
+
+#: includes/class-ai-site-search-chatbot-admin.php:257
+msgid "Status"
+msgstr "状態"
+
+#: includes/class-ai-site-search-chatbot-admin.php:258
+msgid "Time"
+msgstr "日時"
+
+#: includes/class-ai-site-search-chatbot-admin.php:259
+msgid "Visitor Message"
+msgstr "訪問者メッセージ"
+
+#: includes/class-ai-site-search-chatbot-admin.php:260
+msgid "Reply"
+msgstr "返答"
+
+#: includes/class-ai-site-search-chatbot-admin.php:279
+msgid "IP: %s"
+msgstr "IP: %s"
+
+#: includes/class-ai-site-search-chatbot-admin.php:280
+msgid "Sources: %d"
+msgstr "参照元: %d 件"
+
+#: includes/class-ai-site-search-chatbot-admin.php:312
+msgid "Show full text"
+msgstr "全文を表示"
+
+#: includes/class-ai-site-search-chatbot-admin.php:321
+msgid "AI Reply"
+msgstr "AI 応答"
+
+#: includes/class-ai-site-search-chatbot-admin.php:326
+msgid "Cached Reply"
+msgstr "キャッシュ応答"
+
+#: includes/class-ai-site-search-chatbot-admin.php:331
+msgid "AI Limit Hit"
+msgstr "AI 制限到達"
+
+#: includes/class-ai-site-search-chatbot-admin.php:336
+msgid "Spam Blocked"
+msgstr "スパム遮断"
+
+#: includes/class-ai-site-search-chatbot-admin.php:341
+msgid "No Search Match"
+msgstr "検索一致なし"
+
+#: includes/class-ai-site-search-chatbot-admin.php:346
+msgid "AI Error Fallback"
+msgstr "AI エラー時の代替返答"
+
+#: includes/class-ai-site-search-chatbot-admin.php:351
+msgid "Search Only"
+msgstr "検索のみ"
+
+#: includes/class-ai-site-search-chatbot-admin.php:356
+msgid "Other"
+msgstr "その他"
+
+#: includes/class-ai-site-search-chatbot.php:1725
+msgid "To keep the service stable, detailed AI replies are temporarily paused for this connection. Please wait a bit and try again."
+msgstr "サービスを安定して提供するため、この接続では詳細な AI 応答を一時停止しています。しばらく待ってからもう一度お試しください。"
+
 #: includes/class-ai-site-search-chatbot-admin.php:171
 msgid "Choose the floating chatbot design shown at the bottom right of the public site."
 msgstr "公開サイトの右下に表示するフローティングチャットボットのデザインを選択します。"

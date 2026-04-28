@@ -10,6 +10,8 @@ final class AISite_Search_Chatbot {
 	const OPTION_GROUP = 'aiscb_settings_group';
 	const REST_NAMESPACE = 'ai-site-search-chatbot/v1';
 	const SHORTCODE = 'ai_site_search_chatbot';
+	const CHAT_LOG_OPTION = 'aiscb_chat_logs';
+	const CHAT_LOG_LIMIT = 50;
 
 	public static function activate(): void {
 		if ( false !== get_option( self::OPTION_KEY, false ) ) {
@@ -387,21 +389,33 @@ final class AISite_Search_Chatbot {
 	}
 
 	public static function handle_chat_request( WP_REST_Request $request ) {
+		$message = self::sanitize_message( (string) $request->get_param( 'message' ) );
+
 		if ( self::is_rate_limited() ) {
+			$answer = __( 'Too many requests. Please wait a moment and try again.', 'ai-site-search-chatbot' );
+			self::append_chat_log(
+				array(
+					'question'   => $message,
+					'answer'     => $answer,
+					'status'     => 'request-blocked',
+					'used_ai'    => false,
+					'source_count' => 0,
+				)
+			);
+
 			return new WP_REST_Response(
 				array(
-					'answer' => __( 'Too many requests. Please wait a moment and try again.', 'ai-site-search-chatbot' ),
+					'answer' => $answer,
 				),
 				429
 			);
 		}
 
-		$message = self::sanitize_message( (string) $request->get_param( 'message' ) );
-
 		if ( '' === $message ) {
+			$answer = __( 'Please enter a question.', 'ai-site-search-chatbot' );
 			return new WP_REST_Response(
 				array(
-					'answer' => __( 'Please enter a question.', 'ai-site-search-chatbot' ),
+					'answer' => $answer,
 				),
 				400
 			);
@@ -410,6 +424,15 @@ final class AISite_Search_Chatbot {
 		$settings = self::get_settings();
 		$results = self::search_site_content( $message, $settings );
 		$answer = self::generate_answer( $message, $results );
+		self::append_chat_log(
+			array(
+				'question'     => $message,
+				'answer'       => $answer['answer'],
+				'status'       => $answer['log_status'],
+				'used_ai'      => ! empty( $answer['used_ai'] ),
+				'source_count' => count( $answer['sources'] ),
+			)
+		);
 
 		return rest_ensure_response(
 			array(
@@ -1020,6 +1043,7 @@ final class AISite_Search_Chatbot {
 				'answer'   => self::build_fallback_answer( $message, $results ),
 				'used_ai'  => false,
 				'sources'  => $sources,
+				'log_status' => 'fallback-no-config',
 			);
 		}
 
@@ -1028,6 +1052,7 @@ final class AISite_Search_Chatbot {
 				'answer'   => self::build_fallback_answer( $message, $results ),
 				'used_ai'  => false,
 				'sources'  => $sources,
+				'log_status' => 'fallback-no-results',
 			);
 		}
 
@@ -1038,6 +1063,7 @@ final class AISite_Search_Chatbot {
 				'answer'  => $cached_answer,
 				'used_ai' => true,
 				'sources' => $sources,
+				'log_status' => 'ai-cached',
 			);
 		}
 
@@ -1046,6 +1072,7 @@ final class AISite_Search_Chatbot {
 				'answer'  => self::build_ai_limited_fallback_answer( $message, $results ),
 				'used_ai' => false,
 				'sources' => $sources,
+				'log_status' => 'ai-limited',
 			);
 		}
 
@@ -1056,6 +1083,7 @@ final class AISite_Search_Chatbot {
 				'answer'  => self::build_fallback_answer( $message, $results ),
 				'used_ai' => false,
 				'sources' => $sources,
+				'log_status' => 'fallback-provider-error',
 			);
 		}
 
@@ -1066,7 +1094,60 @@ final class AISite_Search_Chatbot {
 			'answer'  => $response_data['content'],
 			'used_ai' => true,
 			'sources' => $sources,
+			'log_status' => 'ai-generated',
 		);
+	}
+
+	public static function get_chat_logs(): array {
+		$logs = get_option( self::CHAT_LOG_OPTION, array() );
+
+		if ( ! is_array( $logs ) ) {
+			return array();
+		}
+
+		return array_values( $logs );
+	}
+
+	private static function append_chat_log( array $entry ): void {
+		$question = isset( $entry['question'] ) ? self::trim_chat_log_text( (string) $entry['question'], 700 ) : '';
+
+		if ( '' === $question ) {
+			return;
+		}
+
+		$logs = self::get_chat_logs();
+		array_unshift(
+			$logs,
+			array(
+				'time'         => time(),
+				'question'     => $question,
+				'answer'       => isset( $entry['answer'] ) ? self::trim_chat_log_text( (string) $entry['answer'], 4000 ) : '',
+				'status'       => isset( $entry['status'] ) ? sanitize_key( (string) $entry['status'] ) : 'unknown',
+				'used_ai'      => ! empty( $entry['used_ai'] ),
+				'source_count' => isset( $entry['source_count'] ) ? absint( $entry['source_count'] ) : 0,
+				'ip'           => self::get_client_ip_address(),
+			)
+		);
+
+		if ( count( $logs ) > self::CHAT_LOG_LIMIT ) {
+			$logs = array_slice( $logs, 0, self::CHAT_LOG_LIMIT );
+		}
+
+		update_option( self::CHAT_LOG_OPTION, $logs, false );
+	}
+
+	private static function trim_chat_log_text( string $text, int $limit ): string {
+		$text = trim( preg_replace( '/\s+/u', ' ', wp_strip_all_tags( $text ) ) );
+
+		if ( '' === $text ) {
+			return '';
+		}
+
+		if ( strlen( $text ) > $limit ) {
+			$text = substr( $text, 0, $limit ) . '...';
+		}
+
+		return $text;
 	}
 
 	private static function request_ai_answer( array $settings, string $message, array $results ): array {

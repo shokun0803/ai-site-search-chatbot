@@ -80,6 +80,7 @@ final class AISite_Search_Chatbot_Admin {
 		}
 
 		$settings = AISite_Search_Chatbot::get_settings();
+		$chat_logs = AISite_Search_Chatbot::get_chat_logs();
 		$providers = AISite_Search_Chatbot::get_providers_config();
 		$widget_themes = AISite_Search_Chatbot::get_widget_themes();
 		$widget_display_modes = AISite_Search_Chatbot::get_widget_display_modes();
@@ -219,7 +220,168 @@ final class AISite_Search_Chatbot_Admin {
 				</table>
 				<?php submit_button(); ?>
 			</form>
+
+			<?php self::render_chat_logs_panel( $chat_logs ); ?>
 		</div>
 		<?php
+	}
+
+	private static function render_chat_logs_panel( array $chat_logs ): void {
+		$status_map = self::get_chat_log_status_map();
+		?>
+		<div class="aiscb-log-panel">
+			<div class="aiscb-log-panel__header">
+				<div>
+					<h2 class="aiscb-section-title"><?php echo esc_html( __( 'Recent Visitor Chat Logs', 'ai-site-search-chatbot' ) ); ?></h2>
+					<p class="description"><?php echo esc_html( sprintf( __( 'The latest %d public chat interactions are stored here so you can review visitor questions and how the chatbot responded.', 'ai-site-search-chatbot' ), AISite_Search_Chatbot::CHAT_LOG_LIMIT ) ); ?></p>
+				</div>
+				<div class="aiscb-log-panel__count"><?php echo esc_html( sprintf( __( '%d entries', 'ai-site-search-chatbot' ), count( $chat_logs ) ) ); ?></div>
+			</div>
+
+			<div class="aiscb-log-legend" aria-label="<?php echo esc_attr__( 'Chat log status legend', 'ai-site-search-chatbot' ); ?>">
+				<?php foreach ( $status_map as $status ) : ?>
+					<span class="aiscb-log-pill aiscb-log-pill--<?php echo esc_attr( $status['tone'] ); ?>">
+						<span class="dashicons <?php echo esc_attr( $status['icon'] ); ?>" aria-hidden="true"></span>
+						<?php echo esc_html( $status['label'] ); ?>
+					</span>
+				<?php endforeach; ?>
+			</div>
+
+			<?php if ( empty( $chat_logs ) ) : ?>
+				<p class="aiscb-log-empty"><?php echo esc_html( __( 'No public chat logs have been recorded yet.', 'ai-site-search-chatbot' ) ); ?></p>
+			<?php else : ?>
+				<div class="aiscb-log-table-wrap">
+					<table class="widefat fixed striped aiscb-log-table">
+						<thead>
+							<tr>
+								<th><?php echo esc_html( __( 'Status', 'ai-site-search-chatbot' ) ); ?></th>
+								<th><?php echo esc_html( __( 'Time', 'ai-site-search-chatbot' ) ); ?></th>
+								<th><?php echo esc_html( __( 'Visitor Message', 'ai-site-search-chatbot' ) ); ?></th>
+								<th><?php echo esc_html( __( 'Reply', 'ai-site-search-chatbot' ) ); ?></th>
+							</tr>
+						</thead>
+						<tbody>
+							<?php foreach ( $chat_logs as $log ) : ?>
+								<?php
+								$status_key = isset( $log['status'] ) ? (string) $log['status'] : 'unknown';
+								$status = $status_map[ $status_key ] ?? $status_map['unknown'];
+								$timestamp = isset( $log['time'] ) ? absint( $log['time'] ) : 0;
+								?>
+								<tr>
+									<td class="aiscb-log-table__status">
+										<span class="aiscb-log-pill aiscb-log-pill--<?php echo esc_attr( $status['tone'] ); ?>">
+											<span class="dashicons <?php echo esc_attr( $status['icon'] ); ?>" aria-hidden="true"></span>
+											<?php echo esc_html( $status['label'] ); ?>
+										</span>
+									</td>
+									<td class="aiscb-log-table__time">
+										<div><?php echo esc_html( $timestamp ? wp_date( 'Y-m-d H:i:s', $timestamp ) : '-' ); ?></div>
+										<div class="aiscb-log-meta"><?php echo esc_html( sprintf( __( 'IP: %s', 'ai-site-search-chatbot' ), self::mask_ip_address( isset( $log['ip'] ) ? (string) $log['ip'] : '' ) ) ); ?></div>
+										<div class="aiscb-log-meta"><?php echo esc_html( sprintf( __( 'Sources: %d', 'ai-site-search-chatbot' ), isset( $log['source_count'] ) ? absint( $log['source_count'] ) : 0 ) ); ?></div>
+									</td>
+									<td><?php self::render_log_text_block( isset( $log['question'] ) ? (string) $log['question'] : '' ); ?></td>
+									<td><?php self::render_log_text_block( isset( $log['answer'] ) ? (string) $log['answer'] : '' ); ?></td>
+								</tr>
+							<?php endforeach; ?>
+						</tbody>
+					</table>
+				</div>
+			<?php endif; ?>
+		</div>
+		<?php
+	}
+
+	private static function render_log_text_block( string $text ): void {
+		$text = trim( $text );
+
+		if ( '' === $text ) {
+			echo '<span class="aiscb-log-meta">-</span>';
+
+			return;
+		}
+
+		if ( strlen( $text ) <= 180 ) {
+			printf( '<div class="aiscb-log-text">%s</div>', esc_html( $text ) );
+
+			return;
+		}
+
+		printf( '<div class="aiscb-log-text">%s</div>', esc_html( substr( $text, 0, 180 ) . '...' ) );
+		?>
+		<details class="aiscb-log-details">
+			<summary><?php echo esc_html( __( 'Show full text', 'ai-site-search-chatbot' ) ); ?></summary>
+			<div class="aiscb-log-details__body"><?php echo esc_html( $text ); ?></div>
+		</details>
+		<?php
+	}
+
+	private static function get_chat_log_status_map(): array {
+		return array(
+			'ai-generated' => array(
+				'label' => __( 'AI Reply', 'ai-site-search-chatbot' ),
+				'icon'  => 'dashicons-format-chat',
+				'tone'  => 'success',
+			),
+			'ai-cached' => array(
+				'label' => __( 'Cached Reply', 'ai-site-search-chatbot' ),
+				'icon'  => 'dashicons-update',
+				'tone'  => 'info',
+			),
+			'ai-limited' => array(
+				'label' => __( 'AI Limit Hit', 'ai-site-search-chatbot' ),
+				'icon'  => 'dashicons-clock',
+				'tone'  => 'warning',
+			),
+			'request-blocked' => array(
+				'label' => __( 'Spam Blocked', 'ai-site-search-chatbot' ),
+				'icon'  => 'dashicons-shield-alt',
+				'tone'  => 'danger',
+			),
+			'fallback-no-results' => array(
+				'label' => __( 'No Search Match', 'ai-site-search-chatbot' ),
+				'icon'  => 'dashicons-search',
+				'tone'  => 'muted',
+			),
+			'fallback-provider-error' => array(
+				'label' => __( 'AI Error Fallback', 'ai-site-search-chatbot' ),
+				'icon'  => 'dashicons-warning',
+				'tone'  => 'warning',
+			),
+			'fallback-no-config' => array(
+				'label' => __( 'Search Only', 'ai-site-search-chatbot' ),
+				'icon'  => 'dashicons-admin-site-alt3',
+				'tone'  => 'muted',
+			),
+			'unknown' => array(
+				'label' => __( 'Other', 'ai-site-search-chatbot' ),
+				'icon'  => 'dashicons-marker',
+				'tone'  => 'muted',
+			),
+		);
+	}
+
+	private static function mask_ip_address( string $ip_address ): string {
+		if ( '' === $ip_address ) {
+			return '-';
+		}
+
+		if ( false !== strpos( $ip_address, ':' ) ) {
+			$parts = explode( ':', $ip_address );
+
+			if ( count( $parts ) > 2 ) {
+				return implode( ':', array_slice( $parts, 0, 2 ) ) . ':*';
+			}
+		}
+
+		if ( false !== strpos( $ip_address, '.' ) ) {
+			$parts = explode( '.', $ip_address );
+
+			if ( 4 === count( $parts ) ) {
+				$parts[3] = '*';
+				return implode( '.', $parts );
+			}
+		}
+
+		return $ip_address;
 	}
 }
