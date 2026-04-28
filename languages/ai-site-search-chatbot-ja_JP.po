@@ -258,6 +258,22 @@ msgstr "親しみやすいブランド、サロン、学校、個人サイトに
 msgid "Chatbot Design"
 msgstr "チャットボットデザイン"
 
+#: includes/class-ai-site-search-chatbot-admin.php:165
+msgid "AI Reply Limit (10 minutes)"
+msgstr "AI 応答上限（10 分）"
+
+#: includes/class-ai-site-search-chatbot-admin.php:168
+msgid "Limit the number of AI replies allowed from the same connection within 10 minutes. Normal short conversations should still pass, while repeated trial-and-error questions are switched to site-search-based guidance only. A practical starting point is around 6 to 10."
+msgstr "同一接続から 10 分以内に許可する AI 応答回数を制限します。通常の短いやり取りはそのまま通しつつ、試行錯誤的な質問の繰り返しはサイト内検索ベースの案内のみに切り替えます。初期目安は 6 回から 10 回程度です。"
+
+#: includes/class-ai-site-search-chatbot-admin.php:172
+msgid "AI Reply Limit (1 hour)"
+msgstr "AI 応答上限（1 時間）"
+
+#: includes/class-ai-site-search-chatbot-admin.php:175
+msgid "Cap the total AI replies allowed from the same connection within 1 hour. Use this to suppress prolonged back-and-forth play while keeping normal customer use available. Set this higher than the 10-minute limit; a practical starting point is around 20 to 40."
+msgstr "同一接続から 1 時間以内に許可する AI 応答の合計回数を制限します。通常の利用は維持しつつ、長時間のやり取りによる過剰利用を抑えるために使います。10 分上限より大きい値に設定し、初期目安は 20 回から 40 回程度です。"
+
 #: includes/class-ai-site-search-chatbot-admin.php:171
 msgid "Choose the floating chatbot design shown at the bottom right of the public site."
 msgstr "公開サイトの右下に表示するフローティングチャットボットのデザインを選択します。"

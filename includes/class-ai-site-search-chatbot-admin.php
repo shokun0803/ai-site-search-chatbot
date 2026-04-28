@@ -162,6 +162,20 @@ final class AISite_Search_Chatbot_Admin {
 						</td>
 					</tr>
 					<tr>
+						<th scope="row"><label for="aiscb_ai_limit_window_10m"><?php echo esc_html( __( 'AI Reply Limit (10 minutes)', 'ai-site-search-chatbot' ) ); ?></label></th>
+						<td>
+							<input type="number" min="1" max="30" id="aiscb_ai_limit_window_10m" name="<?php echo esc_attr( AISite_Search_Chatbot::OPTION_KEY ); ?>[ai_limit_window_10m]" value="<?php echo esc_attr( (string) absint( $settings['ai_limit_window_10m'] ) ); ?>" />
+							<p class="description"><?php echo esc_html( __( 'Limit the number of AI replies allowed from the same connection within 10 minutes. Normal short conversations should still pass, while repeated trial-and-error questions are switched to site-search-based guidance only. A practical starting point is around 6 to 10.', 'ai-site-search-chatbot' ) ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="aiscb_ai_limit_window_1h"><?php echo esc_html( __( 'AI Reply Limit (1 hour)', 'ai-site-search-chatbot' ) ); ?></label></th>
+						<td>
+							<input type="number" min="1" max="100" id="aiscb_ai_limit_window_1h" name="<?php echo esc_attr( AISite_Search_Chatbot::OPTION_KEY ); ?>[ai_limit_window_1h]" value="<?php echo esc_attr( (string) absint( $settings['ai_limit_window_1h'] ) ); ?>" />
+							<p class="description"><?php echo esc_html( __( 'Cap the total AI replies allowed from the same connection within 1 hour. Use this to suppress prolonged back-and-forth play while keeping normal customer use available. Set this higher than the 10-minute limit; a practical starting point is around 20 to 40.', 'ai-site-search-chatbot' ) ); ?></p>
+						</td>
+					</tr>
+					<tr>
 						<th scope="row"><?php echo esc_html( __( 'Chatbot Display', 'ai-site-search-chatbot' ) ); ?></th>
 						<td>
 							<label for="aiscb_widget_enabled">

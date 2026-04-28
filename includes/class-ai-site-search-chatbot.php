@@ -65,6 +65,8 @@ final class AISite_Search_Chatbot {
 			'model'         => '',
 			'system_prompt' => self::get_default_system_prompt(),
 			'max_sources'   => 5,
+			'ai_limit_window_10m' => 8,
+			'ai_limit_window_1h' => 24,
 			'widget_enabled' => 0,
 			'widget_display_mode' => 'all-pages',
 			'widget_theme'  => 'business',
@@ -128,6 +130,8 @@ final class AISite_Search_Chatbot {
 			'model'         => isset( $input['model'] ) ? sanitize_text_field( wp_unslash( $input['model'] ) ) : $defaults['model'],
 			'system_prompt' => isset( $input['system_prompt'] ) ? sanitize_textarea_field( wp_unslash( $input['system_prompt'] ) ) : $defaults['system_prompt'],
 			'max_sources'   => isset( $input['max_sources'] ) ? max( 1, min( 10, absint( $input['max_sources'] ) ) ) : $defaults['max_sources'],
+			'ai_limit_window_10m' => isset( $input['ai_limit_window_10m'] ) ? max( 1, min( 30, absint( $input['ai_limit_window_10m'] ) ) ) : $defaults['ai_limit_window_10m'],
+			'ai_limit_window_1h' => isset( $input['ai_limit_window_1h'] ) ? max( 1, min( 100, absint( $input['ai_limit_window_1h'] ) ) ) : $defaults['ai_limit_window_1h'],
 			'widget_enabled' => isset( $input['widget_enabled'] ) ? 1 : 0,
 			'widget_display_mode' => $widget_display_mode,
 			'widget_theme'  => $widget_theme,
@@ -430,22 +434,213 @@ final class AISite_Search_Chatbot {
 	}
 
 	private static function is_rate_limited(): bool {
-		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : 'unknown';
+		$ip = self::get_client_ip_address();
 		$key = 'aiscb_rate_' . md5( $ip );
+		$now = time();
 		$state = get_transient( $key );
 
 		if ( ! is_array( $state ) ) {
 			$state = array(
-				'count' => 0,
-				'last'  => time(),
+				'timestamps' => array(),
+				'blocked_until' => 0,
 			);
 		}
 
-		$state['count']++;
+		$state = wp_parse_args(
+			$state,
+			array(
+				'timestamps' => array(),
+				'blocked_until' => 0,
+			)
+		);
 
+		if ( $state['blocked_until'] > $now ) {
+			set_transient( $key, $state, max( 1, $state['blocked_until'] - $now ) );
+
+			return true;
+		}
+
+		$timestamps = array_values(
+			array_filter(
+				array_map( 'absint', (array) $state['timestamps'] ),
+				static function ( int $timestamp ) use ( $now ): bool {
+					return $timestamp >= ( $now - MINUTE_IN_SECONDS );
+				}
+			)
+		);
+
+		$recent_burst_count = 0;
+
+		foreach ( $timestamps as $timestamp ) {
+			if ( $timestamp >= ( $now - 10 ) ) {
+				++$recent_burst_count;
+			}
+		}
+
+		if ( $recent_burst_count >= 3 || count( $timestamps ) >= 20 ) {
+			$state['timestamps'] = $timestamps;
+			$state['blocked_until'] = $now + 60;
+			set_transient( $key, $state, 60 );
+
+			return true;
+		}
+
+		$timestamps[] = $now;
+		$state['timestamps'] = $timestamps;
+		$state['blocked_until'] = 0;
 		set_transient( $key, $state, MINUTE_IN_SECONDS );
 
-		return $state['count'] > 30;
+		return false;
+	}
+
+	private static function get_client_ip_address(): string {
+		$candidates = array(
+			'HTTP_CF_CONNECTING_IP',
+			'HTTP_X_REAL_IP',
+			'HTTP_X_FORWARDED_FOR',
+			'REMOTE_ADDR',
+		);
+
+		foreach ( $candidates as $server_key ) {
+			if ( empty( $_SERVER[ $server_key ] ) ) {
+				continue;
+			}
+
+			$raw_value = sanitize_text_field( wp_unslash( (string) $_SERVER[ $server_key ] ) );
+			$parts = array_map( 'trim', explode( ',', $raw_value ) );
+
+			foreach ( $parts as $part ) {
+				if ( '' === $part ) {
+					continue;
+				}
+
+				if ( false !== filter_var( $part, FILTER_VALIDATE_IP ) ) {
+					return $part;
+				}
+			}
+		}
+
+		return 'unknown';
+	}
+
+	private static function is_ai_usage_limited(): bool {
+		$limits = self::get_ai_usage_limits();
+		$state = self::get_ai_usage_state();
+		$now = time();
+		$recent_ten_minutes = 0;
+		$recent_hour = count( $state['timestamps'] );
+
+		foreach ( $state['timestamps'] as $timestamp ) {
+			if ( $timestamp >= ( $now - ( 10 * MINUTE_IN_SECONDS ) ) ) {
+				++$recent_ten_minutes;
+			}
+		}
+
+		return $recent_ten_minutes >= $limits['ten_minutes'] || $recent_hour >= $limits['one_hour'];
+	}
+
+	private static function get_ai_usage_limits(): array {
+		$settings = self::get_settings();
+
+		return array(
+			'ten_minutes' => max( 1, min( 30, absint( $settings['ai_limit_window_10m'] ?? 8 ) ) ),
+			'one_hour'    => max( 1, min( 100, absint( $settings['ai_limit_window_1h'] ?? 24 ) ) ),
+		);
+	}
+
+	private static function register_ai_usage(): void {
+		$state = self::get_ai_usage_state();
+		$state['timestamps'][] = time();
+		self::store_ai_usage_state( $state );
+	}
+
+	private static function get_ai_usage_state(): array {
+		$key = self::get_ai_usage_key();
+		$now = time();
+		$state = get_transient( $key );
+
+		if ( ! is_array( $state ) ) {
+			$state = array(
+				'timestamps' => array(),
+			);
+		}
+
+		$state = wp_parse_args(
+			$state,
+			array(
+				'timestamps' => array(),
+			)
+		);
+
+		$state['timestamps'] = array_values(
+			array_filter(
+				array_map( 'absint', (array) $state['timestamps'] ),
+				static function ( int $timestamp ) use ( $now ): bool {
+					return $timestamp >= ( $now - HOUR_IN_SECONDS );
+				}
+			)
+		);
+
+		set_transient( $key, $state, HOUR_IN_SECONDS );
+
+		return $state;
+	}
+
+	private static function store_ai_usage_state( array $state ): void {
+		set_transient( self::get_ai_usage_key(), $state, HOUR_IN_SECONDS );
+	}
+
+	private static function get_ai_usage_key(): string {
+		return 'aiscb_ai_usage_' . md5( self::get_client_ip_address() );
+	}
+
+	private static function get_cached_ai_answer( array $settings, string $message, array $results ): string {
+		$cached = get_transient( self::get_ai_answer_cache_key( $settings, $message, $results ) );
+
+		if ( ! is_string( $cached ) ) {
+			return '';
+		}
+
+		return trim( $cached );
+	}
+
+	private static function store_cached_ai_answer( array $settings, string $message, array $results, string $answer ): void {
+		$answer = trim( $answer );
+
+		if ( '' === $answer ) {
+			return;
+		}
+
+		set_transient( self::get_ai_answer_cache_key( $settings, $message, $results ), $answer, 6 * HOUR_IN_SECONDS );
+	}
+
+	private static function get_ai_answer_cache_key( array $settings, string $message, array $results ): string {
+		$result_fingerprint = array();
+
+		foreach ( array_slice( $results, 0, 5 ) as $result ) {
+			$result_fingerprint[] = array(
+				'id' => isset( $result['id'] ) ? (int) $result['id'] : 0,
+				'title' => isset( $result['title'] ) ? sanitize_text_field( (string) $result['title'] ) : '',
+				'excerpt' => isset( $result['excerpt'] ) ? sanitize_text_field( (string) $result['excerpt'] ) : '',
+			);
+		}
+
+		$payload = wp_json_encode(
+			array(
+				'provider' => isset( $settings['ai_provider'] ) ? (string) $settings['ai_provider'] : '',
+				'model' => isset( $settings['model'] ) ? (string) $settings['model'] : '',
+				'message' => self::normalize_message_for_cache( $message ),
+				'results' => $result_fingerprint,
+			)
+		);
+
+		return 'aiscb_ai_answer_' . md5( (string) $payload );
+	}
+
+	private static function normalize_message_for_cache( string $message ): string {
+		$message = trim( preg_replace( '/\s+/u', ' ', wp_strip_all_tags( $message ) ) );
+
+		return function_exists( 'mb_strtolower' ) ? mb_strtolower( $message, 'UTF-8' ) : strtolower( $message );
 	}
 
 	private static function search_site_content( string $message, array $settings = array() ): array {
@@ -818,12 +1013,39 @@ final class AISite_Search_Chatbot {
 
 	private static function generate_answer( string $message, array $results ): array {
 		$settings = self::get_settings();
+		$sources = self::build_sources( $results, (int) $settings['max_sources'] );
 
 		if ( empty( $settings['api_key'] ) ) {
 			return array(
 				'answer'   => self::build_fallback_answer( $message, $results ),
 				'used_ai'  => false,
-				'sources'  => self::build_sources( $results, (int) $settings['max_sources'] ),
+				'sources'  => $sources,
+			);
+		}
+
+		if ( empty( $results ) ) {
+			return array(
+				'answer'   => self::build_fallback_answer( $message, $results ),
+				'used_ai'  => false,
+				'sources'  => $sources,
+			);
+		}
+
+		$cached_answer = self::get_cached_ai_answer( $settings, $message, $results );
+
+		if ( '' !== $cached_answer ) {
+			return array(
+				'answer'  => $cached_answer,
+				'used_ai' => true,
+				'sources' => $sources,
+			);
+		}
+
+		if ( self::is_ai_usage_limited() ) {
+			return array(
+				'answer'  => self::build_ai_limited_fallback_answer( $message, $results ),
+				'used_ai' => false,
+				'sources' => $sources,
 			);
 		}
 
@@ -833,14 +1055,17 @@ final class AISite_Search_Chatbot {
 			return array(
 				'answer'  => self::build_fallback_answer( $message, $results ),
 				'used_ai' => false,
-				'sources' => self::build_sources( $results, (int) $settings['max_sources'] ),
+				'sources' => $sources,
 			);
 		}
+
+		self::store_cached_ai_answer( $settings, $message, $results, (string) $response_data['content'] );
+		self::register_ai_usage();
 
 		return array(
 			'answer'  => $response_data['content'],
 			'used_ai' => true,
-			'sources' => self::build_sources( $results, (int) $settings['max_sources'] ),
+			'sources' => $sources,
 		);
 	}
 
@@ -1412,6 +1637,13 @@ final class AISite_Search_Chatbot {
 		$lines[] = __( 'If you want, I can search again with a narrower keyword.', 'ai-site-search-chatbot' );
 
 		return implode( "\n", $lines );
+	}
+
+	private static function build_ai_limited_fallback_answer( string $message, array $results ): string {
+		$answer = self::build_fallback_answer( $message, $results );
+		$notice = __( 'To keep the service stable, detailed AI replies are temporarily paused for this connection. Please wait a bit and try again.', 'ai-site-search-chatbot' );
+
+		return $answer . "\n" . $notice;
 	}
 
 	private static function build_sources( array $results, int $max_sources ): array {

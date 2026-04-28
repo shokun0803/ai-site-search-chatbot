@@ -65,6 +65,7 @@ Display Location を Display only where the shortcode is placed に設定した�
 - Model: 利用するモデル ID をそのまま指定
 - System Prompt: 回答方針を調整するシステムプロンプト
 - Maximum Sources: 回答時に参照する検索結果の上限件数
+- AI Reply Limit (10 minutes / 1 hour): 同一接続からの AI 応答回数の上限。まずは 10 分で 6 から 10 回、1 時間で 20 から 40 回程度を目安に調整
 - Display Location: 全ページ表示、トップページのみ表示、ショートコードまたはブロック設置箇所のみ表示
 - Chatbot Design: Business / Cute
 
