@@ -11,8 +11,10 @@ WordPress サイト訪問者向けに、サイト内検索と生成 AI を組み
 - 公開 REST API: POST /wp-json/ai-site-search-chatbot/v1/chat
 - サイト内検索: 公開投稿タイプを対象にキーワード検索
 - AI 応答: OpenAI、Claude、GitHub Models、Google Gemini を切り替えて利用可能
+- 汎用サイト案内: サイト名、説明文、公開コンテンツ要約をもとに、サイトの使い方や掲載情報の種類などの案内質問にも AI が応答
 - 管理画面: API キー、モデル名、システムプロンプト、参照件数、表示場所、デザインの設定
 - 接続確認: API キーとモデル ID のバリデーション、および管理画面上でのチャットテスト
+- 利用状況確認: 最新 50 件の公開チャット履歴を管理画面で確認可能
 - フロント UI: 自動表示、ショートコード、Gutenberg ブロックに対応した訪問者向けチャット画面
 - デザイン切り替え: Business / Cute の 2 テーマを選択可能
 
@@ -68,9 +70,11 @@ Display Location を Display only where the shortcode is placed に設定した�
 - AI Reply Limit (10 minutes / 1 hour): 同一接続からの AI 応答回数の上限。まずは 10 分で 6 から 10 回、1 時間で 20 から 40 回程度を目安に調整
 - Display Location: 全ページ表示、トップページのみ表示、ショートコードまたはブロック設置箇所のみ表示
 - Chatbot Design: Business / Cute
+- Recent Visitor Chat Logs: 公開チャットの質問、回答、時刻、参照件数、マスク済み IP を管理画面で確認
 
 ## 補足
 
 - 公開エンドポイントのため、簡易レート制限を実装しています。
 - 返答には参照元 URL 一覧を同時に返します。
+- サイト内検索結果が少ない場合でも、サイト名、説明文、公開コンテンツ要約を使ったサイト案内向け回答を返せます。
 - GitHub Models を使う場合は、外部 API 用の models:read 権限付きトークンが必要です。
