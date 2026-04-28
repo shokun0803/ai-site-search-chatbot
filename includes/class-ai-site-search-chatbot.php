@@ -362,16 +362,28 @@ final class AISite_Search_Chatbot {
 			);
 		}
 
-		$results = self::search_site_content( $message, $settings );
-		$response_data = self::request_ai_answer( $settings, $message, $results );
+		$route = self::analyze_message_route( $message, $settings );
 
-		if ( ! empty( $response_data['success'] ) ) {
+		if ( 'reject' === $route['intent'] ) {
+			return new WP_REST_Response(
+				array(
+					'success' => false,
+					'message' => $route['message'],
+				),
+				400
+			);
+		}
+
+		$results = self::search_site_content( $message, $settings, $route );
+		$answer = self::generate_answer( $message, $results, $route );
+
+		if ( ! empty( $answer['used_ai'] ) || 0 === strpos( $answer['log_status'], 'fallback-' ) ) {
 			return new WP_REST_Response(
 				array(
 					'success'  => true,
-					'answer'   => $response_data['content'],
-					'used_ai'  => true,
-					'sources'  => self::build_sources( $results, (int) $settings['max_sources'] ),
+					'answer'   => $answer['answer'],
+					'used_ai'  => ! empty( $answer['used_ai'] ),
+					'sources'  => $answer['sources'],
 					'searches' => $results,
 				),
 				200
@@ -381,7 +393,7 @@ final class AISite_Search_Chatbot {
 		return new WP_REST_Response(
 			array(
 				'success'  => false,
-				'message'  => ! empty( $response_data['message'] ) ? $response_data['message'] : __( 'The admin chat test failed.', 'ai-site-search-chatbot' ),
+				'message'  => __( 'The admin chat test failed.', 'ai-site-search-chatbot' ),
 				'searches' => $results,
 			),
 			400
@@ -422,8 +434,33 @@ final class AISite_Search_Chatbot {
 		}
 
 		$settings = self::get_settings();
-		$results = self::search_site_content( $message, $settings );
-		$answer = self::generate_answer( $message, $results );
+		$route = self::analyze_message_route( $message, $settings );
+
+		if ( 'reject' === $route['intent'] ) {
+			self::append_chat_log(
+				array(
+					'question'     => $message,
+					'answer'       => $route['message'],
+					'status'       => 'rejected-pre-ai',
+					'used_ai'      => false,
+					'source_count' => 0,
+				)
+			);
+
+			return new WP_REST_Response(
+				array(
+					'query'     => $message,
+					'answer'    => $route['message'],
+					'used_ai'   => false,
+					'sources'   => array(),
+					'searches'  => array(),
+				),
+				400
+			);
+		}
+
+		$results = self::search_site_content( $message, $settings, $route );
+		$answer = self::generate_answer( $message, $results, $route );
 		self::append_chat_log(
 			array(
 				'question'     => $message,
@@ -666,11 +703,11 @@ final class AISite_Search_Chatbot {
 		return function_exists( 'mb_strtolower' ) ? mb_strtolower( $message, 'UTF-8' ) : strtolower( $message );
 	}
 
-	private static function search_site_content( string $message, array $settings = array() ): array {
+	private static function search_site_content( string $message, array $settings = array(), array $route = array() ): array {
 		$post_types = get_post_types( array( 'public' => true ), 'names' );
 		unset( $post_types['attachment'] );
 		$post_types = array_values( $post_types );
-		$queries = self::build_search_queries( $message, $settings );
+		$queries = ! empty( $route['queries'] ) && is_array( $route['queries'] ) ? $route['queries'] : self::build_search_queries( $message, $settings );
 		$results = self::search_site_content_by_queries( $queries, $post_types );
 
 		if ( ! empty( $results ) ) {
@@ -732,6 +769,76 @@ final class AISite_Search_Chatbot {
 		);
 
 		return self::normalize_search_queries( $queries );
+	}
+
+	private static function analyze_message_route( string $message, array $settings ): array {
+		if ( self::is_obvious_spam_message( $message ) ) {
+			return array(
+				'intent'  => 'reject',
+				'queries' => array(),
+				'message' => __( 'Your message looks automated or repetitive. Please rewrite it as a short, natural question about this site.', 'ai-site-search-chatbot' ),
+			);
+		}
+
+		$rule_based_queries = self::build_rule_based_search_queries( $message );
+
+		if ( empty( $settings['api_key'] ) || empty( $settings['model'] ) ) {
+			return array(
+				'intent'  => 'site-search',
+				'queries' => self::normalize_search_queries( $rule_based_queries ),
+			);
+		}
+
+		$response = self::request_ai_message_route( $settings, $message );
+
+		if ( empty( $response['success'] ) || empty( $response['content'] ) ) {
+			return array(
+				'intent'  => 'site-search',
+				'queries' => self::normalize_search_queries( $rule_based_queries ),
+			);
+		}
+
+		$route = self::parse_ai_message_route( (string) $response['content'], $message );
+
+		if ( 'site-search' === $route['intent'] ) {
+			$route['queries'] = self::normalize_search_queries( array_merge( $route['queries'], $rule_based_queries ) );
+		}
+
+		return $route;
+	}
+
+	private static function is_obvious_spam_message( string $message ): bool {
+		if ( preg_match( '/https?:\/\//i', $message ) ) {
+			return true;
+		}
+
+		if ( preg_match( '/(.)\1{11,}/u', $message ) ) {
+			return true;
+		}
+
+		preg_match_all( '/[\p{L}\p{N}_-]+/u', $message, $token_matches );
+		$tokens = array_values( array_filter( array_map( 'strtolower', $token_matches[0] ) ) );
+
+		if ( count( $tokens ) >= 6 ) {
+			$frequencies = array_count_values( $tokens );
+			rsort( $frequencies );
+
+			if ( isset( $frequencies[0] ) && $frequencies[0] >= 4 ) {
+				return true;
+			}
+		}
+
+		$symbol_heavy = preg_replace( '/[\p{L}\p{N}\s]/u', '', $message );
+
+		if ( is_string( $symbol_heavy ) && '' !== $message ) {
+			$symbol_ratio = self::unicode_length( $symbol_heavy ) / max( 1, self::unicode_length( $message ) );
+
+			if ( $symbol_ratio > 0.45 ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	private static function build_rule_based_search_queries( string $message ): array {
@@ -801,16 +908,22 @@ final class AISite_Search_Chatbot {
 			return array();
 		}
 
-		$response = self::request_ai_search_queries( $settings, $message );
+		$response = self::request_ai_message_route( $settings, $message );
 
 		if ( empty( $response['success'] ) || empty( $response['content'] ) ) {
 			return array();
 		}
 
-		return self::parse_ai_search_queries( (string) $response['content'], $message );
+		$route = self::parse_ai_message_route( (string) $response['content'], $message );
+
+		if ( 'site-search' !== $route['intent'] ) {
+			return array();
+		}
+
+		return self::normalize_search_queries( $route['queries'] );
 	}
 
-	private static function request_ai_search_queries( array $settings, string $message ): array {
+	private static function request_ai_message_route( array $settings, string $message ): array {
 		$system_prompt = self::get_search_query_system_prompt();
 		$user_prompt = self::build_search_query_prompt( $message );
 		$provider = $settings['ai_provider'] ?? 'openai';
@@ -860,14 +973,62 @@ final class AISite_Search_Chatbot {
 		}
 	}
 
+	private static function parse_ai_message_route( string $content, string $message ): array {
+		$route = array(
+			'intent'  => 'site-search',
+			'queries' => array(),
+		);
+
+		$trimmed = trim( $content );
+
+		if ( preg_match( '/\{[\s\S]*\}/', $trimmed, $matches ) ) {
+			$decoded = json_decode( $matches[0], true );
+
+			if ( is_array( $decoded ) ) {
+				$intent = isset( $decoded['intent'] ) ? sanitize_key( (string) $decoded['intent'] ) : 'site-search';
+				$queries = array();
+
+				if ( ! empty( $decoded['queries'] ) && is_array( $decoded['queries'] ) ) {
+					foreach ( $decoded['queries'] as $query ) {
+						if ( is_string( $query ) ) {
+							$queries[] = $query;
+						}
+					}
+				}
+
+				if ( 'site_guidance' === $intent ) {
+					$intent = 'site-guidance';
+				} elseif ( 'site_search' === $intent ) {
+					$intent = 'site-search';
+				}
+
+				if ( in_array( $intent, array( 'site-search', 'site-guidance', 'reject' ), true ) ) {
+					$route['intent'] = $intent;
+				}
+
+				$route['queries'] = self::filter_queries_by_message_language( $queries, $message );
+			}
+		}
+
+		if ( empty( $route['queries'] ) && 'site-search' === $route['intent'] ) {
+			$route['queries'] = self::parse_ai_search_queries( $content, $message );
+		}
+
+		if ( 'reject' === $route['intent'] ) {
+			$route['message'] = __( 'Your message looks automated or unrelated. Please ask a short question about this site.', 'ai-site-search-chatbot' );
+		}
+
+		return $route;
+	}
+
 	private static function get_search_query_system_prompt(): string {
-		return __( 'You convert a visitor question into WordPress site-search queries. Return only a JSON array of 3 to 8 short search phrases. Keep the phrases in the same language as the visitor question. Prefer words likely to appear in page titles, menu labels, headings, form labels, and short content snippets. Order the array from the most specific phrase to broader fallback phrases. Do not include explanations, markdown, or any text outside the JSON array.', 'ai-site-search-chatbot' );
+		return __( 'You classify a visitor question for a WordPress site assistant. Return only a JSON object with two keys: intent and queries. intent must be one of site_search, site_guidance, or reject. Use site_search when the visitor is looking for a specific page, service, policy, product, location, form, or site term. Use site_guidance for lightweight site-related questions that can be answered without external facts, such as who you are, what kind of information exists on this site, how to use the site, or what the visitor can ask here. Use reject for obvious spam, gibberish, repeated text, or automated promotional content. queries must be an array of 0 to 8 short site-search phrases in the same language as the visitor question. Prefer words likely to appear in page titles, menu labels, headings, form labels, and short content snippets. Return JSON only.', 'ai-site-search-chatbot' );
 	}
 
 	private static function build_search_query_prompt( string $message ): string {
 		return sprintf(
 			/* translators: %s: visitor question */
-			__( "Visitor question:\n%s\n\nReturn JSON only. Example output: [\"contact\", \"contact page\", \"inquiry\"]", 'ai-site-search-chatbot' ),
+			__( "Visitor question:\n%s\n\nReturn JSON only. Example output: {\"intent\":\"site_search\",\"queries\":[\"contact\",\"contact page\",\"inquiry\"]}", 'ai-site-search-chatbot' ),
 			$message
 		);
 	}
@@ -1034,9 +1195,10 @@ final class AISite_Search_Chatbot {
 		);
 	}
 
-	private static function generate_answer( string $message, array $results ): array {
+	private static function generate_answer( string $message, array $results, array $route = array() ): array {
 		$settings = self::get_settings();
 		$sources = self::build_sources( $results, (int) $settings['max_sources'] );
+		$intent = isset( $route['intent'] ) ? (string) $route['intent'] : 'site-search';
 
 		if ( empty( $settings['api_key'] ) ) {
 			return array(
@@ -1044,6 +1206,45 @@ final class AISite_Search_Chatbot {
 				'used_ai'  => false,
 				'sources'  => $sources,
 				'log_status' => 'fallback-no-config',
+			);
+		}
+
+		if ( 'site-guidance' === $intent ) {
+			if ( self::is_ai_usage_limited() ) {
+				return array(
+					'answer'      => self::build_ai_limited_fallback_answer( $message, $results ),
+					'used_ai'     => false,
+					'sources'     => $sources,
+					'log_status'  => 'ai-limited-site-guidance',
+				);
+			}
+
+			$response_data = self::request_ai_answer(
+				$settings,
+				$message,
+				$results,
+				array(
+					'system_prompt' => self::get_site_guidance_system_prompt(),
+					'user_prompt'   => self::build_site_guidance_prompt( $message, $results ),
+				)
+			);
+
+			if ( is_wp_error( $response_data ) || ! $response_data['success'] ) {
+				return array(
+					'answer'      => self::build_fallback_answer( $message, $results ),
+					'used_ai'     => false,
+					'sources'     => $sources,
+					'log_status'  => 'fallback-site-guidance-provider-error',
+				);
+			}
+
+			self::register_ai_usage();
+
+			return array(
+				'answer'      => $response_data['content'],
+				'used_ai'     => true,
+				'sources'     => $sources,
+				'log_status'  => 'ai-site-guidance',
 			);
 		}
 
@@ -1150,20 +1351,129 @@ final class AISite_Search_Chatbot {
 		return $text;
 	}
 
-	private static function request_ai_answer( array $settings, string $message, array $results ): array {
+	private static function request_ai_answer( array $settings, string $message, array $results, array $options = array() ): array {
 		$provider = $settings['ai_provider'] ?? 'openai';
 
 		switch ( $provider ) {
 			case 'claude':
-				return self::call_claude_api( $settings, $message, $results );
+				return self::call_claude_api( $settings, $message, $results, $options );
 			case 'github-copilot':
-				return self::call_github_copilot_api( $settings, $message, $results );
+				return self::call_github_copilot_api( $settings, $message, $results, $options );
 			case 'gemini':
-				return self::call_gemini_api( $settings, $message, $results );
+				return self::call_gemini_api( $settings, $message, $results, $options );
 			case 'openai':
 			default:
-				return self::call_openai_api( $settings, $message, $results );
+				return self::call_openai_api( $settings, $message, $results, $options );
 		}
+	}
+
+	private static function get_site_guidance_system_prompt(): string {
+		return __( 'You are a site assistant for this WordPress website. Answer only from the provided site context and optional site search results. You may handle light site-related conversation such as who you are, what kind of information exists on this site, how the visitor can use the site, and what they can ask here. Do not use external facts, world knowledge, or invented details. If the site context is insufficient, say that briefly and suggest a relevant page or keyword to explore.', 'ai-site-search-chatbot' );
+	}
+
+	private static function build_site_guidance_prompt( string $message, array $results ): string {
+		$lines = array(
+			'Site context:',
+			self::build_site_context_summary(),
+			'',
+		);
+
+		if ( ! empty( $results ) ) {
+			$lines[] = 'Optional related site search results:';
+
+			foreach ( array_slice( $results, 0, 5 ) as $result ) {
+				$lines[] = sprintf( '- %s', $result['title'] );
+				$lines[] = sprintf( '  Excerpt: %s', $result['excerpt'] );
+			}
+
+			$lines[] = '';
+		}
+
+		$lines[] = 'Visitor question:';
+		$lines[] = $message;
+		$lines[] = '';
+		$lines[] = 'Instructions: answer naturally in the visitor language. Keep the answer concise. Stay within the site context and optional related results above. Do not output raw URLs, domains, permalink strings, or markdown links.';
+
+		return implode( "\n", $lines );
+	}
+
+	private static function build_site_context_summary(): string {
+		$cache_key = 'aiscb_site_context_summary';
+		$cached = get_transient( $cache_key );
+
+		if ( is_string( $cached ) && '' !== $cached ) {
+			return $cached;
+		}
+
+		$lines = array();
+		$site_name = wp_strip_all_tags( get_bloginfo( 'name' ) );
+		$site_description = wp_strip_all_tags( get_bloginfo( 'description' ) );
+
+		if ( '' !== $site_name ) {
+			$lines[] = 'Site name: ' . $site_name;
+		}
+
+		if ( '' !== $site_description ) {
+			$lines[] = 'Site description: ' . $site_description;
+		}
+
+		$post_types = get_post_types( array( 'public' => true ), 'names' );
+		unset( $post_types['attachment'] );
+
+		$query = new WP_Query(
+			array(
+				'post_type'           => array_values( $post_types ),
+				'post_status'         => 'publish',
+				'posts_per_page'      => 10,
+				'ignore_sticky_posts' => true,
+				'no_found_rows'       => true,
+				'orderby'             => array(
+					'menu_order' => 'ASC',
+					'date'       => 'DESC',
+				),
+			)
+		);
+
+		if ( ! empty( $query->posts ) ) {
+			$lines[] = 'Public content examples:';
+
+			foreach ( $query->posts as $post ) {
+				if ( ! $post instanceof WP_Post ) {
+					continue;
+				}
+
+				$title = wp_strip_all_tags( get_the_title( $post ) );
+				$excerpt = trim( wp_strip_all_tags( get_the_excerpt( $post ) ) );
+				$line = '- ' . $title;
+
+				if ( '' !== $excerpt ) {
+					$line .= ': ' . self::trim_text_for_prompt( $excerpt, 120 );
+				}
+
+				$lines[] = $line;
+			}
+		}
+
+		wp_reset_postdata();
+
+		$summary = implode( "\n", $lines );
+		set_transient( $cache_key, $summary, 10 * MINUTE_IN_SECONDS );
+
+		return $summary;
+	}
+
+	private static function trim_text_for_prompt( string $text, int $limit ): string {
+		$text = trim( preg_replace( '/\s+/u', ' ', wp_strip_all_tags( $text ) ) );
+
+		if ( '' === $text ) {
+			return '';
+		}
+
+		if ( strlen( $text ) > $limit ) {
+			$text = substr( $text, 0, $limit ) . '...';
+		}
+
+		return $text;
 	}
 
 	private static function validate_provider_settings( array $settings ): array {

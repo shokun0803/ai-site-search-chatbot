@@ -414,6 +414,14 @@ msgstr "ショートコードを手入力せずに、サイト内検索チャッ
 msgid "This block displays the chatbot on the public site. Enable the chatbot and choose the shortcode display mode in the plugin settings before publishing."
 msgstr "このブロックは公開サイトにチャットボットを表示します。公開前に、プラグイン設定でチャットボットを有効化し、表示方法をショートコード表示に設定してください。"
 
+#: includes/class-ai-site-search-chatbot.php
+msgid "Your message looks automated or repetitive. Please rewrite it as a short, natural question about this site."
+msgstr "メッセージが機械的または反復的に見えます。このサイトについての短く自然な質問に書き直してください。"
+
+#: includes/class-ai-site-search-chatbot.php
+msgid "Your message looks automated or unrelated. Please ask a short question about this site."
+msgstr "メッセージが機械的、またはこのサイトと無関係に見えます。このサイトについての短い質問を入力してください。"
+
 #: includes/class-ai-site-search-chatbot.php:166
 msgid "Maximum Sources"
 msgstr "最大ソース数"
