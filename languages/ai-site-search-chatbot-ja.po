@@ -516,6 +516,10 @@ msgid "Claim your Agent SDK credits at claude.ai → Settings → Agent SDK (ava
 msgstr "claude.ai → 設定 → Agent SDK でクレジットを申請します（2026年6月15日から利用可能）。"
 
 #: includes/class-ai-site-search-chatbot.php
+msgid "On your computer (Windows or Mac), install Node.js if not already installed: https://nodejs.org"
+msgstr "お使いのコンピューター（Windows / Mac）に Node.js がインストールされていない場合はインストールします: https://nodejs.org"
+
+#: includes/class-ai-site-search-chatbot.php
 msgid "On your computer (Windows or Mac), install Claude Code: npm install -g @anthropic-ai/claude-code"
 msgstr "お使いのコンピューター（Windows / Mac）で Claude Code をインストールします: npm install -g @anthropic-ai/claude-code"
 
