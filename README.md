@@ -4,13 +4,20 @@
 
 WordPress サイト訪問者向けに、サイト内検索と生成 AI を組み合わせたチャットボットを提供するプラグインです。
 
-※ 現時点で動作検証済みなのは GitHub Models のみです。OpenAI、Claude、Google Gemini は未検証のためご注意ください。
+## 動作要件
+
+- PHP 8.1 以上
+- WordPress 6.0 以上（推奨）
+- 利用したい AI プロバイダーの API キー
+
+依存ライブラリ（[Anthropic PHP SDK](https://github.com/anthropics/anthropic-sdk-php)）は `vendor/` ディレクトリとしてプラグインに同梱しているため、サーバー側での Composer 実行は不要です。
 
 ## 現在実装済み
 
 - 公開 REST API: POST /wp-json/ai-site-search-chatbot/v1/chat
 - サイト内検索: 公開投稿タイプを対象にキーワード検索
-- AI 応答: OpenAI、Claude、GitHub Models、Google Gemini を切り替えて利用可能
+- AI 応答: OpenAI、Claude (Anthropic)、GitHub Models、Google Gemini を切り替えて利用可能
+- Claude 統合: 公式 Anthropic PHP SDK を使用。システムプロンプトキャッシュにより、同じシステムプロンプトを繰り返し送信する際の API コストを削減
 - 汎用サイト案内: サイト名、説明文、公開コンテンツ要約をもとに、サイトの使い方や掲載情報の種類などの案内質問にも AI が応答
 - 管理画面: API キー、モデル名、システムプロンプト、参照件数、表示場所、デザインの設定
 - 接続確認: API キーとモデル ID のバリデーション、および管理画面上でのチャットテスト
@@ -20,11 +27,15 @@ WordPress サイト訪問者向けに、サイト内検索と生成 AI を組み
 
 ## インストール
 
-1. プラグインを有効化
+1. プラグインを有効化（`vendor/` ディレクトリが同梱されているため Composer は不要）
 2. 管理画面 設定 > AI Site Search Chatbot を開く
 3. 利用したい AI プロバイダを選び、API キーとモデル ID を設定
 4. 必要に応じて「Validate API Key and Model」と「Run Admin Chat Test」で接続確認
 5. 「Enable chatbot display on the public site」を有効化して保存
+
+### Claude (Anthropic) を使う場合
+
+[Anthropic コンソール](https://platform.claude.com/settings/keys) で API キーを発行し、モデル ID に `claude-sonnet-4-6` または `claude-opus-4-7` などを指定してください。公式 PHP SDK を通じてリクエストが送信され、システムプロンプトは自動的にキャッシュされます。
 
 ## 使い方
 
@@ -78,3 +89,21 @@ Display Location を Display only where the shortcode is placed に設定した�
 - 返答には参照元 URL 一覧を同時に返します。
 - サイト内検索結果が少ない場合でも、サイト名、説明文、公開コンテンツ要約を使ったサイト案内向け回答を返せます。
 - GitHub Models を使う場合は、外部 API 用の models:read 権限付きトークンが必要です。
+
+## 変更履歴
+
+### 0.3.0
+
+- Claude プロバイダーを公式 Anthropic PHP SDK（`anthropic-ai/sdk`）を使った実装に変更
+- システムプロンプトキャッシュ（`cacheControl: ephemeral`）を有効化し、Claude 利用時の API コストを削減
+- Anthropic PHP SDK を `vendor/` に同梱。サーバー側での Composer 実行が不要に
+- 管理画面の Claude プロバイダー説明文を SDK 統合の内容に更新
+- 翻訳ファイル（`.pot` / `ja.po` / `ja_JP.po` / `.mo`）を更新
+
+### 0.2.0
+
+- 汎用サイト案内機能を追加（サイト名・説明文・コンテンツ要約を活用した案内応答）
+- 管理画面チャットログビューアを追加（最新 50 件）
+- AI 応答回数の上限設定（10 分・1 時間）を追加
+- Google Gemini プロバイダーを追加
+- ブロックエディタ対応・表示場所の切り替え機能を追加
