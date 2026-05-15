@@ -1,0 +1,13 @@
+{
+    "name": "shokun0803/ai-site-search-chatbot",
+    "description": "AI Site Search Chatbot WordPress plugin",
+    "type": "wordpress-plugin",
+    "require": {
+        "php": ">=8.1",
+        "anthropic-ai/sdk": "^0.7"
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "vendor-dir": "vendor"
+    }
+}

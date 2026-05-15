@@ -22,6 +22,10 @@ if ( ! defined( 'AISCB_DIR' ) ) {
 	define( 'AISCB_DIR', plugin_dir_path( AISCB_FILE ) );
 }
 
+if ( file_exists( AISCB_DIR . 'vendor/autoload.php' ) ) {
+	require_once AISCB_DIR . 'vendor/autoload.php';
+}
+
 require_once AISCB_DIR . 'includes/class-ai-site-search-chatbot.php';
 require_once AISCB_DIR . 'includes/class-ai-site-search-chatbot-admin.php';
 require_once AISCB_DIR . 'includes/class-ai-site-search-chatbot-block.php';
