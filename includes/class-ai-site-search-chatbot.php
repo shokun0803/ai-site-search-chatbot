@@ -181,7 +181,7 @@ final class AISite_Search_Chatbot {
 					__( 'Generate a new API key', 'ai-site-search-chatbot' ),
 					__( 'Copy and paste the key above', 'ai-site-search-chatbot' ),
 				),
-				'note'         => __( 'Claude Sonnet is usually the best balance of performance and cost. You can also use the Anthropic Models API to inspect currently available model IDs.', 'ai-site-search-chatbot' ),
+				'note'         => __( 'Uses the official Anthropic PHP SDK with automatic system prompt caching, which reduces API costs when the system prompt is reused across requests. Claude Sonnet 4.6 is a good balance of performance and cost; Claude Opus 4.7 offers the highest capability. See the Anthropic model documentation for available model IDs.', 'ai-site-search-chatbot' ),
 			),
 			'github-copilot' => array(
 				'label'        => __( 'GitHub Models', 'ai-site-search-chatbot' ),

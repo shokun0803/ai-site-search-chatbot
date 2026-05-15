@@ -495,9 +495,23 @@ msgstr "新しい API キーを生成します。"
 msgid "Copy and paste the key above"
 msgstr "キーをコピーして上の欄に貼り付けます。"
 
-#: includes/class-ai-site-search-chatbot.php:315
-msgid "Claude Sonnet is usually the best balance of performance and cost. You can also use the Anthropic Models API to inspect currently available model IDs."
-msgstr "Claude Sonnet は通常、性能とコストのバランスが良好です。現在利用可能なモデル ID は Anthropic Models API でも確認できます。"
+#: includes/class-ai-site-search-chatbot.php:184
+msgid "Uses the official Anthropic PHP SDK with automatic system prompt caching, which reduces API costs when the system prompt is reused across requests. Claude Sonnet 4.6 is a good balance of performance and cost; Claude Opus 4.7 offers the highest capability. See the Anthropic model documentation for available model IDs."
+msgstr "公式の Anthropic PHP SDK を使用しており、システムプロンプトのキャッシュを自動的に行います。これにより、同じシステムプロンプトを繰り返し使用する際の API コストを削減できます。Claude Sonnet 4.6 は性能とコストのバランスが良く、Claude Opus 4.7 は最も高い性能を発揮します。利用可能なモデル ID は Anthropic モデルドキュメントをご確認ください。"
+
+#: includes/class-ai-site-search-chatbot.php:1821
+msgid "Anthropic PHP SDK is not installed. Run composer install in the plugin directory."
+msgstr "Anthropic PHP SDK がインストールされていません。プラグインディレクトリで composer install を実行してください。"
+
+#. translators: %s: API error message
+#: includes/class-ai-site-search-chatbot.php:1849
+msgid "Claude API error (%s): %s"
+msgstr "Claude API エラー (%s): %s"
+
+#. translators: %s: error message
+#: includes/class-ai-site-search-chatbot.php:1855
+msgid "Claude request failed: %s"
+msgstr "Claude へのリクエストに失敗しました: %s"
 
 #: includes/class-ai-site-search-chatbot.php:424
 msgid "GitHub Models"

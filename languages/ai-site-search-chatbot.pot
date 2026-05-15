@@ -306,8 +306,22 @@ msgstr ""
 msgid "Copy and paste the key above"
 msgstr ""
 
-#: includes/class-ai-site-search-chatbot.php:315
-msgid "Claude Sonnet is usually the best balance of performance and cost. You can also use the Anthropic Models API to inspect currently available model IDs."
+#: includes/class-ai-site-search-chatbot.php:184
+msgid "Uses the official Anthropic PHP SDK with automatic system prompt caching, which reduces API costs when the system prompt is reused across requests. Claude Sonnet 4.6 is a good balance of performance and cost; Claude Opus 4.7 offers the highest capability. See the Anthropic model documentation for available model IDs."
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php:1821
+msgid "Anthropic PHP SDK is not installed. Run composer install in the plugin directory."
+msgstr ""
+
+#. translators: %s: API error message
+#: includes/class-ai-site-search-chatbot.php:1849
+msgid "Claude API error (%s): %s"
+msgstr ""
+
+#. translators: %s: error message
+#: includes/class-ai-site-search-chatbot.php:1855
+msgid "Claude request failed: %s"
 msgstr ""
 
 #: includes/class-ai-site-search-chatbot.php:424
