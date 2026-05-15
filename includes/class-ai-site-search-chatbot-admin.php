@@ -52,23 +52,26 @@ final class AISite_Search_Chatbot_Admin {
 				'restNonce'        => wp_create_nonce( 'wp_rest' ),
 				'optionKey'        => AISite_Search_Chatbot::OPTION_KEY,
 				'i18n'             => array(
-					'apiKeyHelpTitle'       => __( 'How to get your API Key:', 'ai-site-search-chatbot' ),
-					'noteTitle'             => __( 'Note:', 'ai-site-search-chatbot' ),
-					'modelExample'          => __( 'Enter the exact model ID. Example:', 'ai-site-search-chatbot' ),
-					'modelReference'        => __( 'Model ID reference:', 'ai-site-search-chatbot' ),
-					'assistantReply'        => __( 'Assistant Reply', 'ai-site-search-chatbot' ),
-					'referencedSources'     => __( 'Referenced Sources', 'ai-site-search-chatbot' ),
-					'validationMissing'     => __( 'Enter an API key and model ID before running validation.', 'ai-site-search-chatbot' ),
-					'validationRunning'     => __( 'Validating connection...', 'ai-site-search-chatbot' ),
-					'validationSuccess'     => __( 'Validation succeeded.', 'ai-site-search-chatbot' ),
-					'validationFailed'      => __( 'Validation failed.', 'ai-site-search-chatbot' ),
-					'validationRequestFail' => __( 'Validation request failed. Please try again.', 'ai-site-search-chatbot' ),
-					'adminTestMissingModel' => __( 'Enter an API key and model ID before running the admin chat test.', 'ai-site-search-chatbot' ),
-					'adminTestMissingText'  => __( 'Enter a test question before running the admin chat test.', 'ai-site-search-chatbot' ),
-					'adminTestRunning'      => __( 'Running admin chat test...', 'ai-site-search-chatbot' ),
-					'adminTestSuccess'      => __( 'Admin chat test succeeded.', 'ai-site-search-chatbot' ),
-					'adminTestFailed'       => __( 'The admin chat test failed.', 'ai-site-search-chatbot' ),
-					'adminTestRequestFail'  => __( 'The admin chat test request failed. Please try again.', 'ai-site-search-chatbot' ),
+					'apiKeyHelpTitle'          => __( 'How to get your API Key:', 'ai-site-search-chatbot' ),
+					'bearerTokenHelpTitle'     => __( 'How to get your Bearer Token:', 'ai-site-search-chatbot' ),
+					'noteTitle'                => __( 'Note:', 'ai-site-search-chatbot' ),
+					'modelExample'             => __( 'Enter the exact model ID. Example:', 'ai-site-search-chatbot' ),
+					'modelReference'           => __( 'Model ID reference:', 'ai-site-search-chatbot' ),
+					'assistantReply'           => __( 'Assistant Reply', 'ai-site-search-chatbot' ),
+					'referencedSources'        => __( 'Referenced Sources', 'ai-site-search-chatbot' ),
+					'validationMissing'        => __( 'Enter an API key and model ID before running validation.', 'ai-site-search-chatbot' ),
+					'validationMissingBearer'  => __( 'Enter a bearer token and model ID before running validation.', 'ai-site-search-chatbot' ),
+					'validationRunning'        => __( 'Validating connection...', 'ai-site-search-chatbot' ),
+					'validationSuccess'        => __( 'Validation succeeded.', 'ai-site-search-chatbot' ),
+					'validationFailed'         => __( 'Validation failed.', 'ai-site-search-chatbot' ),
+					'validationRequestFail'    => __( 'Validation request failed. Please try again.', 'ai-site-search-chatbot' ),
+					'adminTestMissingModel'    => __( 'Enter an API key and model ID before running the admin chat test.', 'ai-site-search-chatbot' ),
+					'adminTestMissingBearer'   => __( 'Enter a bearer token and model ID before running the admin chat test.', 'ai-site-search-chatbot' ),
+					'adminTestMissingText'     => __( 'Enter a test question before running the admin chat test.', 'ai-site-search-chatbot' ),
+					'adminTestRunning'         => __( 'Running admin chat test...', 'ai-site-search-chatbot' ),
+					'adminTestSuccess'         => __( 'Admin chat test succeeded.', 'ai-site-search-chatbot' ),
+					'adminTestFailed'          => __( 'The admin chat test failed.', 'ai-site-search-chatbot' ),
+					'adminTestRequestFail'     => __( 'The admin chat test request failed. Please try again.', 'ai-site-search-chatbot' ),
 				),
 			)
 		);
@@ -116,11 +119,45 @@ final class AISite_Search_Chatbot_Admin {
 				</div>
 
 				<table class="form-table" role="presentation">
-					<tr>
+					<tr id="aiscb_claude_auth_mode_row" hidden>
+						<th scope="row"><?php echo esc_html( __( 'Authentication Method', 'ai-site-search-chatbot' ) ); ?></th>
+						<td>
+							<fieldset>
+								<label>
+									<input type="radio"
+										name="<?php echo esc_attr( AISite_Search_Chatbot::OPTION_KEY ); ?>[claude_auth_mode]"
+										id="aiscb_claude_auth_mode_api_key"
+										value="api_key"
+										<?php checked( $settings['claude_auth_mode'] ?? 'api_key', 'api_key' ); ?>
+									/>
+									<?php echo esc_html( __( 'API Key (pay-per-use)', 'ai-site-search-chatbot' ) ); ?>
+								</label>
+								<br />
+								<label>
+									<input type="radio"
+										name="<?php echo esc_attr( AISite_Search_Chatbot::OPTION_KEY ); ?>[claude_auth_mode]"
+										id="aiscb_claude_auth_mode_bearer_token"
+										value="bearer_token"
+										<?php checked( $settings['claude_auth_mode'] ?? 'api_key', 'bearer_token' ); ?>
+									/>
+									<?php echo esc_html( __( 'Bearer Token (Agent SDK credits)', 'ai-site-search-chatbot' ) ); ?>
+								</label>
+							</fieldset>
+							<p class="description"><?php echo esc_html( __( 'API Key uses pay-per-use billing. Bearer Token uses your Claude subscription monthly credits (Pro, Max, Team, or Enterprise plan required).', 'ai-site-search-chatbot' ) ); ?></p>
+						</td>
+					</tr>
+					<tr id="aiscb_api_key_row">
 						<th scope="row"><label for="aiscb_api_key"><?php echo esc_html( __( 'API Key', 'ai-site-search-chatbot' ) ); ?></label></th>
 						<td>
 							<input type="password" class="regular-text" id="aiscb_api_key" name="<?php echo esc_attr( AISite_Search_Chatbot::OPTION_KEY ); ?>[api_key]" value="<?php echo esc_attr( $settings['api_key'] ); ?>" autocomplete="off" />
 							<p class="description" id="aiscb_api_key_help"></p>
+						</td>
+					</tr>
+					<tr id="aiscb_claude_bearer_token_row" hidden>
+						<th scope="row"><label for="aiscb_claude_bearer_token"><?php echo esc_html( __( 'Bearer Token', 'ai-site-search-chatbot' ) ); ?></label></th>
+						<td>
+							<input type="password" class="regular-text" id="aiscb_claude_bearer_token" name="<?php echo esc_attr( AISite_Search_Chatbot::OPTION_KEY ); ?>[claude_bearer_token]" value="<?php echo esc_attr( $settings['claude_bearer_token'] ?? '' ); ?>" autocomplete="off" />
+							<p class="description"><?php echo esc_html( __( 'The auth token from your Claude account. Obtained by authenticating with Claude Code (claude auth login) and copying the session token.', 'ai-site-search-chatbot' ) ); ?></p>
 						</td>
 					</tr>
 					<tr>

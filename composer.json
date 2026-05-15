@@ -1,7 +1,7 @@
 {
     "name": "shokun0803/ai-site-search-chatbot",
     "description": "AI Site Search Chatbot WordPress plugin",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "type": "wordpress-plugin",
     "require": {
         "php": ">=8.1",

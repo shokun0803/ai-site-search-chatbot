@@ -499,6 +499,68 @@ msgstr "キーをコピーして上の欄に貼り付けます。"
 msgid "Uses the official Anthropic PHP SDK with automatic system prompt caching, which reduces API costs when the system prompt is reused across requests. Claude Sonnet 4.6 is a good balance of performance and cost; Claude Opus 4.7 offers the highest capability. See the Anthropic model documentation for available model IDs."
 msgstr "公式の Anthropic PHP SDK を使用しており、システムプロンプトのキャッシュを自動的に行います。これにより、同じシステムプロンプトを繰り返し使用する際の API コストを削減できます。Claude Sonnet 4.6 は性能とコストのバランスが良く、Claude Opus 4.7 は最も高い性能を発揮します。利用可能なモデル ID は Anthropic モデルドキュメントをご確認ください。"
 
+#: includes/class-ai-site-search-chatbot.php
+msgid "API Key (pay-per-use)"
+msgstr "API キー（従量課金）"
+
+#: includes/class-ai-site-search-chatbot.php
+msgid "Bearer Token (Agent SDK credits)"
+msgstr "Bearer Token（Agent SDK クレジット）"
+
+#: includes/class-ai-site-search-chatbot.php
+msgid "Ensure you have a Pro, Max, Team, or Enterprise Claude plan"
+msgstr "Pro、Max、Team、または Enterprise の Claude プランに加入していることを確認します。"
+
+#: includes/class-ai-site-search-chatbot.php
+msgid "Claim your Agent SDK credits at claude.ai → Settings → Agent SDK (available from June 15, 2026)"
+msgstr "claude.ai → 設定 → Agent SDK でクレジットを申請します（2026年6月15日から利用可能）。"
+
+#: includes/class-ai-site-search-chatbot.php
+msgid "Install Claude Code: npm install -g @anthropic-ai/claude-code"
+msgstr "Claude Code をインストールします: npm install -g @anthropic-ai/claude-code"
+
+#: includes/class-ai-site-search-chatbot.php
+msgid "Sign in: claude auth login"
+msgstr "サインインします: claude auth login"
+
+#: includes/class-ai-site-search-chatbot.php
+msgid "Copy your auth token from the Claude Code session and paste it in the Bearer Token field"
+msgstr "Claude Code セッションの認証トークンをコピーして、Bearer Token 欄に貼り付けます。"
+
+#: includes/class-ai-site-search-chatbot.php
+msgid "Consumes your Claude plan monthly Agent SDK credits (e.g. $20/month for Pro). Credits reset each billing cycle and are not shared across team members. When credits run out, requests stop unless additional usage billing is enabled. Available from June 15, 2026."
+msgstr "Claude プランの月次 Agent SDK クレジットを消費します（Pro プランは月額 $20 相当）。クレジットは各請求サイクルにリセットされ、チームメンバー間での共有はできません。クレジットが枯渇するとリクエストは停止します（追加使用量を有効にしている場合を除く）。2026年6月15日から利用可能です。"
+
+#: includes/class-ai-site-search-chatbot.php
+#: includes/class-ai-site-search-chatbot-admin.php
+msgid "Enter a bearer token and model ID before running validation."
+msgstr "検証を実行する前に Bearer Token とモデル ID を入力してください。"
+
+#: includes/class-ai-site-search-chatbot.php
+#: includes/class-ai-site-search-chatbot-admin.php
+msgid "Enter a bearer token and model ID before running the admin chat test."
+msgstr "管理画面チャットテストを実行する前に Bearer Token とモデル ID を入力してください。"
+
+#: includes/class-ai-site-search-chatbot-admin.php
+msgid "Authentication Method"
+msgstr "認証方法"
+
+#: includes/class-ai-site-search-chatbot-admin.php
+msgid "API Key uses pay-per-use billing. Bearer Token uses your Claude subscription monthly credits (Pro, Max, Team, or Enterprise plan required)."
+msgstr "API キーは従量課金制です。Bearer Token は Claude サブスクリプションの月次クレジットを使用します（Pro、Max、Team、または Enterprise プランが必要）。"
+
+#: includes/class-ai-site-search-chatbot-admin.php
+msgid "Bearer Token"
+msgstr "Bearer Token"
+
+#: includes/class-ai-site-search-chatbot-admin.php
+msgid "The auth token from your Claude account. Obtained by authenticating with Claude Code (claude auth login) and copying the session token."
+msgstr "Claude アカウントの認証トークンです。Claude Code で認証（claude auth login）後にセッショントークンをコピーして貼り付けてください。"
+
+#: includes/class-ai-site-search-chatbot-admin.php
+msgid "How to get your Bearer Token:"
+msgstr "Bearer Token の取得手順"
+
 #: includes/class-ai-site-search-chatbot.php:1821
 msgid "Anthropic PHP SDK is not installed. Run composer install in the plugin directory."
 msgstr "Anthropic PHP SDK がインストールされていません。プラグインディレクトリで composer install を実行してください。"

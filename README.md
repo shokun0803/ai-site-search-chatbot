@@ -92,6 +92,14 @@ Display Location を Display only where the shortcode is placed に設定した�
 
 ## 変更履歴
 
+### 0.4.0
+
+- Claude プロバイダーに認証方法の切り替えを追加（API キー従量課金 / Bearer Token Agent SDK クレジット）
+- Bearer Token モード選択時は Anthropic PHP SDK の `authToken` パラメータで認証し、Claude サブスクリプションの月次クレジットを消費
+- 管理画面の Claude 設定に「認証方法」ラジオボタンと Bearer Token 入力フィールドを追加（Claude 選択時のみ表示）
+- バリデーション・管理チャットテストで認証方法に応じた入力チェックとエラーメッセージに対応
+- 翻訳ファイル（`.pot` / `ja.po` / `ja_JP.po` / `.mo`）を更新
+
 ### 0.3.0
 
 - Claude プロバイダーを公式 Anthropic PHP SDK（`anthropic-ai/sdk`）を使った実装に変更

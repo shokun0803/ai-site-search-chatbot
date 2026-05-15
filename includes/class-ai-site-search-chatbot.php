@@ -5,7 +5,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 final class AISite_Search_Chatbot {
-	const VERSION = '0.2.0';
+	const VERSION = '0.4.0';
 	const OPTION_KEY = 'aiscb_settings';
 	const OPTION_GROUP = 'aiscb_settings_group';
 	const REST_NAMESPACE = 'ai-site-search-chatbot/v1';
@@ -62,16 +62,18 @@ final class AISite_Search_Chatbot {
 
 	public static function default_settings(): array {
 		return array(
-			'ai_provider'   => 'openai',
-			'api_key'       => '',
-			'model'         => '',
-			'system_prompt' => self::get_default_system_prompt(),
-			'max_sources'   => 5,
+			'ai_provider'         => 'openai',
+			'api_key'             => '',
+			'model'               => '',
+			'system_prompt'       => self::get_default_system_prompt(),
+			'max_sources'         => 5,
 			'ai_limit_window_10m' => 8,
-			'ai_limit_window_1h' => 24,
-			'widget_enabled' => 0,
+			'ai_limit_window_1h'  => 24,
+			'widget_enabled'      => 0,
 			'widget_display_mode' => 'all-pages',
-			'widget_theme'  => 'business',
+			'widget_theme'        => 'business',
+			'claude_auth_mode'    => 'api_key',
+			'claude_bearer_token' => '',
 		);
 	}
 
@@ -126,17 +128,24 @@ final class AISite_Search_Chatbot {
 			$widget_display_mode = $defaults['widget_display_mode'];
 		}
 
+		$claude_auth_mode = isset( $input['claude_auth_mode'] ) ? sanitize_key( wp_unslash( $input['claude_auth_mode'] ) ) : $defaults['claude_auth_mode'];
+		if ( ! in_array( $claude_auth_mode, array( 'api_key', 'bearer_token' ), true ) ) {
+			$claude_auth_mode = $defaults['claude_auth_mode'];
+		}
+
 		return array(
-			'ai_provider'   => $provider,
-			'api_key'       => isset( $input['api_key'] ) ? sanitize_text_field( wp_unslash( $input['api_key'] ) ) : $defaults['api_key'],
-			'model'         => isset( $input['model'] ) ? sanitize_text_field( wp_unslash( $input['model'] ) ) : $defaults['model'],
-			'system_prompt' => isset( $input['system_prompt'] ) ? sanitize_textarea_field( wp_unslash( $input['system_prompt'] ) ) : $defaults['system_prompt'],
-			'max_sources'   => isset( $input['max_sources'] ) ? max( 1, min( 10, absint( $input['max_sources'] ) ) ) : $defaults['max_sources'],
+			'ai_provider'         => $provider,
+			'api_key'             => isset( $input['api_key'] ) ? sanitize_text_field( wp_unslash( $input['api_key'] ) ) : $defaults['api_key'],
+			'model'               => isset( $input['model'] ) ? sanitize_text_field( wp_unslash( $input['model'] ) ) : $defaults['model'],
+			'system_prompt'       => isset( $input['system_prompt'] ) ? sanitize_textarea_field( wp_unslash( $input['system_prompt'] ) ) : $defaults['system_prompt'],
+			'max_sources'         => isset( $input['max_sources'] ) ? max( 1, min( 10, absint( $input['max_sources'] ) ) ) : $defaults['max_sources'],
 			'ai_limit_window_10m' => isset( $input['ai_limit_window_10m'] ) ? max( 1, min( 30, absint( $input['ai_limit_window_10m'] ) ) ) : $defaults['ai_limit_window_10m'],
-			'ai_limit_window_1h' => isset( $input['ai_limit_window_1h'] ) ? max( 1, min( 100, absint( $input['ai_limit_window_1h'] ) ) ) : $defaults['ai_limit_window_1h'],
-			'widget_enabled' => isset( $input['widget_enabled'] ) ? 1 : 0,
+			'ai_limit_window_1h'  => isset( $input['ai_limit_window_1h'] ) ? max( 1, min( 100, absint( $input['ai_limit_window_1h'] ) ) ) : $defaults['ai_limit_window_1h'],
+			'widget_enabled'      => isset( $input['widget_enabled'] ) ? 1 : 0,
 			'widget_display_mode' => $widget_display_mode,
-			'widget_theme'  => $widget_theme,
+			'widget_theme'        => $widget_theme,
+			'claude_auth_mode'    => $claude_auth_mode,
+			'claude_bearer_token' => isset( $input['claude_bearer_token'] ) ? sanitize_text_field( wp_unslash( $input['claude_bearer_token'] ) ) : $defaults['claude_bearer_token'],
 		);
 	}
 
@@ -174,6 +183,10 @@ final class AISite_Search_Chatbot {
 				'example_model' => 'claude-sonnet-4-6',
 				'model_docs_url' => 'https://platform.claude.com/docs/en/docs/about-claude/models',
 				'model_docs_label' => __( 'Anthropic model documentation', 'ai-site-search-chatbot' ),
+				'auth_modes'   => array(
+					'api_key'      => __( 'API Key (pay-per-use)', 'ai-site-search-chatbot' ),
+					'bearer_token' => __( 'Bearer Token (Agent SDK credits)', 'ai-site-search-chatbot' ),
+				),
 				'setup_steps'  => array(
 					__( 'Visit https://platform.claude.com/settings/keys', 'ai-site-search-chatbot' ),
 					__( 'Sign in or create an Anthropic account', 'ai-site-search-chatbot' ),
@@ -182,6 +195,14 @@ final class AISite_Search_Chatbot {
 					__( 'Copy and paste the key above', 'ai-site-search-chatbot' ),
 				),
 				'note'         => __( 'Uses the official Anthropic PHP SDK with automatic system prompt caching, which reduces API costs when the system prompt is reused across requests. Claude Sonnet 4.6 is a good balance of performance and cost; Claude Opus 4.7 offers the highest capability. See the Anthropic model documentation for available model IDs.', 'ai-site-search-chatbot' ),
+				'bearer_token_setup_steps' => array(
+					__( 'Ensure you have a Pro, Max, Team, or Enterprise Claude plan', 'ai-site-search-chatbot' ),
+					__( 'Claim your Agent SDK credits at claude.ai → Settings → Agent SDK (available from June 15, 2026)', 'ai-site-search-chatbot' ),
+					__( 'Install Claude Code: npm install -g @anthropic-ai/claude-code', 'ai-site-search-chatbot' ),
+					__( 'Sign in: claude auth login', 'ai-site-search-chatbot' ),
+					__( 'Copy your auth token from the Claude Code session and paste it in the Bearer Token field', 'ai-site-search-chatbot' ),
+				),
+				'bearer_token_note' => __( 'Consumes your Claude plan monthly Agent SDK credits (e.g. $20/month for Pro). Credits reset each billing cycle and are not shared across team members. When credits run out, requests stop unless additional usage billing is enabled. Available from June 15, 2026.', 'ai-site-search-chatbot' ),
 			),
 			'github-copilot' => array(
 				'label'        => __( 'GitHub Models', 'ai-site-search-chatbot' ),
@@ -303,21 +324,33 @@ final class AISite_Search_Chatbot {
 	}
 
 	public static function handle_validate_request( WP_REST_Request $request ) {
+		$claude_auth_mode = sanitize_key( (string) $request->get_param( 'claude_auth_mode' ) );
+		if ( ! in_array( $claude_auth_mode, array( 'api_key', 'bearer_token' ), true ) ) {
+			$claude_auth_mode = 'api_key';
+		}
+
 		$settings = array(
-			'ai_provider'   => sanitize_text_field( (string) $request->get_param( 'ai_provider' ) ),
-			'api_key'       => sanitize_text_field( (string) $request->get_param( 'api_key' ) ),
-			'model'         => sanitize_text_field( (string) $request->get_param( 'model' ) ),
-			'system_prompt' => sanitize_textarea_field( (string) $request->get_param( 'system_prompt' ) ),
-			'max_sources'   => 1,
+			'ai_provider'         => sanitize_text_field( (string) $request->get_param( 'ai_provider' ) ),
+			'api_key'             => sanitize_text_field( (string) $request->get_param( 'api_key' ) ),
+			'model'               => sanitize_text_field( (string) $request->get_param( 'model' ) ),
+			'system_prompt'       => sanitize_textarea_field( (string) $request->get_param( 'system_prompt' ) ),
+			'max_sources'         => 1,
+			'claude_auth_mode'    => $claude_auth_mode,
+			'claude_bearer_token' => sanitize_text_field( (string) $request->get_param( 'claude_bearer_token' ) ),
 		);
 
 		$settings = wp_parse_args( $settings, self::default_settings() );
 
-		if ( '' === trim( $settings['api_key'] ) || '' === trim( $settings['model'] ) ) {
+		$is_bearer_mode = 'claude' === $settings['ai_provider'] && 'bearer_token' === $settings['claude_auth_mode'];
+		$credential     = $is_bearer_mode ? $settings['claude_bearer_token'] : $settings['api_key'];
+
+		if ( '' === trim( $credential ) || '' === trim( $settings['model'] ) ) {
 			return new WP_REST_Response(
 				array(
 					'success' => false,
-					'message' => __( 'Enter an API key and model ID before running validation.', 'ai-site-search-chatbot' ),
+					'message' => $is_bearer_mode
+						? __( 'Enter a bearer token and model ID before running validation.', 'ai-site-search-chatbot' )
+						: __( 'Enter an API key and model ID before running validation.', 'ai-site-search-chatbot' ),
 				),
 				400
 			);
@@ -331,22 +364,34 @@ final class AISite_Search_Chatbot {
 	}
 
 	public static function handle_test_chat_request( WP_REST_Request $request ) {
+		$claude_auth_mode = sanitize_key( (string) $request->get_param( 'claude_auth_mode' ) );
+		if ( ! in_array( $claude_auth_mode, array( 'api_key', 'bearer_token' ), true ) ) {
+			$claude_auth_mode = 'api_key';
+		}
+
 		$settings = array(
-			'ai_provider'   => sanitize_text_field( (string) $request->get_param( 'ai_provider' ) ),
-			'api_key'       => sanitize_text_field( (string) $request->get_param( 'api_key' ) ),
-			'model'         => sanitize_text_field( (string) $request->get_param( 'model' ) ),
-			'system_prompt' => sanitize_textarea_field( (string) $request->get_param( 'system_prompt' ) ),
-			'max_sources'   => max( 1, min( 10, absint( $request->get_param( 'max_sources' ) ) ) ),
+			'ai_provider'         => sanitize_text_field( (string) $request->get_param( 'ai_provider' ) ),
+			'api_key'             => sanitize_text_field( (string) $request->get_param( 'api_key' ) ),
+			'model'               => sanitize_text_field( (string) $request->get_param( 'model' ) ),
+			'system_prompt'       => sanitize_textarea_field( (string) $request->get_param( 'system_prompt' ) ),
+			'max_sources'         => max( 1, min( 10, absint( $request->get_param( 'max_sources' ) ) ) ),
+			'claude_auth_mode'    => $claude_auth_mode,
+			'claude_bearer_token' => sanitize_text_field( (string) $request->get_param( 'claude_bearer_token' ) ),
 		);
 
 		$settings = wp_parse_args( $settings, self::default_settings() );
 		$message = self::sanitize_message( (string) $request->get_param( 'message' ) );
 
-		if ( '' === trim( $settings['api_key'] ) || '' === trim( $settings['model'] ) ) {
+		$is_bearer_mode = 'claude' === $settings['ai_provider'] && 'bearer_token' === $settings['claude_auth_mode'];
+		$credential     = $is_bearer_mode ? $settings['claude_bearer_token'] : $settings['api_key'];
+
+		if ( '' === trim( $credential ) || '' === trim( $settings['model'] ) ) {
 			return new WP_REST_Response(
 				array(
 					'success' => false,
-					'message' => __( 'Enter an API key and model ID before running the admin chat test.', 'ai-site-search-chatbot' ),
+					'message' => $is_bearer_mode
+						? __( 'Enter a bearer token and model ID before running the admin chat test.', 'ai-site-search-chatbot' )
+						: __( 'Enter an API key and model ID before running the admin chat test.', 'ai-site-search-chatbot' ),
 				),
 				400
 			);
@@ -1823,7 +1868,11 @@ final class AISite_Search_Chatbot {
 		}
 
 		try {
-			$client = new \Anthropic\Client( apiKey: $settings['api_key'] );
+			if ( 'bearer_token' === ( $settings['claude_auth_mode'] ?? 'api_key' ) && ! empty( $settings['claude_bearer_token'] ) ) {
+				$client = new \Anthropic\Client( authToken: $settings['claude_bearer_token'] );
+			} else {
+				$client = new \Anthropic\Client( apiKey: $settings['api_key'] );
+			}
 
 			$response = $client->messages->create(
 				model: $settings['model'],
