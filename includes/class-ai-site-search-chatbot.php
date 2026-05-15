@@ -181,7 +181,7 @@ final class AISite_Search_Chatbot {
 					__( 'Generate a new API key', 'ai-site-search-chatbot' ),
 					__( 'Copy and paste the key above', 'ai-site-search-chatbot' ),
 				),
-				'note'         => __( 'Claude Sonnet is usually the best balance of performance and cost. You can also use the Anthropic Models API to inspect currently available model IDs.', 'ai-site-search-chatbot' ),
+				'note'         => __( 'Uses the official Anthropic PHP SDK with automatic system prompt caching, which reduces API costs when the system prompt is reused across requests. Claude Sonnet 4.6 is a good balance of performance and cost; Claude Opus 4.7 offers the highest capability. See the Anthropic model documentation for available model IDs.', 'ai-site-search-chatbot' ),
 			),
 			'github-copilot' => array(
 				'label'        => __( 'GitHub Models', 'ai-site-search-chatbot' ),
@@ -1812,47 +1812,56 @@ final class AISite_Search_Chatbot {
 	}
 
 	private static function call_claude_api( array $settings, string $message, array $results, array $options = array() ): array {
-		$prompt = isset( $options['user_prompt'] ) ? (string) $options['user_prompt'] : self::build_ai_prompt( $message, $results, (int) $settings['max_sources'] );
+		$prompt        = isset( $options['user_prompt'] ) ? (string) $options['user_prompt'] : self::build_ai_prompt( $message, $results, (int) $settings['max_sources'] );
 		$system_prompt = array_key_exists( 'system_prompt', $options ) ? (string) $options['system_prompt'] : (string) $settings['system_prompt'];
-		$payload = array(
-			'model'       => $settings['model'],
-			'max_tokens'  => 1024,
-			'system'      => $system_prompt,
-			'messages'    => array(
-				array(
-					'role'    => 'user',
-					'content' => $prompt,
-				),
-			),
-		);
 
-		$response = wp_remote_post(
-			'https://api.anthropic.com/v1/messages',
-			array(
-				'timeout' => 20,
-				'headers' => array(
-					'x-api-key'       => $settings['api_key'],
-					'anthropic-version' => '2023-06-01',
-					'Content-Type'    => 'application/json',
-				),
-				'body'    => wp_json_encode( $payload ),
-			)
-		);
-
-		if ( is_wp_error( $response ) ) {
-			return self::build_api_error_result( $response, __( 'Claude validation failed.', 'ai-site-search-chatbot' ) );
+		if ( ! class_exists( '\Anthropic\Client' ) ) {
+			return array(
+				'success' => false,
+				'message' => __( 'Anthropic PHP SDK is not installed. Run composer install in the plugin directory.', 'ai-site-search-chatbot' ),
+			);
 		}
 
-		$status_code = (int) wp_remote_retrieve_response_code( $response );
-		if ( $status_code < 200 || $status_code >= 300 ) {
-			return self::build_api_error_result( $response, __( 'Claude validation failed.', 'ai-site-search-chatbot' ) );
+		try {
+			$client = new \Anthropic\Client( apiKey: $settings['api_key'] );
+
+			$response = $client->messages->create(
+				model: $settings['model'],
+				maxTokens: 4096,
+				system: array(
+					array(
+						'type'         => 'text',
+						'text'         => $system_prompt,
+						'cacheControl' => array( 'type' => 'ephemeral' ),
+					),
+				),
+				messages: array(
+					array(
+						'role'    => 'user',
+						'content' => $prompt,
+					),
+				),
+			);
+		} catch ( \Anthropic\Core\Exceptions\APIStatusException $e ) {
+			return array(
+				'success' => false,
+				/* translators: %s: API error message */
+				'message' => sprintf( __( 'Claude API error (%s): %s', 'ai-site-search-chatbot' ), $e->getCode(), $e->getMessage() ),
+			);
+		} catch ( \Exception $e ) {
+			return array(
+				'success' => false,
+				/* translators: %s: error message */
+				'message' => sprintf( __( 'Claude request failed: %s', 'ai-site-search-chatbot' ), $e->getMessage() ),
+			);
 		}
 
-		$body = json_decode( (string) wp_remote_retrieve_body( $response ), true );
 		$content = '';
-
-		if ( isset( $body['content'][0]['text'] ) ) {
-			$content = trim( (string) $body['content'][0]['text'] );
+		foreach ( $response->content as $block ) {
+			if ( 'text' === $block->type ) {
+				$content = trim( (string) $block->text );
+				break;
+			}
 		}
 
 		if ( '' === $content ) {
