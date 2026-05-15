@@ -516,12 +516,12 @@ msgid "Claim your Agent SDK credits at claude.ai → Settings → Agent SDK (ava
 msgstr "claude.ai → 設定 → Agent SDK でクレジットを申請します（2026年6月15日から利用可能）。"
 
 #: includes/class-ai-site-search-chatbot.php
-msgid "On your local PC, install Claude Code: npm install -g @anthropic-ai/claude-code"
-msgstr "ローカル PC で Claude Code をインストールします: npm install -g @anthropic-ai/claude-code"
+msgid "On your computer (Windows or Mac), install Claude Code: npm install -g @anthropic-ai/claude-code"
+msgstr "お使いのコンピューター（Windows / Mac）で Claude Code をインストールします: npm install -g @anthropic-ai/claude-code"
 
 #: includes/class-ai-site-search-chatbot.php
-msgid "On your local PC, sign in: claude auth login"
-msgstr "ローカル PC でサインインします: claude auth login"
+msgid "On your computer (Windows or Mac), sign in: claude auth login"
+msgstr "お使いのコンピューター（Windows / Mac）でサインインします: claude auth login"
 
 #: includes/class-ai-site-search-chatbot.php
 msgid "Copy your auth token from the Claude Code session and paste it in the Bearer Token field"

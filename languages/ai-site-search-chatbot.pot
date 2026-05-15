@@ -327,11 +327,11 @@ msgid "Claim your Agent SDK credits at claude.ai → Settings → Agent SDK (ava
 msgstr ""
 
 #: includes/class-ai-site-search-chatbot.php
-msgid "On your local PC, install Claude Code: npm install -g @anthropic-ai/claude-code"
+msgid "On your computer (Windows or Mac), install Claude Code: npm install -g @anthropic-ai/claude-code"
 msgstr ""
 
 #: includes/class-ai-site-search-chatbot.php
-msgid "On your local PC, sign in: claude auth login"
+msgid "On your computer (Windows or Mac), sign in: claude auth login"
 msgstr ""
 
 #: includes/class-ai-site-search-chatbot.php

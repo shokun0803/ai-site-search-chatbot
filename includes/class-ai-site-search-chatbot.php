@@ -198,8 +198,8 @@ final class AISite_Search_Chatbot {
 				'bearer_token_setup_steps' => array(
 					__( 'Ensure you have a Pro, Max, Team, or Enterprise Claude plan', 'ai-site-search-chatbot' ),
 					__( 'Claim your Agent SDK credits at claude.ai → Settings → Agent SDK (available from June 15, 2026)', 'ai-site-search-chatbot' ),
-					__( 'On your local PC, install Claude Code: npm install -g @anthropic-ai/claude-code', 'ai-site-search-chatbot' ),
-					__( 'On your local PC, sign in: claude auth login', 'ai-site-search-chatbot' ),
+					__( 'On your computer (Windows or Mac), install Claude Code: npm install -g @anthropic-ai/claude-code', 'ai-site-search-chatbot' ),
+					__( 'On your computer (Windows or Mac), sign in: claude auth login', 'ai-site-search-chatbot' ),
 					__( 'Copy your auth token from the Claude Code session and paste it in the Bearer Token field', 'ai-site-search-chatbot' ),
 				),
 				'bearer_token_note' => __( 'Consumes your Claude plan monthly Agent SDK credits (e.g. $20/month for Pro). Credits reset each billing cycle and are not shared across team members. When credits run out, requests stop unless additional usage billing is enabled. Available from June 15, 2026.', 'ai-site-search-chatbot' ),
