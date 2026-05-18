@@ -532,8 +532,12 @@ msgid "On your computer (Windows or Mac), sign in: claude auth login"
 msgstr "お使いのコンピューター（Windows / Mac）でサインインします: claude auth login"
 
 #: includes/class-ai-site-search-chatbot.php
-msgid "Copy your auth token from the Claude Code session and paste it in the Bearer Token field"
-msgstr "Claude Code セッションの認証トークンをコピーして、Bearer Token 欄に貼り付けます。"
+msgid "Windows: run in PowerShell: Get-Content \"$env:USERPROFILE\\.claude\\.credentials.json\" / Mac: run in Terminal: cat ~/.claude/.credentials.json"
+msgstr "Windows: PowerShell で実行します: Get-Content \"$env:USERPROFILE\\.claude\\.credentials.json\" / Mac: ターミナルで実行します: cat ~/.claude/.credentials.json"
+
+#: includes/class-ai-site-search-chatbot.php
+msgid "Copy the accessToken value (starting with sk-ant-oat01-) and paste it in the Bearer Token field below"
+msgstr "表示された accessToken の値（sk-ant-oat01- で始まる文字列）をコピーして、下の Bearer Token 欄に貼り付けます。"
 
 #: includes/class-ai-site-search-chatbot.php
 msgid "Consumes your Claude plan monthly Agent SDK credits (e.g. $20/month for Pro). Credits reset each billing cycle and are not shared across team members. When credits run out, requests stop unless additional usage billing is enabled. Available from June 15, 2026."

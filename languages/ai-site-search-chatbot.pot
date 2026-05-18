@@ -343,7 +343,11 @@ msgid "On your computer (Windows or Mac), sign in: claude auth login"
 msgstr ""
 
 #: includes/class-ai-site-search-chatbot.php
-msgid "Copy your auth token from the Claude Code session and paste it in the Bearer Token field"
+msgid "Windows: run in PowerShell: Get-Content \"$env:USERPROFILE\\.claude\\.credentials.json\" / Mac: run in Terminal: cat ~/.claude/.credentials.json"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot.php
+msgid "Copy the accessToken value (starting with sk-ant-oat01-) and paste it in the Bearer Token field below"
 msgstr ""
 
 #: includes/class-ai-site-search-chatbot.php
