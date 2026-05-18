@@ -520,6 +520,10 @@ msgid "On your computer (Windows or Mac), install Node.js if not already install
 msgstr "お使いのコンピューター（Windows / Mac）に Node.js がインストールされていない場合はインストールします: https://nodejs.org"
 
 #: includes/class-ai-site-search-chatbot.php
+msgid "Windows only: open PowerShell as administrator and run: Set-ExecutionPolicy RemoteSigned — then press Y to confirm"
+msgstr "Windows のみ: PowerShell を管理者として開き、次を実行します: Set-ExecutionPolicy RemoteSigned — Y を押して確定します"
+
+#: includes/class-ai-site-search-chatbot.php
 msgid "On your computer (Windows or Mac), install Claude Code: npm install -g @anthropic-ai/claude-code"
 msgstr "お使いのコンピューター（Windows / Mac）で Claude Code をインストールします: npm install -g @anthropic-ai/claude-code"
 

@@ -199,6 +199,7 @@ final class AISite_Search_Chatbot {
 					__( 'Ensure you have a Pro, Max, Team, or Enterprise Claude plan', 'ai-site-search-chatbot' ),
 					__( 'Claim your Agent SDK credits at claude.ai → Settings → Agent SDK (available from June 15, 2026)', 'ai-site-search-chatbot' ),
 					__( 'On your computer (Windows or Mac), install Node.js if not already installed: https://nodejs.org', 'ai-site-search-chatbot' ),
+					__( 'Windows only: open PowerShell as administrator and run: Set-ExecutionPolicy RemoteSigned — then press Y to confirm', 'ai-site-search-chatbot' ),
 					__( 'On your computer (Windows or Mac), install Claude Code: npm install -g @anthropic-ai/claude-code', 'ai-site-search-chatbot' ),
 					__( 'On your computer (Windows or Mac), sign in: claude auth login', 'ai-site-search-chatbot' ),
 					__( 'Copy your auth token from the Claude Code session and paste it in the Bearer Token field', 'ai-site-search-chatbot' ),
