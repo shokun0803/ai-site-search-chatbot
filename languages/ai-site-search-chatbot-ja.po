@@ -109,6 +109,222 @@ msgstr "%1$s リクエスト ID: %2$s"
 msgid "The request reached GitHub Models, but the inference endpoint returned an internal error. This usually indicates a temporary provider-side issue or a model-specific availability problem. Try another GitHub Models model such as openai/gpt-4.1, or retry later."
 msgstr "リクエストは GitHub Models まで到達しましたが、推論エンドポイントが内部エラーを返しました。これは通常、プロバイダー側の一時的な問題か、そのモデル固有の可用性の問題を示します。openai/gpt-4.1 など別の GitHub Models モデルを試すか、時間をおいて再試行してください。"
 
+msgid "AI only"
+msgstr "AI のみ"
+
+msgid "Always ask AI to decide whether a saved knowledge entry matches the visitor question."
+msgstr "保存済みナレッジが訪問者の質問に一致するかどうかを、常に AI に判定させます。"
+
+msgid "Non-AI first, AI on ambiguous cases"
+msgstr "まず非AI判定、曖昧な場合のみ AI"
+
+msgid "Filter by rule-based similarity first, then ask AI only when the remaining candidates are ambiguous."
+msgstr "まずルールベースの類似度で候補を絞り込み、残った候補が曖昧な場合のみ AI に判定させます。"
+
+msgid "Keep plugin data on uninstall"
+msgstr "アンインストール時にプラグインデータを保持する"
+
+msgid "Recommended. Keep saved knowledge, settings, logs, and encrypted database credentials if the plugin is removed."
+msgstr "推奨。プラグインを削除しても、保存済みナレッジ、設定、ログ、データベース内の暗号化済み認証情報を保持します。"
+
+msgid "Delete all plugin data on uninstall"
+msgstr "アンインストール時にすべてのプラグインデータを削除する"
+
+msgid "Remove the saved knowledge table, logs, settings, encrypted database credentials, and plugin transients when the plugin is uninstalled."
+msgstr "プラグインのアンインストール時に、保存用ナレッジテーブル、ログ、設定、暗号化済みのデータベース認証情報、プラグインの transient を削除します。"
+
+msgid "The knowledge entry could not be found."
+msgstr "保存用ナレッジが見つかりませんでした。"
+
+msgid "The knowledge entry could not be created."
+msgstr "保存用ナレッジを作成できませんでした。"
+
+msgid "The knowledge entry could not be updated."
+msgstr "保存用ナレッジを更新できませんでした。"
+
+msgid "The knowledge entry could not be deleted."
+msgstr "保存用ナレッジを削除できませんでした。"
+
+msgid "Paste the CSV content before importing."
+msgstr "インポートする前に CSV 内容を入力してください。"
+
+msgid "Could not open the CSV import stream."
+msgstr "CSV インポート用のストリームを開けませんでした。"
+
+msgid "The CSV header is invalid. Export a sample file from this plugin and use the same columns."
+msgstr "CSV のヘッダーが不正です。このプラグインからサンプルをエクスポートし、同じ列構成を使用してください。"
+
+msgid "One or more CSV rows are malformed."
+msgstr "1 行以上の CSV データが不正な形式です。"
+
+msgid "Each CSV row must contain a non-empty export_uid."
+msgstr "各 CSV 行には空でない export_uid が必要です。"
+
+msgid "Could not import entry %s."
+msgstr "エントリー %s をインポートできませんでした。"
+
+msgid "Could not update entry %s."
+msgstr "エントリー %s を更新できませんでした。"
+
+msgid "You decide whether a saved generalized knowledge entry matches a visitor question for a WordPress site assistant. Use only the provided visitor question, current search results, and saved knowledge candidates. Return JSON only in the form {\"match\":true|false,\"entry_id\":123,\"reason\":\"short reason\"}. Set match to false and entry_id to 0 when no saved entry is reliable enough. Never invent IDs."
+msgstr "あなたは、保存済みの一般化ナレッジが WordPress サイトアシスタント向けの訪問者質問に一致するかどうかを判定します。提供された訪問者の質問、現在の検索結果、保存済みナレッジ候補だけを使ってください。必ず JSON のみを返し、形式は {\"match\":true|false,\"entry_id\":123,\"reason\":\"short reason\"} とします。信頼できる保存済みエントリーがない場合は match を false、entry_id を 0 にしてください。ID を作り出してはいけません。"
+
+msgid "You turn a visitor question and its answer into a reusable generalized knowledge entry for a WordPress site assistant. Remove personal information, company-specific private details, order numbers, contact details, account details, and one-off case facts. Keep only a general question and a general answer that would be safe to reuse for another visitor. Return JSON only in the form {\"should_save\":true|false,\"question_generalized\":\"...\",\"answer_generalized\":\"...\",\"confidence_note\":\"...\",\"pii_flag\":true|false}. Set should_save to false when the exchange is too specific, too personal, or not reusable."
+msgstr "あなたは、訪問者の質問とその回答を、WordPress サイトアシスタント向けに再利用可能な一般化ナレッジへ変換します。個人情報、企業固有の非公開情報、注文番号、連絡先、アカウント情報、一度限りの個別事案は削除してください。他の訪問者にも安全に再利用できる一般的な質問と一般的な回答だけを残します。必ず JSON のみを返し、形式は {\"should_save\":true|false,\"question_generalized\":\"...\",\"answer_generalized\":\"...\",\"confidence_note\":\"...\",\"pii_flag\":true|false} とします。やり取りが具体的すぎる、個人的すぎる、または再利用に向かない場合は should_save を false にしてください。"
+
+msgid "The saved knowledge list could not be loaded."
+msgstr "保存用ナレッジ一覧を読み込めませんでした。"
+
+msgid "The knowledge entry could not be saved."
+msgstr "保存用ナレッジを保存できませんでした。"
+
+msgid "The CSV import could not be completed."
+msgstr "CSV のインポートを完了できませんでした。"
+
+msgid "The CSV export could not be generated."
+msgstr "CSV のエクスポートを生成できませんでした。"
+
+msgid "The knowledge entry was saved."
+msgstr "保存用ナレッジを保存しました。"
+
+msgid "The knowledge entry was deleted."
+msgstr "保存用ナレッジを削除しました。"
+
+msgid "The CSV import completed."
+msgstr "CSV のインポートが完了しました。"
+
+msgid "Delete this saved knowledge entry?"
+msgstr "この保存用ナレッジを削除しますか？"
+
+msgid "New entry"
+msgstr "新規エントリー"
+
+msgid "Edit entry"
+msgstr "エントリーを編集"
+
+msgid "No saved knowledge entries yet."
+msgstr "保存用ナレッジはまだありません。"
+
+msgid "Choose a CSV file before importing."
+msgstr "インポートする前に CSV ファイルを選択してください。"
+
+msgid "Search saved knowledge"
+msgstr "保存用ナレッジを検索"
+
+msgid "All statuses"
+msgstr "すべての状態"
+
+msgid "Export CSV"
+msgstr "CSV をエクスポート"
+
+msgid "Import CSV"
+msgstr "CSV をインポート"
+
+msgid "Refresh"
+msgstr "更新"
+
+msgid "Create entry"
+msgstr "エントリーを作成"
+
+msgid "Save entry"
+msgstr "エントリーを保存"
+
+msgid "Cancel"
+msgstr "キャンセル"
+
+msgid "Generalized question"
+msgstr "一般化した質問"
+
+msgid "Generalized answer"
+msgstr "一般化した回答"
+
+msgid "Source post IDs"
+msgstr "参照元投稿 ID"
+
+msgid "Matching hint"
+msgstr "一致判定ヒント"
+
+msgid "Confidence note"
+msgstr "信頼度メモ"
+
+msgid "Admin notes"
+msgstr "管理者メモ"
+
+msgid "Needs privacy review"
+msgstr "プライバシー確認が必要"
+
+msgid "Updated"
+msgstr "更新日時"
+
+msgid "Actions"
+msgstr "操作"
+
+msgid "Edit"
+msgstr "編集"
+
+msgid "Delete"
+msgstr "削除"
+
+msgid "Saved Knowledge Reuse"
+msgstr "保存用ナレッジの再利用"
+
+msgid "Enable approved saved knowledge entries before generating a new AI answer."
+msgstr "新しい AI 回答を生成する前に、承認済みの保存用ナレッジを利用します。"
+
+msgid "Saved knowledge is managed separately from public chat logs."
+msgstr "保存用ナレッジは公開チャットログとは別に管理されます。"
+
+msgid "Knowledge Candidate Drafts"
+msgstr "ナレッジ候補ドラフト"
+
+msgid "Allow AI-generated generalized knowledge candidates to be saved as drafts for admin review."
+msgstr "AI が生成した一般化ナレッジ候補を、管理者確認用のドラフトとして保存できるようにします。"
+
+msgid "Knowledge Match Mode"
+msgstr "ナレッジ一致判定モード"
+
+msgid "Knowledge Candidate TTL (hours)"
+msgstr "ナレッジ候補 TTL（時間）"
+
+msgid "How long auto-generated draft candidates remain eligible before they should be reviewed or regenerated."
+msgstr "自動生成されたドラフト候補を、確認または再生成が必要になるまで有効とみなす時間です。"
+
+msgid "Uninstall Data Policy"
+msgstr "アンインストール時のデータポリシー"
+
+msgid "Saved Knowledge Management"
+msgstr "保存用ナレッジ管理"
+
+msgid "Saved Knowledge Base"
+msgstr "保存用ナレッジ"
+
+msgid "Review generalized question and answer pairs, manage approval status, and export or import CSV data from the dedicated Saved Knowledge Base screen."
+msgstr "一般化した質問と回答のペアを確認し、承認状態を管理し、専用の保存用ナレッジ画面から CSV のエクスポートとインポートを行います。"
+
+msgid "Open Saved Knowledge Base"
+msgstr "保存用ナレッジを開く"
+
+msgid "Settings"
+msgstr "設定"
+
+msgid "AI Site Search Chatbot sections"
+msgstr "AI Site Search Chatbot のセクション"
+
+msgid "Manage generalized question and answer pairs that can be approved for reuse. This screen is separate from the public chat logs."
+msgstr "再利用できるよう承認可能な一般化した質問と回答のペアを管理します。この画面は公開チャットログとは別です。"
+
+msgid "Loading saved knowledge…"
+msgstr "保存用ナレッジを読み込み中…"
+
+msgid "Generalized Question"
+msgstr "一般化した質問"
+
+msgid "AI Matched Knowledge"
+msgstr "AI 判定ナレッジ"
+
+msgid "Saved Knowledge Reply"
+msgstr "保存用ナレッジ回答"
+
 #: includes/class-ai-site-search-chatbot.php:402
 msgid "The credential could not be stored securely on this server. The previous saved value was kept unchanged."
 msgstr "このサーバーでは認証情報を安全に保存できませんでした。以前に保存されていた値はそのまま保持されています。"
@@ -345,6 +561,73 @@ msgstr "IP: %s"
 #: includes/class-ai-site-search-chatbot-admin.php:280
 msgid "Sources: %d"
 msgstr "参照元: %d 件"
+
+#: includes/class-ai-site-search-chatbot-admin.php:281
+msgid "Search Terms: %s"
+msgstr "検索語: %s"
+
+msgid "Apply status"
+msgstr "状態を適用"
+
+msgid "The knowledge status was updated."
+msgstr "ナレッジの状態を更新しました。"
+
+msgid "Status / Actions"
+msgstr "状態 / 操作"
+
+msgid "Draft"
+msgstr "下書き"
+
+msgid "Approved"
+msgstr "承認済み"
+
+msgid "Archived"
+msgstr "アーカイブ"
+
+msgid "Knowledge candidate draft saving is disabled."
+msgstr "ナレッジ候補の下書き保存は無効です。"
+
+msgid "The knowledge candidate could not be evaluated because the AI follow-up request failed."
+msgstr "AI の追加入力判定に失敗したため、ナレッジ候補を評価できませんでした。"
+
+msgid "The generated answer was not considered reusable enough to save as draft knowledge."
+msgstr "生成された回答は、下書きナレッジとして保存するには再利用性が不十分と判断されました。"
+
+msgid "A matching approved knowledge entry already exists, so it was left unchanged."
+msgstr "一致する承認済みナレッジが既に存在するため、変更しませんでした。"
+
+msgid "The matching draft knowledge entry was updated."
+msgstr "一致する下書きナレッジを更新しました。"
+
+msgid "A new draft knowledge entry was created."
+msgstr "新しい下書きナレッジを作成しました。"
+
+msgid "Draft saved"
+msgstr "下書きを保存"
+
+msgid "Draft updated"
+msgstr "下書きを更新"
+
+msgid "Approved entry kept"
+msgstr "承認済みエントリーを維持"
+
+msgid "Draft not saved"
+msgstr "下書き未保存"
+
+msgid "Draft evaluation failed"
+msgstr "下書き判定失敗"
+
+msgid "Draft saving disabled"
+msgstr "下書き保存無効"
+
+msgid "Knowledge Draft: %s"
+msgstr "ナレッジ下書き: %s"
+
+msgid "Knowledge Note: %s"
+msgstr "ナレッジ注記: %s"
+
+msgid "Knowledge candidate marked for privacy review."
+msgstr "ナレッジ候補はプライバシー確認が必要としてマークされました。"
 
 #: includes/class-ai-site-search-chatbot-admin.php:312
 msgid "Show full text"

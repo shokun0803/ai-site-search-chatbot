@@ -12,22 +12,97 @@ final class AISite_Search_Chatbot {
 	const SHORTCODE = 'ai_site_search_chatbot';
 	const CHAT_LOG_OPTION = 'aiscb_chat_logs';
 	const CHAT_LOG_LIMIT = 50;
+	const KNOWLEDGE_BASE_TABLE = 'aiscb_knowledge_base';
+	const KNOWLEDGE_BASE_SCHEMA_OPTION = 'aiscb_knowledge_base_schema_version';
+	const KNOWLEDGE_BASE_SCHEMA_VERSION = '1.0.0';
+	const KNOWLEDGE_BASE_MATCH_MODE_AI_ONLY = 'ai_only';
+	const KNOWLEDGE_BASE_MATCH_MODE_HYBRID = 'hybrid';
+	const KNOWLEDGE_BASE_STATUSES = array( 'draft', 'approved', 'archived' );
 
 	public static function activate(): void {
 		if ( false !== get_option( self::OPTION_KEY, false ) ) {
+			self::create_knowledge_base_table();
 			return;
 		}
 
 		add_option( self::OPTION_KEY, self::default_settings(), '', false );
+		self::create_knowledge_base_table();
 	}
 
 	public static function init(): void {
+		self::maybe_upgrade_knowledge_base_schema();
 		self::load_textdomain();
 		add_action( 'admin_init', array( __CLASS__, 'register_settings' ) );
 		add_action( 'rest_api_init', array( __CLASS__, 'register_rest_routes' ) );
 		AISite_Search_Chatbot_Admin::init();
 		AISite_Search_Chatbot_Block::init();
 		AISite_Search_Chatbot_Frontend::init();
+	}
+
+	private static function maybe_upgrade_knowledge_base_schema(): void {
+		$installed_version = (string) get_option( self::KNOWLEDGE_BASE_SCHEMA_OPTION, '' );
+
+		if ( self::KNOWLEDGE_BASE_SCHEMA_VERSION === $installed_version ) {
+			return;
+		}
+
+		self::create_knowledge_base_table();
+	}
+
+	public static function get_knowledge_base_table_name(): string {
+		global $wpdb;
+
+		return $wpdb->prefix . self::KNOWLEDGE_BASE_TABLE;
+	}
+
+	private static function create_knowledge_base_table(): void {
+		global $wpdb;
+
+		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+
+		$table_name      = self::get_knowledge_base_table_name();
+		$charset_collate = $wpdb->get_charset_collate();
+		$sql             = "CREATE TABLE {$table_name} (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			export_uid varchar(64) NOT NULL,
+			status varchar(20) NOT NULL DEFAULT 'draft',
+			question_generalized longtext NOT NULL,
+			answer_generalized longtext NOT NULL,
+			question_fingerprint varchar(64) NOT NULL,
+			source_post_ids longtext NOT NULL,
+			matching_method_hint varchar(20) NOT NULL DEFAULT '',
+			created_from_log_time bigint(20) unsigned NOT NULL DEFAULT 0,
+			created_at datetime NOT NULL,
+			updated_at datetime NOT NULL,
+			approved_at datetime NULL DEFAULT NULL,
+			last_used_at datetime NULL DEFAULT NULL,
+			use_count bigint(20) unsigned NOT NULL DEFAULT 0,
+			confidence_note text NOT NULL,
+			admin_notes longtext NOT NULL,
+			pii_flag tinyint(1) unsigned NOT NULL DEFAULT 0,
+			PRIMARY KEY  (id),
+			UNIQUE KEY export_uid (export_uid),
+			KEY status (status),
+			KEY updated_at (updated_at)
+		) {$charset_collate};";
+
+		dbDelta( $sql );
+		update_option( self::KNOWLEDGE_BASE_SCHEMA_OPTION, self::KNOWLEDGE_BASE_SCHEMA_VERSION, false );
+	}
+
+	public static function delete_plugin_data(): void {
+		global $wpdb;
+
+		delete_option( self::OPTION_KEY );
+		delete_option( self::CHAT_LOG_OPTION );
+		delete_option( self::KNOWLEDGE_BASE_SCHEMA_OPTION );
+
+		$table_name = self::get_knowledge_base_table_name();
+		$wpdb->query( "DROP TABLE IF EXISTS {$table_name}" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+
+		$option_name_like = $wpdb->esc_like( '_transient_aiscb_' ) . '%';
+		$timeout_name_like = $wpdb->esc_like( '_transient_timeout_aiscb_' ) . '%';
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s", $option_name_like, $timeout_name_like ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	}
 
 	public static function load_textdomain(): void {
@@ -79,6 +154,37 @@ final class AISite_Search_Chatbot {
 			'claude_auth_mode'    => 'api_key',
 			'claude_bearer_token' => '',
 			'claude_bearer_token_encrypted' => '',
+			'knowledge_base_enabled' => 1,
+			'knowledge_base_auto_draft' => 1,
+			'knowledge_base_match_mode' => self::KNOWLEDGE_BASE_MATCH_MODE_HYBRID,
+			'knowledge_base_candidate_ttl_hours' => 168,
+			'uninstall_cleanup_mode' => 'retain',
+		);
+	}
+
+	public static function get_knowledge_base_match_modes(): array {
+		return array(
+			self::KNOWLEDGE_BASE_MATCH_MODE_AI_ONLY => array(
+				'label' => __( 'AI only', 'ai-site-search-chatbot' ),
+				'description' => __( 'Always ask AI to decide whether a saved knowledge entry matches the visitor question.', 'ai-site-search-chatbot' ),
+			),
+			self::KNOWLEDGE_BASE_MATCH_MODE_HYBRID => array(
+				'label' => __( 'Non-AI first, AI on ambiguous cases', 'ai-site-search-chatbot' ),
+				'description' => __( 'Filter by rule-based similarity first, then ask AI only when the remaining candidates are ambiguous.', 'ai-site-search-chatbot' ),
+			),
+		);
+	}
+
+	public static function get_uninstall_cleanup_modes(): array {
+		return array(
+			'retain' => array(
+				'label' => __( 'Keep plugin data on uninstall', 'ai-site-search-chatbot' ),
+				'description' => __( 'Recommended. Keep saved knowledge, settings, logs, and encrypted database credentials if the plugin is removed.', 'ai-site-search-chatbot' ),
+			),
+			'delete_all' => array(
+				'label' => __( 'Delete all plugin data on uninstall', 'ai-site-search-chatbot' ),
+				'description' => __( 'Remove the saved knowledge table, logs, settings, encrypted database credentials, and plugin transients when the plugin is uninstalled.', 'ai-site-search-chatbot' ),
+			),
 		);
 	}
 
@@ -488,6 +594,16 @@ final class AISite_Search_Chatbot {
 			$claude_auth_mode = $defaults['claude_auth_mode'];
 		}
 
+		$knowledge_base_match_mode = isset( $input['knowledge_base_match_mode'] ) ? sanitize_key( wp_unslash( $input['knowledge_base_match_mode'] ) ) : $defaults['knowledge_base_match_mode'];
+		if ( ! array_key_exists( $knowledge_base_match_mode, self::get_knowledge_base_match_modes() ) ) {
+			$knowledge_base_match_mode = $defaults['knowledge_base_match_mode'];
+		}
+
+		$uninstall_cleanup_mode = isset( $input['uninstall_cleanup_mode'] ) ? sanitize_key( wp_unslash( $input['uninstall_cleanup_mode'] ) ) : $defaults['uninstall_cleanup_mode'];
+		if ( ! array_key_exists( $uninstall_cleanup_mode, self::get_uninstall_cleanup_modes() ) ) {
+			$uninstall_cleanup_mode = $defaults['uninstall_cleanup_mode'];
+		}
+
 		$sanitized = array(
 			'ai_provider'         => $provider,
 			'api_key'             => '',
@@ -506,6 +622,11 @@ final class AISite_Search_Chatbot {
 			'claude_auth_mode'    => $claude_auth_mode,
 			'claude_bearer_token' => '',
 			'claude_bearer_token_encrypted' => (string) ( $existing_settings['claude_bearer_token_encrypted'] ?? '' ),
+			'knowledge_base_enabled' => isset( $input['knowledge_base_enabled'] ) ? 1 : 0,
+			'knowledge_base_auto_draft' => isset( $input['knowledge_base_auto_draft'] ) ? 1 : 0,
+			'knowledge_base_match_mode' => $knowledge_base_match_mode,
+			'knowledge_base_candidate_ttl_hours' => isset( $input['knowledge_base_candidate_ttl_hours'] ) ? max( 1, min( 720, absint( $input['knowledge_base_candidate_ttl_hours'] ) ) ) : $defaults['knowledge_base_candidate_ttl_hours'],
+			'uninstall_cleanup_mode' => $uninstall_cleanup_mode,
 		);
 
 		$api_key = isset( $input['api_key'] ) ? sanitize_text_field( wp_unslash( $input['api_key'] ) ) : '';
@@ -692,6 +813,988 @@ final class AISite_Search_Chatbot {
 				},
 			)
 		);
+
+		register_rest_route(
+			self::REST_NAMESPACE,
+			'/knowledge-base',
+			array(
+				array(
+					'methods'             => 'GET',
+					'callback'            => array( __CLASS__, 'handle_knowledge_base_list_request' ),
+					'permission_callback' => function () {
+						return current_user_can( 'manage_options' );
+					},
+				),
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( __CLASS__, 'handle_knowledge_base_create_request' ),
+					'permission_callback' => function () {
+						return current_user_can( 'manage_options' );
+					},
+				),
+			)
+		);
+
+		register_rest_route(
+			self::REST_NAMESPACE,
+			'/knowledge-base/(?P<id>\d+)',
+			array(
+				array(
+					'methods'             => 'GET',
+					'callback'            => array( __CLASS__, 'handle_knowledge_base_get_request' ),
+					'permission_callback' => function () {
+						return current_user_can( 'manage_options' );
+					},
+				),
+				array(
+					'methods'             => 'POST,PUT,PATCH',
+					'callback'            => array( __CLASS__, 'handle_knowledge_base_update_request' ),
+					'permission_callback' => function () {
+						return current_user_can( 'manage_options' );
+					},
+				),
+				array(
+					'methods'             => 'DELETE',
+					'callback'            => array( __CLASS__, 'handle_knowledge_base_delete_request' ),
+					'permission_callback' => function () {
+						return current_user_can( 'manage_options' );
+					},
+				),
+			)
+		);
+
+		register_rest_route(
+			self::REST_NAMESPACE,
+			'/knowledge-base/export',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'handle_knowledge_base_export_request' ),
+				'permission_callback' => function () {
+					return current_user_can( 'manage_options' );
+				},
+			)
+		);
+
+		register_rest_route(
+			self::REST_NAMESPACE,
+			'/knowledge-base/import',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'handle_knowledge_base_import_request' ),
+				'permission_callback' => function () {
+					return current_user_can( 'manage_options' );
+				},
+			)
+		);
+	}
+
+	private static function normalize_knowledge_base_status( string $status ): string {
+		$status = sanitize_key( $status );
+
+		if ( ! in_array( $status, self::KNOWLEDGE_BASE_STATUSES, true ) ) {
+			return 'draft';
+		}
+
+		return $status;
+	}
+
+	private static function normalize_source_post_ids( $value ): array {
+		if ( is_string( $value ) ) {
+			$value = preg_split( '/\s*,\s*/', trim( $value ) );
+		}
+
+		if ( ! is_array( $value ) ) {
+			return array();
+		}
+
+		$ids = array_values( array_unique( array_filter( array_map( 'absint', $value ) ) ) );
+
+		return $ids;
+	}
+
+	private static function sanitize_knowledge_base_entry_input( array $input, array $existing = array() ): array {
+		$source_post_ids = self::normalize_source_post_ids( $input['source_post_ids'] ?? ( $existing['source_post_ids'] ?? array() ) );
+		$question = isset( $input['question_generalized'] ) ? self::trim_chat_log_text( (string) $input['question_generalized'], 2000 ) : (string) ( $existing['question_generalized'] ?? '' );
+		$answer = isset( $input['answer_generalized'] ) ? self::trim_chat_log_text( (string) $input['answer_generalized'], 8000 ) : (string) ( $existing['answer_generalized'] ?? '' );
+		$status = isset( $input['status'] ) ? self::normalize_knowledge_base_status( (string) $input['status'] ) : self::normalize_knowledge_base_status( (string) ( $existing['status'] ?? 'draft' ) );
+		$matching_method_hint = isset( $input['matching_method_hint'] ) ? sanitize_key( (string) $input['matching_method_hint'] ) : (string) ( $existing['matching_method_hint'] ?? '' );
+		$confidence_note = isset( $input['confidence_note'] ) ? self::trim_chat_log_text( (string) $input['confidence_note'], 1000 ) : (string) ( $existing['confidence_note'] ?? '' );
+		$admin_notes = isset( $input['admin_notes'] ) ? self::trim_chat_log_text( (string) $input['admin_notes'], 4000 ) : (string) ( $existing['admin_notes'] ?? '' );
+
+		return array(
+			'export_uid' => isset( $input['export_uid'] ) && '' !== trim( (string) $input['export_uid'] ) ? sanitize_text_field( (string) $input['export_uid'] ) : (string) ( $existing['export_uid'] ?? wp_generate_uuid4() ),
+			'status' => $status,
+			'question_generalized' => $question,
+			'answer_generalized' => $answer,
+			'question_fingerprint' => hash( 'sha256', self::normalize_message_for_cache( $question ) ),
+			'source_post_ids' => wp_json_encode( $source_post_ids ),
+			'matching_method_hint' => $matching_method_hint,
+			'created_from_log_time' => isset( $input['created_from_log_time'] ) ? absint( $input['created_from_log_time'] ) : absint( $existing['created_from_log_time'] ?? 0 ),
+			'confidence_note' => $confidence_note,
+			'admin_notes' => $admin_notes,
+			'pii_flag' => isset( $input['pii_flag'] ) ? (int) ! empty( $input['pii_flag'] ) : (int) ( $existing['pii_flag'] ?? 0 ),
+		);
+	}
+
+	private static function map_knowledge_base_row( array $row ): array {
+		$source_post_ids = json_decode( (string) ( $row['source_post_ids'] ?? '[]' ), true );
+
+		return array(
+			'id' => isset( $row['id'] ) ? absint( $row['id'] ) : 0,
+			'export_uid' => (string) ( $row['export_uid'] ?? '' ),
+			'status' => self::normalize_knowledge_base_status( (string) ( $row['status'] ?? 'draft' ) ),
+			'question_generalized' => (string) ( $row['question_generalized'] ?? '' ),
+			'answer_generalized' => (string) ( $row['answer_generalized'] ?? '' ),
+			'question_fingerprint' => (string) ( $row['question_fingerprint'] ?? '' ),
+			'source_post_ids' => is_array( $source_post_ids ) ? array_values( array_map( 'absint', $source_post_ids ) ) : array(),
+			'matching_method_hint' => (string) ( $row['matching_method_hint'] ?? '' ),
+			'created_from_log_time' => absint( $row['created_from_log_time'] ?? 0 ),
+			'created_at' => (string) ( $row['created_at'] ?? '' ),
+			'created_at_iso' => self::format_knowledge_base_datetime_iso( (string) ( $row['created_at'] ?? '' ) ),
+			'updated_at' => (string) ( $row['updated_at'] ?? '' ),
+			'updated_at_iso' => self::format_knowledge_base_datetime_iso( (string) ( $row['updated_at'] ?? '' ) ),
+			'approved_at' => (string) ( $row['approved_at'] ?? '' ),
+			'approved_at_iso' => self::format_knowledge_base_datetime_iso( (string) ( $row['approved_at'] ?? '' ) ),
+			'last_used_at' => (string) ( $row['last_used_at'] ?? '' ),
+			'last_used_at_iso' => self::format_knowledge_base_datetime_iso( (string) ( $row['last_used_at'] ?? '' ) ),
+			'use_count' => absint( $row['use_count'] ?? 0 ),
+			'confidence_note' => (string) ( $row['confidence_note'] ?? '' ),
+			'admin_notes' => (string) ( $row['admin_notes'] ?? '' ),
+			'pii_flag' => ! empty( $row['pii_flag'] ),
+		);
+	}
+
+	private static function format_knowledge_base_datetime_iso( string $datetime ): string {
+		$datetime = trim( $datetime );
+
+		if ( '' === $datetime ) {
+			return '';
+		}
+
+		$parsed = date_create_immutable_from_format( 'Y-m-d H:i:s', $datetime, new DateTimeZone( 'UTC' ) );
+
+		if ( false === $parsed ) {
+			return '';
+		}
+
+		return $parsed->format( DATE_ATOM );
+	}
+
+	private static function get_knowledge_base_entry( int $id ): array {
+		global $wpdb;
+
+		$table_name = self::get_knowledge_base_table_name();
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table_name} WHERE id = %d", $id ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		if ( ! is_array( $row ) ) {
+			return array();
+		}
+
+		return self::map_knowledge_base_row( $row );
+	}
+
+	private static function list_knowledge_base_entries( array $args = array() ): array {
+		global $wpdb;
+
+		$table_name = self::get_knowledge_base_table_name();
+		$page = max( 1, absint( $args['page'] ?? 1 ) );
+		$per_page = max( 1, min( 100, absint( $args['per_page'] ?? 20 ) ) );
+		$offset = ( $page - 1 ) * $per_page;
+		$status = isset( $args['status'] ) ? trim( (string) $args['status'] ) : '';
+		if ( '' !== $status ) {
+			$status = self::normalize_knowledge_base_status( $status );
+		}
+		$search = isset( $args['search'] ) ? self::trim_chat_log_text( (string) $args['search'], 200 ) : '';
+
+		$where_clauses = array( '1=1' );
+		$params = array();
+
+		if ( '' !== $status ) {
+			$where_clauses[] = 'status = %s';
+			$params[] = $status;
+		}
+
+		if ( '' !== $search ) {
+			$where_clauses[] = '(question_generalized LIKE %s OR answer_generalized LIKE %s)';
+			$like = '%' . $wpdb->esc_like( $search ) . '%';
+			$params[] = $like;
+			$params[] = $like;
+		}
+
+		$where_sql = implode( ' AND ', $where_clauses );
+		$count_sql = "SELECT COUNT(*) FROM {$table_name} WHERE {$where_sql}";
+		$list_sql = "SELECT * FROM {$table_name} WHERE {$where_sql} ORDER BY updated_at DESC LIMIT %d OFFSET %d";
+
+		$count_query = ! empty( $params ) ? $wpdb->prepare( $count_sql, $params ) : $count_sql;
+		$total = (int) $wpdb->get_var( $count_query ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$params[] = $per_page;
+		$params[] = $offset;
+		$list_query = $wpdb->prepare( $list_sql, $params );
+		$rows = $wpdb->get_results( $list_query, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+
+		return array(
+			'items' => array_map( array( __CLASS__, 'map_knowledge_base_row' ), is_array( $rows ) ? $rows : array() ),
+			'total' => $total,
+			'page' => $page,
+			'per_page' => $per_page,
+		);
+	}
+
+	private static function insert_knowledge_base_entry( array $input ): array {
+		global $wpdb;
+
+		$data = self::sanitize_knowledge_base_entry_input( $input );
+		$now = current_time( 'mysql', true );
+		$data['created_at'] = $now;
+		$data['updated_at'] = $now;
+		$data['approved_at'] = 'approved' === $data['status'] ? $now : null;
+
+		$inserted = $wpdb->insert(
+			self::get_knowledge_base_table_name(),
+			$data,
+			array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%s', '%d', '%s', '%s', '%s' )
+		);
+
+		if ( false === $inserted ) {
+			return array();
+		}
+
+		return self::get_knowledge_base_entry( (int) $wpdb->insert_id );
+	}
+
+	private static function update_knowledge_base_entry( int $id, array $input ): array {
+		global $wpdb;
+
+		$existing = self::get_knowledge_base_entry( $id );
+
+		if ( empty( $existing ) ) {
+			return array();
+		}
+
+		$data = self::sanitize_knowledge_base_entry_input( $input, $existing );
+		$data['updated_at'] = current_time( 'mysql', true );
+
+		if ( 'approved' === $data['status'] && empty( $existing['approved_at'] ) ) {
+			$data['approved_at'] = current_time( 'mysql', true );
+		} elseif ( 'approved' !== $data['status'] ) {
+			$data['approved_at'] = null;
+		}
+
+		$updated = $wpdb->update(
+			self::get_knowledge_base_table_name(),
+			$data,
+			array( 'id' => $id ),
+			array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%s', '%d', '%s', '%s' ),
+			array( '%d' )
+		);
+
+		if ( false === $updated ) {
+			return array();
+		}
+
+		return self::get_knowledge_base_entry( $id );
+	}
+
+	private static function delete_knowledge_base_entry( int $id ): bool {
+		global $wpdb;
+
+		$deleted = $wpdb->delete( self::get_knowledge_base_table_name(), array( 'id' => $id ), array( '%d' ) );
+
+		return false !== $deleted;
+	}
+
+	private static function export_knowledge_base_as_csv(): string {
+		$entries = self::list_knowledge_base_entries(
+			array(
+				'page' => 1,
+				'per_page' => 5000,
+			)
+		);
+		$stream = fopen( 'php://temp', 'r+' );
+
+		if ( false === $stream ) {
+			return '';
+		}
+
+		fwrite( $stream, "\xEF\xBB\xBF" );
+		fputcsv( $stream, array( 'export_uid', 'status', 'question_generalized', 'answer_generalized', 'source_post_ids', 'matching_method_hint', 'updated_at' ) );
+
+		foreach ( $entries['items'] as $entry ) {
+			fputcsv(
+				$stream,
+				array(
+					$entry['export_uid'],
+					$entry['status'],
+					$entry['question_generalized'],
+					$entry['answer_generalized'],
+					implode( ',', $entry['source_post_ids'] ),
+					$entry['matching_method_hint'],
+					$entry['updated_at'],
+				)
+			);
+		}
+
+		rewind( $stream );
+		$content = stream_get_contents( $stream );
+		fclose( $stream );
+
+		return is_string( $content ) ? $content : '';
+	}
+
+	private static function import_knowledge_base_from_csv( string $csv_content ): array {
+		$csv_content = preg_replace( '/^\xEF\xBB\xBF/', '', $csv_content );
+		$stream = fopen( 'php://temp', 'r+' );
+
+		if ( false === $stream ) {
+			return array(
+				'created' => 0,
+				'updated' => 0,
+				'errors' => array( __( 'Could not open the CSV import stream.', 'ai-site-search-chatbot' ) ),
+			);
+		}
+
+		fwrite( $stream, $csv_content );
+		rewind( $stream );
+
+		$headers = fgetcsv( $stream );
+		$required_headers = array( 'export_uid', 'status', 'question_generalized', 'answer_generalized', 'source_post_ids', 'matching_method_hint', 'updated_at' );
+
+		if ( ! is_array( $headers ) || $required_headers !== array_values( $headers ) ) {
+			fclose( $stream );
+			return array(
+				'created' => 0,
+				'updated' => 0,
+				'errors' => array( __( 'The CSV header is invalid. Export a sample file from this plugin and use the same columns.', 'ai-site-search-chatbot' ) ),
+			);
+		}
+
+		$created = 0;
+		$updated = 0;
+		$errors = array();
+
+		while ( ( $row = fgetcsv( $stream ) ) !== false ) {
+			if ( ! is_array( $row ) || count( $row ) !== count( $required_headers ) ) {
+				$errors[] = __( 'One or more CSV rows are malformed.', 'ai-site-search-chatbot' );
+				continue;
+			}
+
+			$record = array_combine( $required_headers, $row );
+
+			if ( ! is_array( $record ) || '' === trim( (string) $record['export_uid'] ) ) {
+				$errors[] = __( 'Each CSV row must contain a non-empty export_uid.', 'ai-site-search-chatbot' );
+				continue;
+			}
+
+			$existing = self::get_knowledge_base_entry_by_export_uid( (string) $record['export_uid'] );
+			$payload = array(
+				'export_uid' => $record['export_uid'],
+				'status' => $record['status'],
+				'question_generalized' => $record['question_generalized'],
+				'answer_generalized' => $record['answer_generalized'],
+				'source_post_ids' => $record['source_post_ids'],
+				'matching_method_hint' => $record['matching_method_hint'],
+			);
+
+			if ( empty( $existing ) ) {
+				if ( ! empty( self::insert_knowledge_base_entry( $payload ) ) ) {
+					++$created;
+					continue;
+				}
+
+				$errors[] = sprintf( __( 'Could not import entry %s.', 'ai-site-search-chatbot' ), $record['export_uid'] );
+				continue;
+			}
+
+			if ( ! empty( self::update_knowledge_base_entry( (int) $existing['id'], $payload ) ) ) {
+				++$updated;
+				continue;
+			}
+
+			$errors[] = sprintf( __( 'Could not update entry %s.', 'ai-site-search-chatbot' ), $record['export_uid'] );
+		}
+
+		fclose( $stream );
+
+		return array(
+			'created' => $created,
+			'updated' => $updated,
+			'errors' => $errors,
+		);
+	}
+
+	private static function get_knowledge_base_entry_by_export_uid( string $export_uid ): array {
+		global $wpdb;
+
+		$table_name = self::get_knowledge_base_table_name();
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table_name} WHERE export_uid = %s", sanitize_text_field( $export_uid ) ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		if ( ! is_array( $row ) ) {
+			return array();
+		}
+
+		return self::map_knowledge_base_row( $row );
+	}
+
+	private static function get_knowledge_base_entry_by_question_fingerprint( string $question_fingerprint ): array {
+		global $wpdb;
+
+		$table_name = self::get_knowledge_base_table_name();
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table_name} WHERE question_fingerprint = %s ORDER BY updated_at DESC LIMIT 1", sanitize_text_field( $question_fingerprint ) ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		if ( ! is_array( $row ) ) {
+			return array();
+		}
+
+		return self::map_knowledge_base_row( $row );
+	}
+
+	private static function get_result_ids( array $results ): array {
+		$ids = array();
+
+		foreach ( $results as $result ) {
+			$post_id = isset( $result['id'] ) ? absint( $result['id'] ) : 0;
+
+			if ( $post_id > 0 ) {
+				$ids[] = $post_id;
+			}
+		}
+
+		return array_values( array_unique( $ids ) );
+	}
+
+	private static function extract_text_tokens( string $value ): array {
+		$normalized = self::normalize_message_for_cache( $value );
+		preg_match_all( '/[\p{L}\p{N}_-]+/u', $normalized, $matches );
+
+		if ( empty( $matches[0] ) ) {
+			return array();
+		}
+
+		return array_values( array_unique( array_filter( array_map( 'trim', $matches[0] ) ) ) );
+	}
+
+	private static function extract_character_ngrams( string $value, int $size = 2 ): array {
+		$value = preg_replace( '/\s+/u', '', self::normalize_message_for_cache( $value ) );
+
+		if ( ! is_string( $value ) || '' === $value ) {
+			return array();
+		}
+
+		$length = function_exists( 'mb_strlen' ) ? mb_strlen( $value, 'UTF-8' ) : strlen( $value );
+
+		if ( $length <= $size ) {
+			return array( $value );
+		}
+
+		$ngrams = array();
+
+		for ( $index = 0; $index <= ( $length - $size ); ++$index ) {
+			$ngrams[] = function_exists( 'mb_substr' ) ? mb_substr( $value, $index, $size, 'UTF-8' ) : substr( $value, $index, $size );
+		}
+
+		return array_values( array_unique( array_filter( $ngrams ) ) );
+	}
+
+	private static function calculate_set_similarity( array $left, array $right ): float {
+		if ( empty( $left ) || empty( $right ) ) {
+			return 0.0;
+		}
+
+		$intersection = count( array_intersect( $left, $right ) );
+		$union = count( array_unique( array_merge( $left, $right ) ) );
+
+		if ( 0 === $union ) {
+			return 0.0;
+		}
+
+		return $intersection / $union;
+	}
+
+	private static function calculate_question_similarity_score( string $message, string $candidate_question ): float {
+		$normalized_message = self::normalize_message_for_cache( $message );
+		$normalized_candidate = self::normalize_message_for_cache( $candidate_question );
+
+		if ( '' === $normalized_message || '' === $normalized_candidate ) {
+			return 0.0;
+		}
+
+		if ( $normalized_message === $normalized_candidate ) {
+			return 1.0;
+		}
+
+		$contains_bonus = ( false !== strpos( $normalized_message, $normalized_candidate ) || false !== strpos( $normalized_candidate, $normalized_message ) ) ? 0.2 : 0.0;
+		$token_similarity = self::calculate_set_similarity( self::extract_text_tokens( $normalized_message ), self::extract_text_tokens( $normalized_candidate ) );
+		$ngram_similarity = self::calculate_set_similarity( self::extract_character_ngrams( $normalized_message ), self::extract_character_ngrams( $normalized_candidate ) );
+
+		return min( 1.0, ( $token_similarity * 0.4 ) + ( $ngram_similarity * 0.6 ) + $contains_bonus );
+	}
+
+	private static function calculate_source_overlap_score( array $candidate_source_ids, array $current_result_ids ): float {
+		if ( empty( $candidate_source_ids ) || empty( $current_result_ids ) ) {
+			return 0.0;
+		}
+
+		return self::calculate_set_similarity( array_map( 'strval', $candidate_source_ids ), array_map( 'strval', $current_result_ids ) );
+	}
+
+	private static function get_approved_knowledge_base_candidates( string $message, array $results, int $limit = 5 ): array {
+		$entries = self::list_knowledge_base_entries(
+			array(
+				'status' => 'approved',
+				'page' => 1,
+				'per_page' => 100,
+			)
+		);
+		$current_result_ids = self::get_result_ids( $results );
+		$candidates = array();
+
+		foreach ( $entries['items'] as $entry ) {
+			if ( ! empty( $entry['pii_flag'] ) ) {
+				continue;
+			}
+
+			$text_score = self::calculate_question_similarity_score( $message, (string) $entry['question_generalized'] );
+			$source_score = self::calculate_source_overlap_score( $entry['source_post_ids'], $current_result_ids );
+			$total_score = max( $text_score, ( $text_score * 0.75 ) + ( $source_score * 0.25 ) );
+
+			if ( $text_score < 0.18 && $source_score <= 0.0 ) {
+				continue;
+			}
+
+			$candidates[] = array(
+				'entry' => $entry,
+				'score' => $total_score,
+				'text_score' => $text_score,
+				'source_score' => $source_score,
+			);
+		}
+
+		usort(
+			$candidates,
+			static function ( array $left, array $right ): int {
+				if ( $left['score'] === $right['score'] ) {
+					return $right['entry']['use_count'] <=> $left['entry']['use_count'];
+				}
+
+				return $right['score'] <=> $left['score'];
+			}
+		);
+
+		return array_slice( $candidates, 0, $limit );
+	}
+
+	private static function build_knowledge_base_match_system_prompt(): string {
+		return __( 'You decide whether a saved generalized knowledge entry matches a visitor question for a WordPress site assistant. Use only the provided visitor question, current search results, and saved knowledge candidates. Return JSON only in the form {"match":true|false,"entry_id":123,"reason":"short reason"}. Set match to false and entry_id to 0 when no saved entry is reliable enough. Never invent IDs.', 'ai-site-search-chatbot' );
+	}
+
+	private static function build_knowledge_base_match_prompt( string $message, array $results, array $candidates ): string {
+		$lines = array(
+			'Visitor question:',
+			$message,
+			'',
+			'Current site search results:',
+		);
+
+		foreach ( array_slice( $results, 0, 5 ) as $result ) {
+			$lines[] = sprintf( '- [%d] %s', isset( $result['id'] ) ? absint( $result['id'] ) : 0, $result['title'] );
+			$lines[] = sprintf( '  Excerpt: %s', $result['excerpt'] );
+		}
+
+		$lines[] = '';
+		$lines[] = 'Saved knowledge candidates:';
+
+		foreach ( $candidates as $candidate ) {
+			$entry = $candidate['entry'];
+			$lines[] = sprintf( '- ID %d', absint( $entry['id'] ) );
+			$lines[] = sprintf( '  Question: %s', $entry['question_generalized'] );
+			$lines[] = sprintf( '  Answer: %s', $entry['answer_generalized'] );
+			$lines[] = sprintf( '  Source IDs: %s', implode( ',', $entry['source_post_ids'] ) );
+		}
+
+		$lines[] = '';
+		$lines[] = 'Choose a saved entry only if it directly answers the visitor question and still fits the current search results. Return JSON only.';
+
+		return implode( "\n", $lines );
+	}
+
+	private static function parse_knowledge_base_match_response( string $content ): array {
+		$result = array(
+			'match' => false,
+			'entry_id' => 0,
+			'reason' => '',
+		);
+
+		$trimmed = trim( $content );
+
+		if ( preg_match( '/\{[\s\S]*\}/', $trimmed, $matches ) ) {
+			$decoded = json_decode( $matches[0], true );
+
+			if ( is_array( $decoded ) ) {
+				$result['match'] = ! empty( $decoded['match'] );
+				$result['entry_id'] = isset( $decoded['entry_id'] ) ? absint( $decoded['entry_id'] ) : 0;
+				$result['reason'] = isset( $decoded['reason'] ) ? self::trim_chat_log_text( (string) $decoded['reason'], 300 ) : '';
+			}
+		}
+
+		return $result;
+	}
+
+	private static function choose_knowledge_base_entry_with_ai( array $settings, string $message, array $results, array $candidates ): array {
+		if ( empty( $candidates ) ) {
+			return array();
+		}
+
+		$response = self::request_ai_answer(
+			$settings,
+			$message,
+			$results,
+			array(
+				'system_prompt' => self::build_knowledge_base_match_system_prompt(),
+				'user_prompt' => self::build_knowledge_base_match_prompt( $message, $results, $candidates ),
+			)
+		);
+
+		if ( is_wp_error( $response ) || empty( $response['success'] ) || empty( $response['content'] ) ) {
+			return array();
+		}
+
+		$decision = self::parse_knowledge_base_match_response( (string) $response['content'] );
+
+		if ( empty( $decision['match'] ) || empty( $decision['entry_id'] ) ) {
+			return array();
+		}
+
+		foreach ( $candidates as $candidate ) {
+			if ( absint( $candidate['entry']['id'] ) === absint( $decision['entry_id'] ) ) {
+				$candidate['selection_reason'] = $decision['reason'];
+				return $candidate;
+			}
+		}
+
+		return array();
+	}
+
+	private static function mark_knowledge_base_entry_as_used( int $id ): void {
+		global $wpdb;
+
+		if ( $id <= 0 ) {
+			return;
+		}
+
+		$table_name = self::get_knowledge_base_table_name();
+		$wpdb->query( $wpdb->prepare( "UPDATE {$table_name} SET use_count = use_count + 1, last_used_at = %s WHERE id = %d", current_time( 'mysql', true ), $id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	}
+
+	private static function maybe_get_reusable_knowledge_base_entry( array $settings, string $message, array $results ): array {
+		if ( empty( $settings['knowledge_base_enabled'] ) ) {
+			return array();
+		}
+
+		$candidates = self::get_approved_knowledge_base_candidates( $message, $results, 5 );
+
+		if ( empty( $candidates ) ) {
+			return array();
+		}
+
+		$mode = isset( $settings['knowledge_base_match_mode'] ) ? (string) $settings['knowledge_base_match_mode'] : self::KNOWLEDGE_BASE_MATCH_MODE_HYBRID;
+		$top_candidate = $candidates[0];
+		$next_score = isset( $candidates[1]['score'] ) ? (float) $candidates[1]['score'] : 0.0;
+		$score_margin = (float) $top_candidate['score'] - $next_score;
+
+		if ( self::KNOWLEDGE_BASE_MATCH_MODE_HYBRID === $mode && $top_candidate['score'] >= 0.88 && $score_margin >= 0.1 ) {
+			return array(
+				'entry' => $top_candidate['entry'],
+				'used_ai_selection' => false,
+				'match_score' => $top_candidate['score'],
+			);
+		}
+
+		if ( self::is_ai_usage_limited() ) {
+			return array();
+		}
+
+		$selected = self::choose_knowledge_base_entry_with_ai( $settings, $message, $results, $candidates );
+
+		if ( empty( $selected['entry'] ) ) {
+			return array();
+		}
+
+		return array(
+			'entry' => $selected['entry'],
+			'used_ai_selection' => true,
+			'match_score' => isset( $selected['score'] ) ? (float) $selected['score'] : 0.0,
+		);
+	}
+
+	private static function build_knowledge_candidate_generation_system_prompt(): string {
+		return __( 'You turn a visitor question and its answer into a reusable generalized knowledge entry for a WordPress site assistant. Remove personal information, company-specific private details, order numbers, contact details, account details, and one-off case facts. Keep only a general question and a general answer that would be safe to reuse for another visitor. Public facts that are explicitly stated on the current site pages may be saved even when they include named places, page titles, product names, character names, or pet names, as long as they are public site content and not private personal data. Do not reject an entry only because the original visitor phrasing was specific; rewrite it into a reusable fact-based question and answer when the fact is clearly stated in the provided public search results. Return JSON only in the form {"should_save":true|false,"question_generalized":"...","answer_generalized":"...","confidence_note":"...","pii_flag":true|false}. Set should_save to false only when the exchange is truly private, one-off, unsafe, or not reusable.', 'ai-site-search-chatbot' );
+	}
+
+	private static function build_knowledge_candidate_generation_prompt( string $message, string $answer, array $results ): string {
+		$lines = array(
+			'Original visitor question:',
+			$message,
+			'',
+			'Assistant answer:',
+			$answer,
+			'',
+			'Current search results:',
+		);
+
+		foreach ( array_slice( $results, 0, 5 ) as $result ) {
+			$lines[] = sprintf( '- %s', $result['title'] );
+			$lines[] = sprintf( '  Excerpt: %s', $result['excerpt'] );
+
+			if ( ! empty( $result['content_snippet'] ) ) {
+				$lines[] = sprintf( '  Content: %s', $result['content_snippet'] );
+			}
+		}
+
+		$lines[] = '';
+		$lines[] = 'If the answer is a public fact explicitly supported by the provided search results, prefer rewriting it into a reusable generalized question and answer instead of rejecting it as too specific. Return JSON only.';
+
+		return implode( "\n", $lines );
+	}
+
+	private static function parse_knowledge_candidate_generation_response( string $content ): array {
+		$result = array(
+			'should_save' => false,
+			'question_generalized' => '',
+			'answer_generalized' => '',
+			'confidence_note' => '',
+			'pii_flag' => false,
+		);
+
+		$trimmed = trim( $content );
+
+		if ( preg_match( '/\{[\s\S]*\}/', $trimmed, $matches ) ) {
+			$decoded = json_decode( $matches[0], true );
+
+			if ( is_array( $decoded ) ) {
+				$result['should_save'] = ! empty( $decoded['should_save'] );
+				$result['question_generalized'] = isset( $decoded['question_generalized'] ) ? self::trim_chat_log_text( (string) $decoded['question_generalized'], 2000 ) : '';
+				$result['answer_generalized'] = isset( $decoded['answer_generalized'] ) ? self::trim_chat_log_text( (string) $decoded['answer_generalized'], 8000 ) : '';
+				$result['confidence_note'] = isset( $decoded['confidence_note'] ) ? self::trim_chat_log_text( (string) $decoded['confidence_note'], 1000 ) : '';
+				$result['pii_flag'] = ! empty( $decoded['pii_flag'] );
+			}
+		}
+
+		return $result;
+	}
+
+	private static function contains_sensitive_pattern( string $value ): bool {
+		if ( '' === trim( $value ) ) {
+			return false;
+		}
+
+		$patterns = array(
+			'/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i',
+			'/\b\d{2,4}[-\s]?\d{2,4}[-\s]?\d{3,4}\b/',
+			'/https?:\/\//i',
+			'/\b[A-Z]{2,}\d{4,}\b/',
+		);
+
+		foreach ( $patterns as $pattern ) {
+			if ( preg_match( $pattern, $value ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	private static function maybe_store_generated_knowledge_candidate( array $settings, string $message, string $answer, array $results ): array {
+		$status = array(
+			'attempted' => false,
+			'status' => '',
+			'note' => '',
+			'pii_flag' => false,
+		);
+
+		if ( empty( $settings['knowledge_base_auto_draft'] ) || '' === trim( $answer ) ) {
+			$status['status'] = 'disabled';
+			$status['note'] = __( 'Knowledge candidate draft saving is disabled.', 'ai-site-search-chatbot' );
+			return $status;
+		}
+
+		$status['attempted'] = true;
+
+		$response = self::request_ai_answer(
+			$settings,
+			$message,
+			$results,
+			array(
+				'system_prompt' => self::build_knowledge_candidate_generation_system_prompt(),
+				'user_prompt' => self::build_knowledge_candidate_generation_prompt( $message, $answer, $results ),
+			)
+		);
+
+		if ( is_wp_error( $response ) || empty( $response['success'] ) || empty( $response['content'] ) ) {
+			$status['status'] = 'provider-error';
+			$status['note'] = __( 'The knowledge candidate could not be evaluated because the AI follow-up request failed.', 'ai-site-search-chatbot' );
+			return $status;
+		}
+
+		$candidate = self::parse_knowledge_candidate_generation_response( (string) $response['content'] );
+		$status['note'] = $candidate['confidence_note'];
+		$status['pii_flag'] = ! empty( $candidate['pii_flag'] );
+
+		if ( empty( $candidate['should_save'] ) || '' === $candidate['question_generalized'] || '' === $candidate['answer_generalized'] ) {
+			$status['status'] = 'rejected';
+
+			if ( '' === $status['note'] ) {
+				$status['note'] = __( 'The generated answer was not considered reusable enough to save as draft knowledge.', 'ai-site-search-chatbot' );
+			}
+
+			return $status;
+		}
+
+		if ( self::contains_sensitive_pattern( $candidate['question_generalized'] ) || self::contains_sensitive_pattern( $candidate['answer_generalized'] ) ) {
+			$candidate['pii_flag'] = true;
+			$status['pii_flag'] = true;
+		}
+
+		$payload = array(
+			'status' => 'draft',
+			'question_generalized' => $candidate['question_generalized'],
+			'answer_generalized' => $candidate['answer_generalized'],
+			'source_post_ids' => self::get_result_ids( $results ),
+			'matching_method_hint' => 'ai_generated',
+			'confidence_note' => $candidate['confidence_note'],
+			'pii_flag' => ! empty( $candidate['pii_flag'] ) ? 1 : 0,
+		);
+
+		$question_fingerprint = hash( 'sha256', self::normalize_message_for_cache( $candidate['question_generalized'] ) );
+		$existing = self::get_knowledge_base_entry_by_question_fingerprint( $question_fingerprint );
+
+		if ( ! empty( $existing ) ) {
+			if ( 'approved' === $existing['status'] ) {
+				$status['status'] = 'kept-approved';
+
+				if ( '' === $status['note'] ) {
+					$status['note'] = __( 'A matching approved knowledge entry already exists, so it was left unchanged.', 'ai-site-search-chatbot' );
+				}
+
+				return $status;
+			}
+
+			self::update_knowledge_base_entry( (int) $existing['id'], $payload );
+			$status['status'] = 'updated';
+
+			if ( '' === $status['note'] ) {
+				$status['note'] = __( 'The matching draft knowledge entry was updated.', 'ai-site-search-chatbot' );
+			}
+
+			return $status;
+		}
+
+		self::insert_knowledge_base_entry( $payload );
+		$status['status'] = 'saved';
+
+		if ( '' === $status['note'] ) {
+			$status['note'] = __( 'A new draft knowledge entry was created.', 'ai-site-search-chatbot' );
+		}
+
+		return $status;
+	}
+
+	public static function handle_knowledge_base_list_request( WP_REST_Request $request ) {
+		return rest_ensure_response(
+			self::list_knowledge_base_entries(
+				array(
+					'page' => $request->get_param( 'page' ),
+					'per_page' => $request->get_param( 'per_page' ),
+					'status' => $request->get_param( 'status' ),
+					'search' => $request->get_param( 'search' ),
+				)
+			)
+		);
+	}
+
+	public static function handle_knowledge_base_get_request( WP_REST_Request $request ) {
+		$entry = self::get_knowledge_base_entry( absint( $request['id'] ) );
+
+		if ( empty( $entry ) ) {
+			return new WP_REST_Response(
+				array(
+					'message' => __( 'The knowledge entry could not be found.', 'ai-site-search-chatbot' ),
+				),
+				404
+			);
+		}
+
+		return rest_ensure_response( $entry );
+	}
+
+	public static function handle_knowledge_base_create_request( WP_REST_Request $request ) {
+		$entry = self::insert_knowledge_base_entry( (array) $request->get_json_params() );
+
+		if ( empty( $entry ) ) {
+			return new WP_REST_Response(
+				array(
+					'message' => __( 'The knowledge entry could not be created.', 'ai-site-search-chatbot' ),
+				),
+				500
+			);
+		}
+
+		return new WP_REST_Response( $entry, 201 );
+	}
+
+	public static function handle_knowledge_base_update_request( WP_REST_Request $request ) {
+		$entry = self::update_knowledge_base_entry( absint( $request['id'] ), (array) $request->get_json_params() );
+
+		if ( empty( $entry ) ) {
+			return new WP_REST_Response(
+				array(
+					'message' => __( 'The knowledge entry could not be updated.', 'ai-site-search-chatbot' ),
+				),
+				500
+			);
+		}
+
+		return rest_ensure_response( $entry );
+	}
+
+	public static function handle_knowledge_base_delete_request( WP_REST_Request $request ) {
+		$deleted = self::delete_knowledge_base_entry( absint( $request['id'] ) );
+
+		if ( ! $deleted ) {
+			return new WP_REST_Response(
+				array(
+					'message' => __( 'The knowledge entry could not be deleted.', 'ai-site-search-chatbot' ),
+				),
+				500
+			);
+		}
+
+		return rest_ensure_response( array( 'success' => true ) );
+	}
+
+	public static function handle_knowledge_base_export_request( WP_REST_Request $request ) {
+		unset( $request );
+
+		return rest_ensure_response(
+			array(
+				'filename' => 'aiscb-knowledge-base-' . gmdate( 'Ymd-His' ) . '.csv',
+				'content' => self::export_knowledge_base_as_csv(),
+			)
+		);
+	}
+
+	public static function handle_knowledge_base_import_request( WP_REST_Request $request ) {
+		$content = (string) $request->get_param( 'content' );
+
+		if ( '' === trim( $content ) ) {
+			return new WP_REST_Response(
+				array(
+					'message' => __( 'Paste the CSV content before importing.', 'ai-site-search-chatbot' ),
+				),
+				400
+			);
+		}
+
+		return rest_ensure_response( self::import_knowledge_base_from_csv( $content ) );
 	}
 
 	public static function handle_validate_request( WP_REST_Request $request ) {
@@ -875,6 +1978,8 @@ final class AISite_Search_Chatbot {
 			);
 		}
 
+		$search_queries = self::resolve_search_queries( $message, $settings, $route );
+		$route['queries'] = $search_queries;
 		$results = self::search_site_content( $message, $settings, $route );
 		$answer = self::generate_answer( $message, $results, $route );
 		self::append_chat_log(
@@ -884,6 +1989,10 @@ final class AISite_Search_Chatbot {
 				'status'       => $answer['log_status'],
 				'used_ai'      => ! empty( $answer['used_ai'] ),
 				'source_count' => count( $answer['sources'] ),
+				'search_queries' => $search_queries,
+				'knowledge_candidate_status' => isset( $answer['knowledge_candidate']['status'] ) ? (string) $answer['knowledge_candidate']['status'] : '',
+				'knowledge_candidate_note' => isset( $answer['knowledge_candidate']['note'] ) ? (string) $answer['knowledge_candidate']['note'] : '',
+				'knowledge_candidate_pii_flag' => ! empty( $answer['knowledge_candidate']['pii_flag'] ),
 			)
 		);
 
@@ -1098,11 +2207,13 @@ final class AISite_Search_Chatbot {
 				'id' => isset( $result['id'] ) ? (int) $result['id'] : 0,
 				'title' => isset( $result['title'] ) ? sanitize_text_field( (string) $result['title'] ) : '',
 				'excerpt' => isset( $result['excerpt'] ) ? sanitize_text_field( (string) $result['excerpt'] ) : '',
+				'content_snippet' => isset( $result['content_snippet'] ) ? sanitize_text_field( (string) $result['content_snippet'] ) : '',
 			);
 		}
 
 		$payload = wp_json_encode(
 			array(
+				'cache_version' => 2,
 				'provider' => isset( $settings['ai_provider'] ) ? (string) $settings['ai_provider'] : '',
 				'model' => isset( $settings['model'] ) ? (string) $settings['model'] : '',
 				'message' => self::normalize_message_for_cache( $message ),
@@ -1123,7 +2234,7 @@ final class AISite_Search_Chatbot {
 		$post_types = get_post_types( array( 'public' => true ), 'names' );
 		unset( $post_types['attachment'] );
 		$post_types = array_values( $post_types );
-		$queries = ! empty( $route['queries'] ) && is_array( $route['queries'] ) ? $route['queries'] : self::build_search_queries( $message, $settings );
+		$queries = self::resolve_search_queries( $message, $settings, $route );
 		$results = self::search_site_content_by_queries( $queries, $post_types );
 
 		if ( ! empty( $results ) ) {
@@ -1165,7 +2276,7 @@ final class AISite_Search_Chatbot {
 				}
 
 				$seen_ids[ $post_id ] = true;
-				$results[] = self::build_search_result_item( $post );
+				$results[] = self::build_search_result_item( $post, $queries );
 
 				if ( count( $results ) >= 10 ) {
 					break;
@@ -1185,6 +2296,14 @@ final class AISite_Search_Chatbot {
 		);
 
 		return self::normalize_search_queries( $queries );
+	}
+
+	private static function resolve_search_queries( string $message, array $settings = array(), array $route = array() ): array {
+		if ( ! empty( $route['queries'] ) && is_array( $route['queries'] ) ) {
+			return self::normalize_search_queries( $route['queries'] );
+		}
+
+		return self::build_search_queries( $message, $settings );
 	}
 
 	private static function analyze_message_route( string $message, array $settings ): array {
@@ -1215,6 +2334,13 @@ final class AISite_Search_Chatbot {
 		}
 
 		$route = self::parse_ai_message_route( (string) $response['content'], $message );
+
+		if ( 'reject' === $route['intent'] && ! empty( $rule_based_queries ) ) {
+			return array(
+				'intent'  => 'site-search',
+				'queries' => self::normalize_search_queries( $rule_based_queries ),
+			);
+		}
 
 		if ( 'site-search' === $route['intent'] ) {
 			$route['queries'] = self::normalize_search_queries( array_merge( $route['queries'], $rule_based_queries ) );
@@ -1266,10 +2392,10 @@ final class AISite_Search_Chatbot {
 			return $queries;
 		}
 
-		$queries[] = $normalized;
+		$queries[] = self::canonicalize_search_query( $normalized );
 
 		$trimmed_question = preg_replace(
-			'/\s*(を教えてください|を教えて|について教えてください|について教えて|について知りたい|はありますか|ありますか|ですか|でしょうか|とは何ですか|とは|はどこですか|はどこ|はあります|って何ですか|って何)\s*$/u',
+			'/\s*(を教えてください|を教えて|について教えてください|について教えて|について知りたい|はありますか|ありますか|ですか|でしょうか|とは何ですか|とは|はどこですか|はどこ|はあります|って何ですか|って何|は何ですか|の名前は何ですか|名前は何ですか)\s*$/u',
 			'',
 			$normalized
 		);
@@ -1278,23 +2404,25 @@ final class AISite_Search_Chatbot {
 			$trimmed_question = trim( $trimmed_question, " \t\n\r\0\x0B?？!！。.,、" );
 
 			if ( '' !== $trimmed_question ) {
-				$queries[] = $trimmed_question;
+				$queries[] = self::canonicalize_search_query( $trimmed_question );
 
 				$without_generic_suffix = preg_replace( '/(ページ|記事|フォーム|内容|情報|方法|場所)$/u', '', $trimmed_question );
 				if ( is_string( $without_generic_suffix ) ) {
 					$without_generic_suffix = trim( $without_generic_suffix );
 
 					if ( '' !== $without_generic_suffix && $without_generic_suffix !== $trimmed_question ) {
-						$queries[] = $without_generic_suffix;
+						$queries[] = self::canonicalize_search_query( $without_generic_suffix );
 					}
 				}
 			}
 		}
 
+		$queries = array_merge( $queries, self::extract_japanese_search_segments( $normalized ) );
+
 		preg_match_all( '/[\p{Han}\p{Hiragana}\p{Katakana}A-Za-z0-9_-]+/u', $normalized, $matches );
 
 		foreach ( $matches[0] as $token ) {
-			$token = trim( (string) $token );
+			$token = self::canonicalize_search_query( (string) $token );
 
 			if ( self::unicode_length( $token ) < 2 ) {
 				continue;
@@ -1304,7 +2432,7 @@ final class AISite_Search_Chatbot {
 
 			$without_suffix = preg_replace( '/(ページ|記事|フォーム|内容|情報|方法|場所|ありますか|ですか|でしょうか)$/u', '', $token );
 			if ( is_string( $without_suffix ) ) {
-				$without_suffix = trim( $without_suffix );
+				$without_suffix = self::canonicalize_search_query( $without_suffix );
 
 				if ( '' !== $without_suffix && $without_suffix !== $token ) {
 					$queries[] = $without_suffix;
@@ -1314,6 +2442,41 @@ final class AISite_Search_Chatbot {
 			if ( 0 === strpos( $token, 'お問い合わせ' ) ) {
 				$queries[] = str_replace( 'お問い合わせ', '問い合わせ', $token );
 			}
+		}
+
+		return $queries;
+	}
+
+	private static function extract_japanese_search_segments( string $message ): array {
+		if ( ! preg_match( '/[\p{Han}\p{Hiragana}\p{Katakana}]/u', $message ) ) {
+			return array();
+		}
+
+		$base = self::canonicalize_search_query( $message );
+
+		if ( '' === $base ) {
+			return array();
+		}
+
+		$segments = preg_split(
+			'/(?:\s+|について|に関する|に関して|を教えてください|を教えて|について知りたい|知りたい|ください|教えて|は何ですか|の名前は何ですか|名前は何ですか|何ですか|どこですか|ありますか|でしょうか|ですか|とは|って何|って何ですか|[のはがをにへでともやからまで]+)/u',
+			$base
+		);
+
+		if ( ! is_array( $segments ) ) {
+			return array();
+		}
+
+		$queries = array();
+
+		foreach ( $segments as $segment ) {
+			$segment = self::canonicalize_search_query( (string) $segment );
+
+			if ( ! self::is_reasonable_search_query( $segment ) ) {
+				continue;
+			}
+
+			$queries[] = $segment;
 		}
 
 		return $queries;
@@ -1438,13 +2601,13 @@ final class AISite_Search_Chatbot {
 	}
 
 	private static function get_search_query_system_prompt(): string {
-		return __( 'You classify a visitor question for a WordPress site assistant. Return only a JSON object with two keys: intent and queries. intent must be one of site_search, site_guidance, or reject. Use site_search when the visitor is looking for a specific page, service, policy, product, location, form, or site term. Use site_guidance for lightweight site-related questions that can be answered without external facts, such as who you are, what kind of information exists on this site, how to use the site, or what the visitor can ask here. Use reject for obvious spam, gibberish, repeated text, or automated promotional content. queries must be an array of 0 to 8 short site-search phrases in the same language as the visitor question. Prefer words likely to appear in page titles, menu labels, headings, form labels, and short content snippets. Return JSON only.', 'ai-site-search-chatbot' );
+		return __( 'You classify a visitor question for a WordPress site assistant. Return only a JSON object with two keys: intent and queries. intent must be one of site_search, site_guidance, or reject. Use site_search when the visitor is looking for a specific page, service, policy, product, location, form, or site term. Use site_guidance for lightweight site-related questions that can be answered without external facts, such as who you are, what kind of information exists on this site, how to use the site, or what the visitor can ask here. Use reject for obvious spam, gibberish, repeated text, or automated promotional content. queries must be an array of 0 to 8 short, stable site-search phrases in the same language as the visitor question. Prefer concise keywords or short noun phrases that are likely to appear in page titles, menu labels, headings, form labels, and short content snippets. Do not repeat the full visitor sentence. Do not duplicate similar phrases. Return JSON only.', 'ai-site-search-chatbot' );
 	}
 
 	private static function build_search_query_prompt( string $message ): string {
 		return sprintf(
 			/* translators: %s: visitor question */
-			__( "Visitor question:\n%s\n\nReturn JSON only. Example output: {\"intent\":\"site_search\",\"queries\":[\"contact\",\"contact page\",\"inquiry\"]}", 'ai-site-search-chatbot' ),
+			__( "Visitor question:\n%s\n\nReturn JSON only. Extract only concise search terms suitable for a WordPress search box. Keep them stable and deterministic. Example output: {\"intent\":\"site_search\",\"queries\":[\"contact\",\"contact page\",\"inquiry\"]}", 'ai-site-search-chatbot' ),
 			$message
 		);
 	}
@@ -1511,32 +2674,176 @@ final class AISite_Search_Chatbot {
 
 	private static function normalize_search_queries( array $queries ): array {
 		$normalized_queries = array();
+		$seen_keys = array();
 
 		foreach ( $queries as $query ) {
 			if ( ! is_string( $query ) ) {
 				continue;
 			}
 
-			$query = trim( preg_replace( '/\s+/u', ' ', wp_strip_all_tags( $query ) ) );
-			$query = trim( preg_replace( '/[?？!！。．、,，]+/u', ' ', $query ) );
+			$query = self::canonicalize_search_query( $query );
 
-			if ( '' === $query ) {
+			if ( ! self::is_reasonable_search_query( $query ) ) {
 				continue;
 			}
 
+			$query_key = function_exists( 'mb_strtolower' ) ? mb_strtolower( $query, 'UTF-8' ) : strtolower( $query );
+
+			if ( isset( $seen_keys[ $query_key ] ) ) {
+				continue;
+			}
+
+			$seen_keys[ $query_key ] = true;
 			$normalized_queries[] = $query;
 		}
-
-		$normalized_queries = array_values( array_unique( $normalized_queries ) );
 
 		usort(
 			$normalized_queries,
 			static function ( string $left, string $right ): int {
-				return self::unicode_length( $right ) <=> self::unicode_length( $left );
+				$score_diff = self::score_search_query( $right ) <=> self::score_search_query( $left );
+
+				if ( 0 !== $score_diff ) {
+					return $score_diff;
+				}
+
+				$length_diff = self::unicode_length( $left ) <=> self::unicode_length( $right );
+
+				if ( 0 !== $length_diff ) {
+					return $length_diff;
+				}
+
+				return strcmp( $left, $right );
 			}
 		);
 
-		return $normalized_queries;
+		return self::prune_search_queries( $normalized_queries );
+	}
+
+	private static function prune_search_queries( array $queries ): array {
+		$pruned = array();
+
+		foreach ( $queries as $query ) {
+			if ( ! is_string( $query ) || self::is_noise_search_query( $query ) ) {
+				continue;
+			}
+
+			$skip = false;
+
+			foreach ( $pruned as $existing_query ) {
+				if ( self::calculate_question_similarity_score( $query, $existing_query ) >= 0.9 ) {
+					$skip = true;
+					break;
+				}
+
+				$contains_existing = function_exists( 'mb_strpos' ) ? false !== mb_strpos( $query, $existing_query, 0, 'UTF-8' ) : false !== strpos( $query, $existing_query );
+
+				if ( $contains_existing && self::unicode_length( $query ) >= ( self::unicode_length( $existing_query ) + 3 ) ) {
+					$skip = true;
+					break;
+				}
+			}
+
+			if ( $skip ) {
+				continue;
+			}
+
+			$pruned[] = $query;
+
+			if ( count( $pruned ) >= 5 ) {
+				break;
+			}
+		}
+
+		return $pruned;
+	}
+
+	private static function canonicalize_search_query( string $query ): string {
+		$query = trim( preg_replace( '/\s+/u', ' ', wp_strip_all_tags( $query ) ) );
+		$query = trim( preg_replace( '/[?？!！。．、,，]+/u', ' ', $query ) );
+		$query = trim( preg_replace( '/^(query|queries|keyword|keywords|search|search terms?)\s*[:：-]\s*/iu', '', $query ) );
+		$query = trim( preg_replace( '/\s*(を教えてください|を教えて|について教えてください|について教えて|について知りたい|知りたい|ください|教えて|はありますか|ありますか|でしょうか|ですか|とは何ですか|とは|って何ですか|って何|はどこですか|はどこ|は何ですか|の名前は何ですか|名前は何ですか|何ですか)\s*$/u', '', $query ) );
+
+		return self::collapse_repeated_search_query( $query );
+	}
+
+	private static function collapse_repeated_search_query( string $query ): string {
+		$query = trim( $query );
+
+		if ( '' === $query ) {
+			return '';
+		}
+
+		if ( preg_match( '/^(.{2,}?)\s+\1$/u', $query, $matches ) ) {
+			return trim( (string) $matches[1] );
+		}
+
+		return $query;
+	}
+
+	private static function is_reasonable_search_query( string $query ): bool {
+		$length = self::unicode_length( $query );
+
+		if ( $length < 2 || $length > 32 ) {
+			return false;
+		}
+
+		if ( $length <= 2 && preg_match( '/[\p{Hiragana}]/u', $query ) ) {
+			return false;
+		}
+
+		if ( preg_match( '/[?？]/u', $query ) ) {
+			return false;
+		}
+
+		if ( preg_match_all( '/[のはがをにへでともやからまで]/u', $query, $matches ) && count( $matches[0] ) >= 4 ) {
+			return false;
+		}
+
+		return true;
+	}
+
+	private static function is_noise_search_query( string $query ): bool {
+		$normalized = self::normalize_message_for_cache( $query );
+		$noise_queries = array(
+			'いる',
+			'ある',
+			'です',
+			'ます',
+			'住ん',
+			'住む',
+			'教え',
+			'教えて',
+			'知りたい',
+			'名前',
+			'何',
+			'どこ',
+			'こと',
+		);
+
+		return in_array( $normalized, $noise_queries, true );
+	}
+
+	private static function score_search_query( string $query ): int {
+		$length = self::unicode_length( $query );
+		$score = 0;
+
+		if ( $length >= 2 && $length <= 16 ) {
+			$score += 30;
+		} elseif ( $length <= 24 ) {
+			$score += 18;
+		} else {
+			$score += 4;
+		}
+
+		if ( preg_match( '/[\p{Han}\p{Katakana}A-Za-z0-9]/u', $query ) ) {
+			$score += 10;
+		}
+
+		if ( preg_match( '/[のはがをにへでともやからまで]/u', $query ) ) {
+			$score -= 8;
+		}
+
+		return $score;
 	}
 
 	private static function search_site_content_by_like_matching( array $queries, array $post_types ): array {
@@ -1582,7 +2889,7 @@ final class AISite_Search_Chatbot {
 				continue;
 			}
 
-			$results[] = self::build_search_result_item( $post );
+			$results[] = self::build_search_result_item( $post, $queries );
 		}
 
 		return $results;
@@ -1596,8 +2903,10 @@ final class AISite_Search_Chatbot {
 		return preg_match_all( '/./u', $value );
 	}
 
-	private static function build_search_result_item( WP_Post $post ): array {
+	private static function build_search_result_item( WP_Post $post, array $queries = array() ): array {
 		$excerpt = get_the_excerpt( $post );
+		$content = wp_strip_all_tags( (string) $post->post_content );
+		$content_snippet = self::build_matching_content_snippet( $content, $queries, 320 );
 
 		if ( '' === trim( $excerpt ) ) {
 			$excerpt = wp_strip_all_tags( wp_trim_words( $post->post_content, 36 ) );
@@ -1608,7 +2917,65 @@ final class AISite_Search_Chatbot {
 			'title'   => get_the_title( $post ),
 			'url'     => get_permalink( $post ),
 			'excerpt' => wp_strip_all_tags( $excerpt ),
+			'content_snippet' => $content_snippet,
 		);
+	}
+
+	private static function build_matching_content_snippet( string $content, array $queries, int $limit = 320 ): string {
+		$content = trim( preg_replace( '/\s+/u', ' ', $content ) );
+
+		if ( '' === $content ) {
+			return '';
+		}
+
+		$best_position = null;
+		$best_length = null;
+
+		foreach ( $queries as $query ) {
+			if ( ! is_string( $query ) ) {
+				continue;
+			}
+
+			$query = trim( $query );
+
+			if ( '' === $query ) {
+				continue;
+			}
+
+			$position = function_exists( 'mb_stripos' ) ? mb_stripos( $content, $query, 0, 'UTF-8' ) : stripos( $content, $query );
+
+			if ( false === $position ) {
+				continue;
+			}
+
+			$query_length = self::unicode_length( $query );
+
+			if ( null === $best_position || $query_length > (int) $best_length ) {
+				$best_position = (int) $position;
+				$best_length = $query_length;
+			}
+		}
+
+		if ( null === $best_position ) {
+			return self::trim_text_for_prompt( $content, $limit );
+		}
+
+		$window_start = max( 0, $best_position - 70 );
+		$snippet = function_exists( 'mb_substr' ) ? mb_substr( $content, $window_start, $limit, 'UTF-8' ) : substr( $content, $window_start, $limit );
+		$snippet = trim( (string) $snippet );
+
+		if ( $window_start > 0 ) {
+			$snippet = '...' . ltrim( $snippet );
+		}
+
+		$content_length = self::unicode_length( $content );
+		$snippet_length = self::unicode_length( $snippet );
+
+		if ( ( $window_start + $snippet_length ) < $content_length ) {
+			$snippet = rtrim( $snippet, '. ' ) . '...';
+		}
+
+		return $snippet;
 	}
 
 	private static function generate_answer( string $message, array $results, array $route = array() ): array {
@@ -1684,6 +3051,23 @@ final class AISite_Search_Chatbot {
 			);
 		}
 
+		$reused_knowledge = self::maybe_get_reusable_knowledge_base_entry( $settings, $message, $results );
+
+		if ( ! empty( $reused_knowledge['entry'] ) ) {
+			self::mark_knowledge_base_entry_as_used( (int) $reused_knowledge['entry']['id'] );
+
+			if ( ! empty( $reused_knowledge['used_ai_selection'] ) ) {
+				self::register_ai_usage();
+			}
+
+			return array(
+				'answer' => (string) $reused_knowledge['entry']['answer_generalized'],
+				'used_ai' => ! empty( $reused_knowledge['used_ai_selection'] ),
+				'sources' => $sources,
+				'log_status' => ! empty( $reused_knowledge['used_ai_selection'] ) ? 'ai-knowledge-reused' : 'knowledge-reused',
+			);
+		}
+
 		if ( self::is_ai_usage_limited() ) {
 			return array(
 				'answer'  => self::build_ai_limited_fallback_answer( $message, $results ),
@@ -1705,6 +3089,7 @@ final class AISite_Search_Chatbot {
 		}
 
 		self::store_cached_ai_answer( $settings, $message, $results, (string) $response_data['content'] );
+		$knowledge_candidate = self::maybe_store_generated_knowledge_candidate( $settings, $message, (string) $response_data['content'], $results );
 		self::register_ai_usage();
 
 		return array(
@@ -1712,6 +3097,7 @@ final class AISite_Search_Chatbot {
 			'used_ai' => true,
 			'sources' => $sources,
 			'log_status' => 'ai-generated',
+			'knowledge_candidate' => $knowledge_candidate,
 		);
 	}
 
@@ -1742,6 +3128,10 @@ final class AISite_Search_Chatbot {
 				'status'       => isset( $entry['status'] ) ? sanitize_key( (string) $entry['status'] ) : 'unknown',
 				'used_ai'      => ! empty( $entry['used_ai'] ),
 				'source_count' => isset( $entry['source_count'] ) ? absint( $entry['source_count'] ) : 0,
+				'search_queries' => isset( $entry['search_queries'] ) ? self::sanitize_chat_log_search_queries( (array) $entry['search_queries'] ) : array(),
+				'knowledge_candidate_status' => isset( $entry['knowledge_candidate_status'] ) ? sanitize_key( (string) $entry['knowledge_candidate_status'] ) : '',
+				'knowledge_candidate_note' => isset( $entry['knowledge_candidate_note'] ) ? self::trim_chat_log_text( (string) $entry['knowledge_candidate_note'], 1000 ) : '',
+				'knowledge_candidate_pii_flag' => ! empty( $entry['knowledge_candidate_pii_flag'] ),
 				'ip'           => self::get_client_ip_address(),
 			)
 		);
@@ -1765,6 +3155,30 @@ final class AISite_Search_Chatbot {
 		}
 
 		return $text;
+	}
+
+	private static function sanitize_chat_log_search_queries( array $queries ): array {
+		$sanitized = array();
+
+		foreach ( $queries as $query ) {
+			if ( ! is_scalar( $query ) ) {
+				continue;
+			}
+
+			$trimmed = self::trim_chat_log_text( (string) $query, 80 );
+
+			if ( '' === $trimmed || in_array( $trimmed, $sanitized, true ) ) {
+				continue;
+			}
+
+			$sanitized[] = $trimmed;
+
+			if ( count( $sanitized ) >= 12 ) {
+				break;
+			}
+		}
+
+		return $sanitized;
 	}
 
 	private static function request_ai_answer( array $settings, string $message, array $results, array $options = array() ): array {
@@ -1800,6 +3214,9 @@ final class AISite_Search_Chatbot {
 			foreach ( array_slice( $results, 0, 5 ) as $result ) {
 				$lines[] = sprintf( '- %s', $result['title'] );
 				$lines[] = sprintf( '  Excerpt: %s', $result['excerpt'] );
+				if ( ! empty( $result['content_snippet'] ) ) {
+					$lines[] = sprintf( '  Content: %s', $result['content_snippet'] );
+				}
 			}
 
 			$lines[] = '';
@@ -2433,6 +3850,9 @@ final class AISite_Search_Chatbot {
 		foreach ( array_slice( $results, 0, $max_sources ) as $result ) {
 			$lines[] = sprintf( '- %s', $result['title'] );
 			$lines[] = sprintf( '  Excerpt: %s', $result['excerpt'] );
+			if ( ! empty( $result['content_snippet'] ) ) {
+				$lines[] = sprintf( '  Content: %s', $result['content_snippet'] );
+			}
 		}
 
 		$lines[] = '';
@@ -2451,7 +3871,8 @@ final class AISite_Search_Chatbot {
 		);
 
 		foreach ( array_slice( $results, 0, 3 ) as $result ) {
-			$lines[] = sprintf( '%s: %s', $result['title'], $result['excerpt'] );
+			$summary = ! empty( $result['content_snippet'] ) ? (string) $result['content_snippet'] : (string) $result['excerpt'];
+			$lines[] = sprintf( '%s: %s', $result['title'], $summary );
 		}
 
 		$lines[] = __( 'If you want, I can search again with a narrower keyword.', 'ai-site-search-chatbot' );

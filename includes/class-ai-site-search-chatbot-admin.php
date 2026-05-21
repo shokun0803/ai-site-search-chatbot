@@ -47,9 +47,20 @@ final class AISite_Search_Chatbot_Admin {
 			'AISCBAdmin',
 			array(
 				'providers'        => AISite_Search_Chatbot::get_providers_config(),
+				'knowledgeStatuses' => array(
+					'draft'    => __( 'Draft', 'ai-site-search-chatbot' ),
+					'approved' => __( 'Approved', 'ai-site-search-chatbot' ),
+					'archived' => __( 'Archived', 'ai-site-search-chatbot' ),
+				),
+				'knowledgeBaseMatchModes' => AISite_Search_Chatbot::get_knowledge_base_match_modes(),
+				'uninstallCleanupModes' => AISite_Search_Chatbot::get_uninstall_cleanup_modes(),
 				'credentialStatus' => AISite_Search_Chatbot::get_admin_credential_status(),
 				'validateEndpoint' => rest_url( AISite_Search_Chatbot::REST_NAMESPACE . '/validate' ),
 				'testChatEndpoint' => rest_url( AISite_Search_Chatbot::REST_NAMESPACE . '/test-chat' ),
+				'knowledgeBaseEndpoint' => rest_url( AISite_Search_Chatbot::REST_NAMESPACE . '/knowledge-base' ),
+				'knowledgeBaseExportEndpoint' => rest_url( AISite_Search_Chatbot::REST_NAMESPACE . '/knowledge-base/export' ),
+				'knowledgeBaseImportEndpoint' => rest_url( AISite_Search_Chatbot::REST_NAMESPACE . '/knowledge-base/import' ),
+				'knowledgeBasePageUrl' => admin_url( 'options-general.php?page=ai-site-search-chatbot&tab=knowledge-base' ),
 				'restNonce'        => wp_create_nonce( 'wp_rest' ),
 				'optionKey'        => AISite_Search_Chatbot::OPTION_KEY,
 				'i18n'             => array(
@@ -79,6 +90,41 @@ final class AISite_Search_Chatbot_Admin {
 					'bearerTokenStored'        => __( 'A saved bearer token is available. Enter a new value only if you want to replace it.', 'ai-site-search-chatbot' ),
 					'bearerTokenConfig'        => __( 'A server-defined bearer token is active. Enter a value here only if you want to save a database fallback.', 'ai-site-search-chatbot' ),
 					'bearerTokenEmpty'         => __( 'No saved bearer token exists yet.', 'ai-site-search-chatbot' ),
+					'knowledgeLoadFailed'      => __( 'The saved knowledge list could not be loaded.', 'ai-site-search-chatbot' ),
+					'knowledgeSaveFailed'      => __( 'The knowledge entry could not be saved.', 'ai-site-search-chatbot' ),
+					'knowledgeDeleteFailed'    => __( 'The knowledge entry could not be deleted.', 'ai-site-search-chatbot' ),
+					'knowledgeImportFailed'    => __( 'The CSV import could not be completed.', 'ai-site-search-chatbot' ),
+					'knowledgeExportFailed'    => __( 'The CSV export could not be generated.', 'ai-site-search-chatbot' ),
+					'knowledgeSaved'           => __( 'The knowledge entry was saved.', 'ai-site-search-chatbot' ),
+					'knowledgeDeleted'         => __( 'The knowledge entry was deleted.', 'ai-site-search-chatbot' ),
+					'knowledgeImported'        => __( 'The CSV import completed.', 'ai-site-search-chatbot' ),
+					'knowledgeConfirmDelete'   => __( 'Delete this saved knowledge entry?', 'ai-site-search-chatbot' ),
+					'knowledgeNewEntry'        => __( 'New entry', 'ai-site-search-chatbot' ),
+					'knowledgeEditEntry'       => __( 'Edit entry', 'ai-site-search-chatbot' ),
+					'knowledgeNoEntries'       => __( 'No saved knowledge entries yet.', 'ai-site-search-chatbot' ),
+					'knowledgeImportMissing'   => __( 'Choose a CSV file before importing.', 'ai-site-search-chatbot' ),
+					'knowledgeSearchPlaceholder' => __( 'Search saved knowledge', 'ai-site-search-chatbot' ),
+					'knowledgeStatusAll'       => __( 'All statuses', 'ai-site-search-chatbot' ),
+					'knowledgeExport'          => __( 'Export CSV', 'ai-site-search-chatbot' ),
+					'knowledgeImport'          => __( 'Import CSV', 'ai-site-search-chatbot' ),
+					'knowledgeRefresh'         => __( 'Refresh', 'ai-site-search-chatbot' ),
+					'knowledgeCreate'          => __( 'Create entry', 'ai-site-search-chatbot' ),
+					'knowledgeSave'            => __( 'Save entry', 'ai-site-search-chatbot' ),
+					'knowledgeCancel'          => __( 'Cancel', 'ai-site-search-chatbot' ),
+					'knowledgeQuestion'        => __( 'Generalized question', 'ai-site-search-chatbot' ),
+					'knowledgeAnswer'          => __( 'Generalized answer', 'ai-site-search-chatbot' ),
+					'knowledgeStatus'          => __( 'Status', 'ai-site-search-chatbot' ),
+					'knowledgeSources'         => __( 'Source post IDs', 'ai-site-search-chatbot' ),
+					'knowledgeMatchingHint'    => __( 'Matching hint', 'ai-site-search-chatbot' ),
+					'knowledgeConfidence'      => __( 'Confidence note', 'ai-site-search-chatbot' ),
+					'knowledgeAdminNotes'      => __( 'Admin notes', 'ai-site-search-chatbot' ),
+					'knowledgePIIFlag'         => __( 'Needs privacy review', 'ai-site-search-chatbot' ),
+					'knowledgeUpdatedAt'       => __( 'Updated', 'ai-site-search-chatbot' ),
+					'knowledgeActions'         => __( 'Actions', 'ai-site-search-chatbot' ),
+					'knowledgeEdit'            => __( 'Edit', 'ai-site-search-chatbot' ),
+					'knowledgeDelete'          => __( 'Delete', 'ai-site-search-chatbot' ),
+					'knowledgeApplyStatus'     => __( 'Apply status', 'ai-site-search-chatbot' ),
+					'knowledgeStatusUpdated'   => __( 'The knowledge status was updated.', 'ai-site-search-chatbot' ),
 				),
 			)
 		);
@@ -89,14 +135,22 @@ final class AISite_Search_Chatbot_Admin {
 			return;
 		}
 
+		$current_tab = self::get_current_tab();
+
 		$settings = AISite_Search_Chatbot::get_settings();
 		$chat_logs = AISite_Search_Chatbot::get_chat_logs();
 		$providers = AISite_Search_Chatbot::get_providers_config();
 		$widget_themes = AISite_Search_Chatbot::get_widget_themes();
 		$widget_display_modes = AISite_Search_Chatbot::get_widget_display_modes();
+		$knowledge_match_modes = AISite_Search_Chatbot::get_knowledge_base_match_modes();
+		$uninstall_cleanup_modes = AISite_Search_Chatbot::get_uninstall_cleanup_modes();
 		?>
 		<div class="wrap aiscb-admin">
 			<h1><?php echo esc_html( __( 'AI Site Search Chatbot', 'ai-site-search-chatbot' ) ); ?></h1>
+			<?php self::render_page_tabs( $current_tab ); ?>
+			<?php if ( 'knowledge-base' === $current_tab ) : ?>
+				<?php self::render_knowledge_base_panel(); ?>
+			<?php else : ?>
 			<p><?php echo esc_html( __( 'Configure the AI provider and the prompt used when answering visitors with site search results.', 'ai-site-search-chatbot' ) ); ?></p>
 			<form method="post" action="options.php" id="aiscb-settings-form">
 				<?php settings_fields( AISite_Search_Chatbot::OPTION_GROUP ); ?>
@@ -248,6 +302,62 @@ final class AISite_Search_Chatbot_Admin {
 						</td>
 					</tr>
 					<tr>
+						<th scope="row"><?php echo esc_html( __( 'Saved Knowledge Reuse', 'ai-site-search-chatbot' ) ); ?></th>
+						<td>
+							<label for="aiscb_knowledge_base_enabled">
+								<input type="checkbox" id="aiscb_knowledge_base_enabled" name="<?php echo esc_attr( AISite_Search_Chatbot::OPTION_KEY ); ?>[knowledge_base_enabled]" value="1" <?php checked( ! empty( $settings['knowledge_base_enabled'] ) ); ?> />
+								<?php echo esc_html( __( 'Enable approved saved knowledge entries before generating a new AI answer.', 'ai-site-search-chatbot' ) ); ?>
+							</label>
+							<p class="description"><?php echo esc_html( __( 'Saved knowledge is managed separately from public chat logs.', 'ai-site-search-chatbot' ) ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php echo esc_html( __( 'Knowledge Candidate Drafts', 'ai-site-search-chatbot' ) ); ?></th>
+						<td>
+							<label for="aiscb_knowledge_base_auto_draft">
+								<input type="checkbox" id="aiscb_knowledge_base_auto_draft" name="<?php echo esc_attr( AISite_Search_Chatbot::OPTION_KEY ); ?>[knowledge_base_auto_draft]" value="1" <?php checked( ! empty( $settings['knowledge_base_auto_draft'] ) ); ?> />
+								<?php echo esc_html( __( 'Allow AI-generated generalized knowledge candidates to be saved as drafts for admin review.', 'ai-site-search-chatbot' ) ); ?>
+							</label>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="aiscb_knowledge_base_match_mode"><?php echo esc_html( __( 'Knowledge Match Mode', 'ai-site-search-chatbot' ) ); ?></label></th>
+						<td>
+							<select id="aiscb_knowledge_base_match_mode" name="<?php echo esc_attr( AISite_Search_Chatbot::OPTION_KEY ); ?>[knowledge_base_match_mode]">
+								<?php foreach ( $knowledge_match_modes as $mode_key => $mode_info ) : ?>
+									<option value="<?php echo esc_attr( $mode_key ); ?>" <?php selected( $settings['knowledge_base_match_mode'], $mode_key ); ?>><?php echo esc_html( $mode_info['label'] ); ?></option>
+								<?php endforeach; ?>
+							</select>
+							<div class="aiscb-theme-descriptions">
+								<?php foreach ( $knowledge_match_modes as $mode_info ) : ?>
+									<p class="description"><?php echo esc_html( $mode_info['label'] . ': ' . $mode_info['description'] ); ?></p>
+								<?php endforeach; ?>
+							</div>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="aiscb_knowledge_base_candidate_ttl_hours"><?php echo esc_html( __( 'Knowledge Candidate TTL (hours)', 'ai-site-search-chatbot' ) ); ?></label></th>
+						<td>
+							<input type="number" min="1" max="720" id="aiscb_knowledge_base_candidate_ttl_hours" name="<?php echo esc_attr( AISite_Search_Chatbot::OPTION_KEY ); ?>[knowledge_base_candidate_ttl_hours]" value="<?php echo esc_attr( (string) absint( $settings['knowledge_base_candidate_ttl_hours'] ) ); ?>" />
+							<p class="description"><?php echo esc_html( __( 'How long auto-generated draft candidates remain eligible before they should be reviewed or regenerated.', 'ai-site-search-chatbot' ) ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="aiscb_uninstall_cleanup_mode"><?php echo esc_html( __( 'Uninstall Data Policy', 'ai-site-search-chatbot' ) ); ?></label></th>
+						<td>
+							<select id="aiscb_uninstall_cleanup_mode" name="<?php echo esc_attr( AISite_Search_Chatbot::OPTION_KEY ); ?>[uninstall_cleanup_mode]">
+								<?php foreach ( $uninstall_cleanup_modes as $cleanup_key => $cleanup_info ) : ?>
+									<option value="<?php echo esc_attr( $cleanup_key ); ?>" <?php selected( $settings['uninstall_cleanup_mode'], $cleanup_key ); ?>><?php echo esc_html( $cleanup_info['label'] ); ?></option>
+								<?php endforeach; ?>
+							</select>
+							<div class="aiscb-theme-descriptions">
+								<?php foreach ( $uninstall_cleanup_modes as $cleanup_info ) : ?>
+									<p class="description"><?php echo esc_html( $cleanup_info['label'] . ': ' . $cleanup_info['description'] ); ?></p>
+								<?php endforeach; ?>
+							</div>
+						</td>
+					</tr>
+					<tr>
 						<th scope="row"><label for="aiscb_widget_theme"><?php echo esc_html( __( 'Chatbot Design', 'ai-site-search-chatbot' ) ); ?></label></th>
 						<td>
 							<select id="aiscb_widget_theme" name="<?php echo esc_attr( AISite_Search_Chatbot::OPTION_KEY ); ?>[widget_theme]">
@@ -264,11 +374,136 @@ final class AISite_Search_Chatbot_Admin {
 						</td>
 					</tr>
 				</table>
+				<div class="aiscb-inline-callout">
+					<strong><?php echo esc_html( __( 'Saved Knowledge Management', 'ai-site-search-chatbot' ) ); ?></strong>
+					<p><?php echo esc_html( __( 'Review generalized question and answer pairs, manage approval status, and export or import CSV data from the dedicated Saved Knowledge Base screen.', 'ai-site-search-chatbot' ) ); ?></p>
+					<p><a class="button button-secondary" href="<?php echo esc_url( admin_url( 'options-general.php?page=ai-site-search-chatbot&tab=knowledge-base' ) ); ?>"><?php echo esc_html( __( 'Open Saved Knowledge Base', 'ai-site-search-chatbot' ) ); ?></a></p>
+				</div>
 				<?php submit_button(); ?>
 			</form>
 
 			<?php self::render_chat_logs_panel( $chat_logs ); ?>
+			<?php endif; ?>
 		</div>
+		<?php
+	}
+
+	private static function get_current_tab(): string {
+		$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( (string) $_GET['tab'] ) ) : 'settings';
+
+		return in_array( $tab, array( 'settings', 'knowledge-base' ), true ) ? $tab : 'settings';
+	}
+
+	private static function render_page_tabs( string $current_tab ): void {
+		$tabs = array(
+			'settings' => __( 'Settings', 'ai-site-search-chatbot' ),
+			'knowledge-base' => __( 'Saved Knowledge Base', 'ai-site-search-chatbot' ),
+		);
+		?>
+		<nav class="nav-tab-wrapper aiscb-nav-tabs" aria-label="<?php echo esc_attr( __( 'AI Site Search Chatbot sections', 'ai-site-search-chatbot' ) ); ?>">
+			<?php foreach ( $tabs as $tab_key => $label ) : ?>
+				<?php $url = admin_url( 'options-general.php?page=ai-site-search-chatbot' . ( 'settings' === $tab_key ? '' : '&tab=' . $tab_key ) ); ?>
+				<a href="<?php echo esc_url( $url ); ?>" class="nav-tab <?php echo esc_attr( $current_tab === $tab_key ? 'nav-tab-active' : '' ); ?>"><?php echo esc_html( $label ); ?></a>
+			<?php endforeach; ?>
+		</nav>
+		<?php
+	}
+
+	private static function render_knowledge_base_panel(): void {
+		?>
+		<p><?php echo esc_html( __( 'Manage generalized question and answer pairs that can be approved for reuse. This screen is separate from the public chat logs.', 'ai-site-search-chatbot' ) ); ?></p>
+
+			<div class="aiscb-knowledge-layout">
+				<div class="aiscb-knowledge-panel">
+					<div class="aiscb-knowledge-toolbar">
+						<input type="search" id="aiscb_knowledge_search" class="regular-text" placeholder="<?php echo esc_attr( __( 'Search saved knowledge', 'ai-site-search-chatbot' ) ); ?>" />
+						<select id="aiscb_knowledge_status_filter">
+							<option value=""><?php echo esc_html( __( 'All statuses', 'ai-site-search-chatbot' ) ); ?></option>
+							<option value="draft"><?php echo esc_html( __( 'Draft', 'ai-site-search-chatbot' ) ); ?></option>
+							<option value="approved"><?php echo esc_html( __( 'Approved', 'ai-site-search-chatbot' ) ); ?></option>
+							<option value="archived"><?php echo esc_html( __( 'Archived', 'ai-site-search-chatbot' ) ); ?></option>
+						</select>
+						<button type="button" class="button" id="aiscb_knowledge_refresh"><?php echo esc_html( __( 'Refresh', 'ai-site-search-chatbot' ) ); ?></button>
+						<button type="button" class="button button-primary" id="aiscb_knowledge_create"><?php echo esc_html( __( 'Create entry', 'ai-site-search-chatbot' ) ); ?></button>
+						<button type="button" class="button" id="aiscb_knowledge_export"><?php echo esc_html( __( 'Export CSV', 'ai-site-search-chatbot' ) ); ?></button>
+					</div>
+
+					<div class="aiscb-knowledge-import-row">
+						<input type="file" id="aiscb_knowledge_import_file" accept=".csv,text/csv" />
+						<button type="button" class="button" id="aiscb_knowledge_import"><?php echo esc_html( __( 'Import CSV', 'ai-site-search-chatbot' ) ); ?></button>
+					</div>
+
+					<div id="aiscb_knowledge_notice" class="notice inline aiscb-notice" hidden></div>
+
+					<div class="aiscb-knowledge-table-wrap">
+						<table class="widefat fixed striped aiscb-knowledge-table">
+							<thead>
+								<tr>
+									<th><?php echo esc_html( __( 'Status / Actions', 'ai-site-search-chatbot' ) ); ?></th>
+									<th><?php echo esc_html( __( 'Generalized Question', 'ai-site-search-chatbot' ) ); ?></th>
+									<th><?php echo esc_html( __( 'Generalized answer', 'ai-site-search-chatbot' ) ); ?></th>
+									<th><?php echo esc_html( __( 'Updated', 'ai-site-search-chatbot' ) ); ?></th>
+								</tr>
+							</thead>
+							<tbody id="aiscb_knowledge_table_body">
+								<tr>
+									<td colspan="4"><?php echo esc_html( __( 'Loading saved knowledge…', 'ai-site-search-chatbot' ) ); ?></td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
+				</div>
+
+				<div class="aiscb-knowledge-panel">
+					<h2 class="aiscb-section-title" id="aiscb_knowledge_form_title"><?php echo esc_html( __( 'New entry', 'ai-site-search-chatbot' ) ); ?></h2>
+					<form id="aiscb_knowledge_form">
+						<input type="hidden" id="aiscb_knowledge_id" value="" />
+						<input type="hidden" id="aiscb_knowledge_export_uid" value="" />
+						<p>
+							<label for="aiscb_knowledge_status"><strong><?php echo esc_html( __( 'Status', 'ai-site-search-chatbot' ) ); ?></strong></label><br />
+							<select id="aiscb_knowledge_status">
+								<option value="draft"><?php echo esc_html( __( 'Draft', 'ai-site-search-chatbot' ) ); ?></option>
+								<option value="approved"><?php echo esc_html( __( 'Approved', 'ai-site-search-chatbot' ) ); ?></option>
+								<option value="archived"><?php echo esc_html( __( 'Archived', 'ai-site-search-chatbot' ) ); ?></option>
+							</select>
+						</p>
+						<p>
+							<label for="aiscb_knowledge_question"><strong><?php echo esc_html( __( 'Generalized question', 'ai-site-search-chatbot' ) ); ?></strong></label>
+							<textarea id="aiscb_knowledge_question" class="large-text" rows="4"></textarea>
+						</p>
+						<p>
+							<label for="aiscb_knowledge_answer"><strong><?php echo esc_html( __( 'Generalized answer', 'ai-site-search-chatbot' ) ); ?></strong></label>
+							<textarea id="aiscb_knowledge_answer" class="large-text" rows="8"></textarea>
+						</p>
+						<p>
+							<label for="aiscb_knowledge_source_post_ids"><strong><?php echo esc_html( __( 'Source post IDs', 'ai-site-search-chatbot' ) ); ?></strong></label>
+							<input type="text" id="aiscb_knowledge_source_post_ids" class="regular-text" />
+						</p>
+						<p>
+							<label for="aiscb_knowledge_matching_method_hint"><strong><?php echo esc_html( __( 'Matching hint', 'ai-site-search-chatbot' ) ); ?></strong></label>
+							<input type="text" id="aiscb_knowledge_matching_method_hint" class="regular-text" />
+						</p>
+						<p>
+							<label for="aiscb_knowledge_confidence_note"><strong><?php echo esc_html( __( 'Confidence note', 'ai-site-search-chatbot' ) ); ?></strong></label>
+							<textarea id="aiscb_knowledge_confidence_note" class="large-text" rows="3"></textarea>
+						</p>
+						<p>
+							<label for="aiscb_knowledge_admin_notes"><strong><?php echo esc_html( __( 'Admin notes', 'ai-site-search-chatbot' ) ); ?></strong></label>
+							<textarea id="aiscb_knowledge_admin_notes" class="large-text" rows="4"></textarea>
+						</p>
+						<p>
+							<label for="aiscb_knowledge_pii_flag">
+								<input type="checkbox" id="aiscb_knowledge_pii_flag" value="1" />
+								<?php echo esc_html( __( 'Needs privacy review', 'ai-site-search-chatbot' ) ); ?>
+							</label>
+						</p>
+						<p class="submit">
+							<button type="submit" class="button button-primary" id="aiscb_knowledge_save"><?php echo esc_html( __( 'Save entry', 'ai-site-search-chatbot' ) ); ?></button>
+							<button type="button" class="button" id="aiscb_knowledge_cancel"><?php echo esc_html( __( 'Cancel', 'ai-site-search-chatbot' ) ); ?></button>
+						</p>
+					</form>
+				</div>
+			</div>
 		<?php
 	}
 
@@ -324,6 +559,16 @@ final class AISite_Search_Chatbot_Admin {
 										<div><?php echo esc_html( $timestamp ? wp_date( 'Y-m-d H:i:s', $timestamp ) : '-' ); ?></div>
 										<div class="aiscb-log-meta"><?php echo esc_html( sprintf( __( 'IP: %s', 'ai-site-search-chatbot' ), self::mask_ip_address( isset( $log['ip'] ) ? (string) $log['ip'] : '' ) ) ); ?></div>
 										<div class="aiscb-log-meta"><?php echo esc_html( sprintf( __( 'Sources: %d', 'ai-site-search-chatbot' ), isset( $log['source_count'] ) ? absint( $log['source_count'] ) : 0 ) ); ?></div>
+										<div class="aiscb-log-meta"><?php echo esc_html( sprintf( __( 'Search Terms: %s', 'ai-site-search-chatbot' ), self::format_search_queries( isset( $log['search_queries'] ) && is_array( $log['search_queries'] ) ? $log['search_queries'] : array() ) ) ); ?></div>
+										<?php if ( ! empty( $log['knowledge_candidate_status'] ) ) : ?>
+											<div class="aiscb-log-meta"><?php echo esc_html( sprintf( __( 'Knowledge Draft: %s', 'ai-site-search-chatbot' ), self::format_knowledge_candidate_status( (string) $log['knowledge_candidate_status'] ) ) ); ?></div>
+										<?php endif; ?>
+										<?php if ( ! empty( $log['knowledge_candidate_note'] ) ) : ?>
+											<div class="aiscb-log-meta"><?php echo esc_html( sprintf( __( 'Knowledge Note: %s', 'ai-site-search-chatbot' ), (string) $log['knowledge_candidate_note'] ) ); ?></div>
+										<?php endif; ?>
+										<?php if ( ! empty( $log['knowledge_candidate_pii_flag'] ) ) : ?>
+											<div class="aiscb-log-meta"><?php echo esc_html( __( 'Knowledge candidate marked for privacy review.', 'ai-site-search-chatbot' ) ); ?></div>
+										<?php endif; ?>
 									</td>
 									<td><?php self::render_log_text_block( isset( $log['question'] ) ? (string) $log['question'] : '' ); ?></td>
 									<td><?php self::render_log_text_block( isset( $log['answer'] ) ? (string) $log['answer'] : '' ); ?></td>
@@ -361,6 +606,40 @@ final class AISite_Search_Chatbot_Admin {
 		<?php
 	}
 
+	private static function format_search_queries( array $queries ): string {
+		$queries = array_values(
+			array_filter(
+				array_map(
+					static function ( $query ): string {
+						return is_scalar( $query ) ? trim( (string) $query ) : '';
+					},
+					$queries
+				)
+			)
+		);
+
+		if ( empty( $queries ) ) {
+			return '-';
+		}
+
+		return implode( ', ', $queries );
+	}
+
+	private static function format_knowledge_candidate_status( string $status ): string {
+		$status = sanitize_key( $status );
+
+		$labels = array(
+			'saved' => __( 'Draft saved', 'ai-site-search-chatbot' ),
+			'updated' => __( 'Draft updated', 'ai-site-search-chatbot' ),
+			'kept-approved' => __( 'Approved entry kept', 'ai-site-search-chatbot' ),
+			'rejected' => __( 'Draft not saved', 'ai-site-search-chatbot' ),
+			'provider-error' => __( 'Draft evaluation failed', 'ai-site-search-chatbot' ),
+			'disabled' => __( 'Draft saving disabled', 'ai-site-search-chatbot' ),
+		);
+
+		return $labels[ $status ] ?? '';
+	}
+
 	private static function get_chat_log_status_map(): array {
 		return array(
 			'ai-generated' => array(
@@ -368,10 +647,20 @@ final class AISite_Search_Chatbot_Admin {
 				'icon'  => 'dashicons-format-chat',
 				'tone'  => 'success',
 			),
+			'ai-knowledge-reused' => array(
+				'label' => __( 'AI Matched Knowledge', 'ai-site-search-chatbot' ),
+				'icon'  => 'dashicons-database-view',
+				'tone'  => 'info',
+			),
 			'ai-cached' => array(
 				'label' => __( 'Cached Reply', 'ai-site-search-chatbot' ),
 				'icon'  => 'dashicons-update',
 				'tone'  => 'info',
+			),
+			'knowledge-reused' => array(
+				'label' => __( 'Saved Knowledge Reply', 'ai-site-search-chatbot' ),
+				'icon'  => 'dashicons-yes-alt',
+				'tone'  => 'success',
 			),
 			'ai-limited' => array(
 				'label' => __( 'AI Limit Hit', 'ai-site-search-chatbot' ),
