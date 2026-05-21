@@ -5,7 +5,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 final class AISite_Search_Chatbot {
-	const VERSION = '0.4.0';
+	const VERSION = '0.4.1';
 	const OPTION_KEY = 'aiscb_settings';
 	const OPTION_GROUP = 'aiscb_settings_group';
 	const REST_NAMESPACE = 'ai-site-search-chatbot/v1';
@@ -18,7 +18,7 @@ final class AISite_Search_Chatbot {
 			return;
 		}
 
-		add_option( self::OPTION_KEY, self::default_settings() );
+		add_option( self::OPTION_KEY, self::default_settings(), '', false );
 	}
 
 	public static function init(): void {
@@ -64,6 +64,10 @@ final class AISite_Search_Chatbot {
 		return array(
 			'ai_provider'         => 'openai',
 			'api_key'             => '',
+			'openai_api_key_encrypted' => '',
+			'claude_api_key_encrypted' => '',
+			'github_models_api_key_encrypted' => '',
+			'gemini_api_key_encrypted' => '',
 			'model'               => '',
 			'system_prompt'       => self::get_default_system_prompt(),
 			'max_sources'         => 5,
@@ -74,6 +78,7 @@ final class AISite_Search_Chatbot {
 			'widget_theme'        => 'business',
 			'claude_auth_mode'    => 'api_key',
 			'claude_bearer_token' => '',
+			'claude_bearer_token_encrypted' => '',
 		);
 	}
 
@@ -94,8 +99,360 @@ final class AISite_Search_Chatbot {
 		);
 	}
 
-	public static function get_settings(): array {
+	private static function get_raw_settings(): array {
 		$settings = get_option( self::OPTION_KEY, array() );
+
+		return is_array( $settings ) ? $settings : array();
+	}
+
+	private static function get_valid_provider( string $provider ): string {
+		$valid_providers = array( 'openai', 'claude', 'github-copilot', 'gemini' );
+
+		if ( ! in_array( $provider, $valid_providers, true ) ) {
+			return 'openai';
+		}
+
+		return $provider;
+	}
+
+	private static function get_provider_secret_option_key( string $provider ): string {
+		$provider_secret_keys = array(
+			'openai'         => 'openai_api_key_encrypted',
+			'claude'         => 'claude_api_key_encrypted',
+			'github-copilot' => 'github_models_api_key_encrypted',
+			'gemini'         => 'gemini_api_key_encrypted',
+		);
+
+		return $provider_secret_keys[ $provider ] ?? '';
+	}
+
+	private static function get_secret_reference_map(): array {
+		return array(
+			'openai'         => array(
+				'api_key' => array(
+					'constants' => array( 'AISCB_OPENAI_API_KEY' ),
+					'env'       => array( 'AISCB_OPENAI_API_KEY', 'OPENAI_API_KEY' ),
+				),
+			),
+			'claude'         => array(
+				'api_key'      => array(
+					'constants' => array( 'AISCB_CLAUDE_API_KEY' ),
+					'env'       => array( 'AISCB_CLAUDE_API_KEY', 'ANTHROPIC_API_KEY' ),
+				),
+				'bearer_token' => array(
+					'constants' => array( 'AISCB_CLAUDE_BEARER_TOKEN' ),
+					'env'       => array( 'AISCB_CLAUDE_BEARER_TOKEN', 'ANTHROPIC_AUTH_TOKEN' ),
+				),
+			),
+			'github-copilot' => array(
+				'api_key' => array(
+					'constants' => array( 'AISCB_GITHUB_MODELS_TOKEN' ),
+					'env'       => array( 'AISCB_GITHUB_MODELS_TOKEN', 'GITHUB_MODELS_TOKEN', 'GITHUB_TOKEN' ),
+				),
+			),
+			'gemini'         => array(
+				'api_key' => array(
+					'constants' => array( 'AISCB_GEMINI_API_KEY' ),
+					'env'       => array( 'AISCB_GEMINI_API_KEY', 'GEMINI_API_KEY', 'GOOGLE_API_KEY' ),
+				),
+			),
+		);
+	}
+
+	private static function get_config_secret( string $provider, string $type = 'api_key' ): string {
+		$provider = self::get_valid_provider( $provider );
+		$references = self::get_secret_reference_map();
+		$reference = $references[ $provider ][ $type ] ?? null;
+
+		if ( ! is_array( $reference ) ) {
+			return '';
+		}
+
+		foreach ( $reference['constants'] ?? array() as $constant_name ) {
+			if ( defined( $constant_name ) ) {
+				$value = trim( (string) constant( $constant_name ) );
+
+				if ( '' !== $value ) {
+					return $value;
+				}
+			}
+		}
+
+		foreach ( $reference['env'] ?? array() as $env_name ) {
+			$value = getenv( $env_name );
+
+			if ( false === $value ) {
+				continue;
+			}
+
+			$value = trim( (string) $value );
+
+			if ( '' !== $value ) {
+				return $value;
+			}
+		}
+
+		return '';
+	}
+
+	private static function get_secret_encryption_key(): string {
+		$site_salt = wp_salt( 'auth' );
+
+		if ( '' === trim( (string) $site_salt ) ) {
+			return '';
+		}
+
+		return hash_hkdf( 'sha256', (string) $site_salt, 32, 'ai-site-search-chatbot/secret-storage' );
+	}
+
+	private static function encrypt_secret( string $secret ): string {
+		$secret = trim( $secret );
+
+		if ( '' === $secret ) {
+			return '';
+		}
+
+		$key = self::get_secret_encryption_key();
+
+		if ( '' === $key || ! function_exists( 'openssl_encrypt' ) ) {
+			return '';
+		}
+
+		$iv = random_bytes( 12 );
+		$tag = '';
+		$ciphertext = openssl_encrypt( $secret, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag, '', 16 );
+
+		if ( false === $ciphertext ) {
+			return '';
+		}
+
+		$payload = wp_json_encode(
+			array(
+				'v'    => 1,
+				'alg'  => 'aes-256-gcm',
+				'iv'   => base64_encode( $iv ),
+				'tag'  => base64_encode( $tag ),
+				'data' => base64_encode( $ciphertext ),
+			)
+		);
+
+		return is_string( $payload ) ? base64_encode( $payload ) : '';
+	}
+
+	private static function decrypt_secret( string $payload ): string {
+		$payload = trim( $payload );
+
+		if ( '' === $payload ) {
+			return '';
+		}
+
+		$key = self::get_secret_encryption_key();
+
+		if ( '' === $key || ! function_exists( 'openssl_decrypt' ) ) {
+			return '';
+		}
+
+		$decoded_payload = base64_decode( $payload, true );
+
+		if ( false === $decoded_payload ) {
+			return '';
+		}
+
+		$data = json_decode( $decoded_payload, true );
+
+		if ( ! is_array( $data ) || 'aes-256-gcm' !== ( $data['alg'] ?? '' ) ) {
+			return '';
+		}
+
+		$iv = base64_decode( (string) ( $data['iv'] ?? '' ), true );
+		$tag = base64_decode( (string) ( $data['tag'] ?? '' ), true );
+		$ciphertext = base64_decode( (string) ( $data['data'] ?? '' ), true );
+
+		if ( false === $iv || false === $tag || false === $ciphertext ) {
+			return '';
+		}
+
+		$plaintext = openssl_decrypt( $ciphertext, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag );
+
+		return is_string( $plaintext ) ? $plaintext : '';
+	}
+
+	private static function get_stored_secret( array $settings, string $provider, string $type = 'api_key' ): string {
+		$provider = self::get_valid_provider( $provider );
+
+		if ( 'bearer_token' === $type ) {
+			$encrypted = trim( (string) ( $settings['claude_bearer_token_encrypted'] ?? '' ) );
+
+			if ( '' !== $encrypted ) {
+				$decrypted = self::decrypt_secret( $encrypted );
+
+				if ( '' !== $decrypted ) {
+					return $decrypted;
+				}
+			}
+
+			return trim( (string) ( $settings['claude_bearer_token'] ?? '' ) );
+		}
+
+		$option_key = self::get_provider_secret_option_key( $provider );
+
+		if ( '' !== $option_key ) {
+			$encrypted = trim( (string) ( $settings[ $option_key ] ?? '' ) );
+
+			if ( '' !== $encrypted ) {
+				$decrypted = self::decrypt_secret( $encrypted );
+
+				if ( '' !== $decrypted ) {
+					return $decrypted;
+				}
+			}
+		}
+
+		$legacy_provider = self::get_valid_provider( (string) ( $settings['ai_provider'] ?? 'openai' ) );
+
+		if ( $provider === $legacy_provider ) {
+			return trim( (string) ( $settings['api_key'] ?? '' ) );
+		}
+
+		return '';
+	}
+
+	private static function get_effective_secret( array $settings, string $provider, string $type = 'api_key' ): array {
+		$config_secret = self::get_config_secret( $provider, $type );
+
+		if ( '' !== $config_secret ) {
+			return array(
+				'value'  => $config_secret,
+				'source' => 'config',
+			);
+		}
+
+		$stored_secret = self::get_stored_secret( $settings, $provider, $type );
+
+		if ( '' !== $stored_secret ) {
+			return array(
+				'value'  => $stored_secret,
+				'source' => 'database',
+			);
+		}
+
+		return array(
+			'value'  => '',
+			'source' => 'none',
+		);
+	}
+
+	private static function normalize_runtime_settings( array $settings, ?array $raw_settings = null, bool $prefer_explicit_secret = false ): array {
+		$defaults = self::default_settings();
+		$settings = wp_parse_args( $settings, $defaults );
+		$raw_settings = is_array( $raw_settings ) ? wp_parse_args( $raw_settings, $defaults ) : wp_parse_args( self::get_raw_settings(), $defaults );
+
+		$provider = self::get_valid_provider( (string) ( $settings['ai_provider'] ?? $raw_settings['ai_provider'] ?? $defaults['ai_provider'] ) );
+		$settings['ai_provider'] = $provider;
+
+		$api_key_status = self::get_effective_secret( $raw_settings, $provider, 'api_key' );
+		$bearer_token_status = self::get_effective_secret( $raw_settings, 'claude', 'bearer_token' );
+
+		$explicit_api_key = trim( (string) ( $settings['api_key'] ?? '' ) );
+		$explicit_bearer_token = trim( (string) ( $settings['claude_bearer_token'] ?? '' ) );
+
+		$settings['api_key'] = ( $prefer_explicit_secret && '' !== $explicit_api_key ) ? $explicit_api_key : $api_key_status['value'];
+		$settings['claude_bearer_token'] = ( $prefer_explicit_secret && '' !== $explicit_bearer_token ) ? $explicit_bearer_token : $bearer_token_status['value'];
+		$settings['api_key_configured'] = '' !== trim( (string) $api_key_status['value'] );
+		$settings['api_key_source'] = $api_key_status['source'];
+		$settings['claude_bearer_token_configured'] = '' !== trim( (string) $bearer_token_status['value'] );
+		$settings['claude_bearer_token_source'] = $bearer_token_status['source'];
+
+		return $settings;
+	}
+
+	private static function has_active_provider_credential( array $settings ): bool {
+		$provider = self::get_valid_provider( (string) ( $settings['ai_provider'] ?? 'openai' ) );
+
+		if ( 'claude' === $provider && 'bearer_token' === ( $settings['claude_auth_mode'] ?? 'api_key' ) ) {
+			return '' !== trim( (string) ( $settings['claude_bearer_token'] ?? '' ) );
+		}
+
+		return '' !== trim( (string) ( $settings['api_key'] ?? '' ) );
+	}
+
+	private static function remember_secret_for_provider( array &$sanitized, array $existing_settings, string $provider, string $secret, string $type = 'api_key' ): void {
+		$secret = trim( $secret );
+
+		if ( 'bearer_token' === $type ) {
+			$storage_key = 'claude_bearer_token_encrypted';
+			$legacy_plain_secret = trim( (string) ( $existing_settings['claude_bearer_token'] ?? '' ) );
+		} else {
+			$storage_key = self::get_provider_secret_option_key( $provider );
+			$legacy_provider = self::get_valid_provider( (string) ( $existing_settings['ai_provider'] ?? 'openai' ) );
+			$legacy_plain_secret = ( $provider === $legacy_provider ) ? trim( (string) ( $existing_settings['api_key'] ?? '' ) ) : '';
+		}
+
+		if ( '' === $storage_key ) {
+			return;
+		}
+
+		if ( '' !== $secret ) {
+			$encrypted_secret = self::encrypt_secret( $secret );
+
+			if ( '' === $encrypted_secret ) {
+				add_settings_error(
+					self::OPTION_KEY,
+					'aiscb_secret_storage_failed',
+					__( 'The credential could not be stored securely on this server. The previous saved value was kept unchanged.', 'ai-site-search-chatbot' ),
+					'error'
+				);
+
+				$sanitized[ $storage_key ] = (string) ( $existing_settings[ $storage_key ] ?? '' );
+
+				return;
+			}
+
+			$sanitized[ $storage_key ] = $encrypted_secret;
+
+			return;
+		}
+
+		if ( ! empty( $existing_settings[ $storage_key ] ) ) {
+			$sanitized[ $storage_key ] = (string) $existing_settings[ $storage_key ];
+
+			return;
+		}
+
+		if ( '' !== $legacy_plain_secret ) {
+			$encrypted_secret = self::encrypt_secret( $legacy_plain_secret );
+
+			if ( '' !== $encrypted_secret ) {
+				$sanitized[ $storage_key ] = $encrypted_secret;
+			}
+		}
+	}
+
+	public static function get_admin_credential_status(): array {
+		$raw_settings = wp_parse_args( self::get_raw_settings(), self::default_settings() );
+		$status = array();
+
+		foreach ( array( 'openai', 'claude', 'github-copilot', 'gemini' ) as $provider ) {
+			$api_key = self::get_effective_secret( $raw_settings, $provider, 'api_key' );
+			$status[ $provider ] = array(
+				'api_key' => array(
+					'configured' => '' !== trim( (string) $api_key['value'] ),
+					'source'     => $api_key['source'],
+				),
+			);
+		}
+
+		$bearer_token = self::get_effective_secret( $raw_settings, 'claude', 'bearer_token' );
+		$status['claude']['bearer_token'] = array(
+			'configured' => '' !== trim( (string) $bearer_token['value'] ),
+			'source'     => $bearer_token['source'],
+		);
+
+		return $status;
+	}
+
+	public static function get_settings(): array {
+		$settings = self::get_raw_settings();
 
 		if ( ! is_array( $settings ) ) {
 			$settings = array();
@@ -105,18 +462,16 @@ final class AISite_Search_Chatbot {
 			$settings['system_prompt'] = self::get_default_system_prompt();
 		}
 
-		return wp_parse_args( $settings, self::default_settings() );
+		return self::normalize_runtime_settings( $settings, $settings );
 	}
 
 	public static function sanitize_settings( $input ): array {
 		$defaults = self::default_settings();
+		$existing_settings = wp_parse_args( self::get_raw_settings(), $defaults );
 		$input = is_array( $input ) ? $input : array();
 
 		$provider = isset( $input['ai_provider'] ) ? sanitize_text_field( wp_unslash( $input['ai_provider'] ) ) : $defaults['ai_provider'];
-		$valid_providers = array( 'openai', 'claude', 'github-copilot', 'gemini' );
-		if ( ! in_array( $provider, $valid_providers, true ) ) {
-			$provider = $defaults['ai_provider'];
-		}
+		$provider = self::get_valid_provider( $provider );
 
 		$widget_theme = isset( $input['widget_theme'] ) ? sanitize_key( wp_unslash( $input['widget_theme'] ) ) : $defaults['widget_theme'];
 		if ( ! array_key_exists( $widget_theme, self::get_widget_themes() ) ) {
@@ -133,9 +488,13 @@ final class AISite_Search_Chatbot {
 			$claude_auth_mode = $defaults['claude_auth_mode'];
 		}
 
-		return array(
+		$sanitized = array(
 			'ai_provider'         => $provider,
-			'api_key'             => isset( $input['api_key'] ) ? sanitize_text_field( wp_unslash( $input['api_key'] ) ) : $defaults['api_key'],
+			'api_key'             => '',
+			'openai_api_key_encrypted' => (string) ( $existing_settings['openai_api_key_encrypted'] ?? '' ),
+			'claude_api_key_encrypted' => (string) ( $existing_settings['claude_api_key_encrypted'] ?? '' ),
+			'github_models_api_key_encrypted' => (string) ( $existing_settings['github_models_api_key_encrypted'] ?? '' ),
+			'gemini_api_key_encrypted' => (string) ( $existing_settings['gemini_api_key_encrypted'] ?? '' ),
 			'model'               => isset( $input['model'] ) ? sanitize_text_field( wp_unslash( $input['model'] ) ) : $defaults['model'],
 			'system_prompt'       => isset( $input['system_prompt'] ) ? sanitize_textarea_field( wp_unslash( $input['system_prompt'] ) ) : $defaults['system_prompt'],
 			'max_sources'         => isset( $input['max_sources'] ) ? max( 1, min( 10, absint( $input['max_sources'] ) ) ) : $defaults['max_sources'],
@@ -145,8 +504,17 @@ final class AISite_Search_Chatbot {
 			'widget_display_mode' => $widget_display_mode,
 			'widget_theme'        => $widget_theme,
 			'claude_auth_mode'    => $claude_auth_mode,
-			'claude_bearer_token' => isset( $input['claude_bearer_token'] ) ? sanitize_text_field( wp_unslash( $input['claude_bearer_token'] ) ) : $defaults['claude_bearer_token'],
+			'claude_bearer_token' => '',
+			'claude_bearer_token_encrypted' => (string) ( $existing_settings['claude_bearer_token_encrypted'] ?? '' ),
 		);
+
+		$api_key = isset( $input['api_key'] ) ? sanitize_text_field( wp_unslash( $input['api_key'] ) ) : '';
+		$bearer_token = isset( $input['claude_bearer_token'] ) ? sanitize_text_field( wp_unslash( $input['claude_bearer_token'] ) ) : '';
+
+		self::remember_secret_for_provider( $sanitized, $existing_settings, $provider, $api_key, 'api_key' );
+		self::remember_secret_for_provider( $sanitized, $existing_settings, 'claude', $bearer_token, 'bearer_token' );
+
+		return $sanitized;
 	}
 
 	public static function register_settings(): void {
@@ -342,7 +710,7 @@ final class AISite_Search_Chatbot {
 			'claude_bearer_token' => sanitize_text_field( (string) $request->get_param( 'claude_bearer_token' ) ),
 		);
 
-		$settings = wp_parse_args( $settings, self::default_settings() );
+		$settings = self::normalize_runtime_settings( $settings, null, true );
 
 		$is_bearer_mode = 'claude' === $settings['ai_provider'] && 'bearer_token' === $settings['claude_auth_mode'];
 		$credential     = $is_bearer_mode ? $settings['claude_bearer_token'] : $settings['api_key'];
@@ -382,7 +750,7 @@ final class AISite_Search_Chatbot {
 			'claude_bearer_token' => sanitize_text_field( (string) $request->get_param( 'claude_bearer_token' ) ),
 		);
 
-		$settings = wp_parse_args( $settings, self::default_settings() );
+		$settings = self::normalize_runtime_settings( $settings, null, true );
 		$message = self::sanitize_message( (string) $request->get_param( 'message' ) );
 
 		$is_bearer_mode = 'claude' === $settings['ai_provider'] && 'bearer_token' === $settings['claude_auth_mode'];
@@ -830,7 +1198,7 @@ final class AISite_Search_Chatbot {
 
 		$rule_based_queries = self::build_rule_based_search_queries( $message );
 
-		if ( empty( $settings['api_key'] ) || empty( $settings['model'] ) ) {
+		if ( ! self::has_active_provider_credential( $settings ) || empty( $settings['model'] ) ) {
 			return array(
 				'intent'  => 'site-search',
 				'queries' => self::normalize_search_queries( $rule_based_queries ),
@@ -952,7 +1320,7 @@ final class AISite_Search_Chatbot {
 	}
 
 	private static function extract_search_queries_with_ai( string $message, array $settings ): array {
-		if ( empty( $settings['api_key'] ) || empty( $settings['model'] ) ) {
+		if ( ! self::has_active_provider_credential( $settings ) || empty( $settings['model'] ) ) {
 			return array();
 		}
 
@@ -1248,7 +1616,7 @@ final class AISite_Search_Chatbot {
 		$sources = self::build_sources( $results, (int) $settings['max_sources'] );
 		$intent = isset( $route['intent'] ) ? (string) $route['intent'] : 'site-search';
 
-		if ( empty( $settings['api_key'] ) ) {
+		if ( ! self::has_active_provider_credential( $settings ) ) {
 			return array(
 				'answer'   => self::build_fallback_answer( $message, $results ),
 				'used_ai'  => false,

@@ -102,6 +102,7 @@
 		}
 
 		var providers = AISCBAdmin.providers || {};
+			var credentialStatus = AISCBAdmin.credentialStatus || {};
 		var i18n = AISCBAdmin.i18n || {};
 		var optionKey = AISCBAdmin.optionKey || 'aiscb_settings';
 		var radioSelector = 'input[name="' + optionKey + '[ai_provider]"]';
@@ -110,6 +111,8 @@
 		var modelReference = document.getElementById( 'aiscb_model_reference' );
 		var validationResult = document.getElementById( 'aiscb_validation_result' );
 		var testResult = document.getElementById( 'aiscb_test_result' );
+			var apiKeyStatus = document.getElementById( 'aiscb_api_key_status' );
+			var bearerTokenStatus = document.getElementById( 'aiscb_claude_bearer_token_status' );
 
 		var authModeRow = document.getElementById( 'aiscb_claude_auth_mode_row' );
 		var apiKeyRow = document.getElementById( 'aiscb_api_key_row' );
@@ -133,6 +136,43 @@
 			return isClaudeProvider() && 'bearer_token' === getClaudeAuthMode();
 		}
 
+			function getCredentialStatus( providerKey, credentialType ) {
+				var providerState = credentialStatus[ providerKey ] || {};
+				return providerState[ credentialType ] || { configured: false, source: 'none' };
+			}
+
+			function hasAvailableCredential( providerKey, bearerMode ) {
+				var credentialType = bearerMode ? 'bearer_token' : 'api_key';
+				var status = getCredentialStatus( providerKey, credentialType );
+				return !! status.configured;
+			}
+
+			function getCredentialStatusText( providerKey, credentialType ) {
+				var status = getCredentialStatus( providerKey, credentialType );
+
+				if ( status.configured ) {
+					if ( 'config' === status.source ) {
+						return 'bearer_token' === credentialType ? i18n.bearerTokenConfig : i18n.apiKeyConfig;
+					}
+
+					return 'bearer_token' === credentialType ? i18n.bearerTokenStored : i18n.apiKeyStored;
+				}
+
+				return 'bearer_token' === credentialType ? i18n.bearerTokenEmpty : i18n.apiKeyEmpty;
+			}
+
+			function updateCredentialStatusUI() {
+				var provider = getSelectedProvider();
+
+				if ( apiKeyStatus ) {
+					apiKeyStatus.textContent = provider ? getCredentialStatusText( provider.value, 'api_key' ) : '';
+				}
+
+				if ( bearerTokenStatus ) {
+					bearerTokenStatus.textContent = provider ? getCredentialStatusText( provider.value, 'bearer_token' ) : '';
+				}
+			}
+
 		function updateClaudeAuthUI() {
 			if ( ! authModeRow || ! apiKeyRow || ! bearerTokenRow ) {
 				return;
@@ -148,6 +188,8 @@
 				bearerTokenRow.hidden = true;
 				apiKeyRow.hidden = false;
 			}
+
+				updateCredentialStatusUI();
 		}
 
 		function updateProviderInfo() {
@@ -188,7 +230,7 @@
 			var bearerMode = isBearerTokenMode();
 			var credential = bearerMode ? bearerToken.value : apiKey.value;
 
-			if ( ! provider || ! credential.trim() || ! model.value.trim() ) {
+				if ( ! provider || ( ! credential.trim() && ! hasAvailableCredential( provider.value, bearerMode ) ) || ! model.value.trim() ) {
 				showNotice( validationResult, 'warning', bearerMode ? i18n.validationMissingBearer : i18n.validationMissing );
 				return;
 			}
@@ -240,7 +282,7 @@
 			var bearerMode = isBearerTokenMode();
 			var credential = bearerMode ? bearerToken.value : apiKey.value;
 
-			if ( ! provider || ! credential.trim() || ! model.value.trim() ) {
+				if ( ! provider || ( ! credential.trim() && ! hasAvailableCredential( provider.value, bearerMode ) ) || ! model.value.trim() ) {
 				showNotice( testResult, 'warning', bearerMode ? i18n.adminTestMissingBearer : i18n.adminTestMissingModel );
 				renderAdminTestAnswer( null, i18n );
 				return;
@@ -308,5 +350,6 @@
 		document.getElementById( 'aiscb_test_chat_button' ).addEventListener( 'click', runAdminChatTest );
 
 		updateModelOptions();
+			updateCredentialStatusUI();
 	} );
 } )();

@@ -47,6 +47,7 @@ final class AISite_Search_Chatbot_Admin {
 			'AISCBAdmin',
 			array(
 				'providers'        => AISite_Search_Chatbot::get_providers_config(),
+				'credentialStatus' => AISite_Search_Chatbot::get_admin_credential_status(),
 				'validateEndpoint' => rest_url( AISite_Search_Chatbot::REST_NAMESPACE . '/validate' ),
 				'testChatEndpoint' => rest_url( AISite_Search_Chatbot::REST_NAMESPACE . '/test-chat' ),
 				'restNonce'        => wp_create_nonce( 'wp_rest' ),
@@ -72,6 +73,12 @@ final class AISite_Search_Chatbot_Admin {
 					'adminTestSuccess'         => __( 'Admin chat test succeeded.', 'ai-site-search-chatbot' ),
 					'adminTestFailed'          => __( 'The admin chat test failed.', 'ai-site-search-chatbot' ),
 					'adminTestRequestFail'     => __( 'The admin chat test request failed. Please try again.', 'ai-site-search-chatbot' ),
+					'apiKeyStored'             => __( 'A saved API key is available for this provider. Enter a new value only if you want to replace it.', 'ai-site-search-chatbot' ),
+					'apiKeyConfig'             => __( 'A server-defined API key is active for this provider. Enter a value here only if you want to save a database fallback.', 'ai-site-search-chatbot' ),
+					'apiKeyEmpty'              => __( 'No saved API key exists for this provider yet.', 'ai-site-search-chatbot' ),
+					'bearerTokenStored'        => __( 'A saved bearer token is available. Enter a new value only if you want to replace it.', 'ai-site-search-chatbot' ),
+					'bearerTokenConfig'        => __( 'A server-defined bearer token is active. Enter a value here only if you want to save a database fallback.', 'ai-site-search-chatbot' ),
+					'bearerTokenEmpty'         => __( 'No saved bearer token exists yet.', 'ai-site-search-chatbot' ),
 				),
 			)
 		);
@@ -149,14 +156,16 @@ final class AISite_Search_Chatbot_Admin {
 					<tr id="aiscb_api_key_row">
 						<th scope="row"><label for="aiscb_api_key"><?php echo esc_html( __( 'API Key', 'ai-site-search-chatbot' ) ); ?></label></th>
 						<td>
-							<input type="password" class="regular-text" id="aiscb_api_key" name="<?php echo esc_attr( AISite_Search_Chatbot::OPTION_KEY ); ?>[api_key]" value="<?php echo esc_attr( $settings['api_key'] ); ?>" autocomplete="off" />
+							<input type="password" class="regular-text" id="aiscb_api_key" name="<?php echo esc_attr( AISite_Search_Chatbot::OPTION_KEY ); ?>[api_key]" value="" autocomplete="off" />
+							<p class="description" id="aiscb_api_key_status"></p>
 							<p class="description" id="aiscb_api_key_help"></p>
 						</td>
 					</tr>
 					<tr id="aiscb_claude_bearer_token_row" hidden>
 						<th scope="row"><label for="aiscb_claude_bearer_token"><?php echo esc_html( __( 'Bearer Token', 'ai-site-search-chatbot' ) ); ?></label></th>
 						<td>
-							<input type="password" class="regular-text" id="aiscb_claude_bearer_token" name="<?php echo esc_attr( AISite_Search_Chatbot::OPTION_KEY ); ?>[claude_bearer_token]" value="<?php echo esc_attr( $settings['claude_bearer_token'] ?? '' ); ?>" autocomplete="off" />
+							<input type="password" class="regular-text" id="aiscb_claude_bearer_token" name="<?php echo esc_attr( AISite_Search_Chatbot::OPTION_KEY ); ?>[claude_bearer_token]" value="" autocomplete="off" />
+							<p class="description" id="aiscb_claude_bearer_token_status"></p>
 							<p class="description"><?php echo esc_html( __( 'The auth token from your Claude account. Obtained by authenticating with Claude Code (claude auth login) and copying the session token.', 'ai-site-search-chatbot' ) ); ?></p>
 						</td>
 					</tr>

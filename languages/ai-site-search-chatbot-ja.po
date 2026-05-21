@@ -109,6 +109,34 @@ msgstr "%1$s リクエスト ID: %2$s"
 msgid "The request reached GitHub Models, but the inference endpoint returned an internal error. This usually indicates a temporary provider-side issue or a model-specific availability problem. Try another GitHub Models model such as openai/gpt-4.1, or retry later."
 msgstr "リクエストは GitHub Models まで到達しましたが、推論エンドポイントが内部エラーを返しました。これは通常、プロバイダー側の一時的な問題か、そのモデル固有の可用性の問題を示します。openai/gpt-4.1 など別の GitHub Models モデルを試すか、時間をおいて再試行してください。"
 
+#: includes/class-ai-site-search-chatbot.php:402
+msgid "The credential could not be stored securely on this server. The previous saved value was kept unchanged."
+msgstr "このサーバーでは認証情報を安全に保存できませんでした。以前に保存されていた値はそのまま保持されています。"
+
+#: includes/class-ai-site-search-chatbot-admin.php:76
+msgid "A saved API key is available for this provider. Enter a new value only if you want to replace it."
+msgstr "このプロバイダーには保存済みの API キーがあります。置き換える場合のみ新しい値を入力してください。"
+
+#: includes/class-ai-site-search-chatbot-admin.php:77
+msgid "A server-defined API key is active for this provider. Enter a value here only if you want to save a database fallback."
+msgstr "このプロバイダーではサーバー側で定義された API キーが有効です。データベース用のフォールバックを保存したい場合のみここに入力してください。"
+
+#: includes/class-ai-site-search-chatbot-admin.php:78
+msgid "No saved API key exists for this provider yet."
+msgstr "このプロバイダーにはまだ保存済みの API キーがありません。"
+
+#: includes/class-ai-site-search-chatbot-admin.php:79
+msgid "A saved bearer token is available. Enter a new value only if you want to replace it."
+msgstr "保存済みの Bearer Token があります。置き換える場合のみ新しい値を入力してください。"
+
+#: includes/class-ai-site-search-chatbot-admin.php:80
+msgid "A server-defined bearer token is active. Enter a value here only if you want to save a database fallback."
+msgstr "サーバー側で定義された Bearer Token が有効です。データベース用のフォールバックを保存したい場合のみここに入力してください。"
+
+#: includes/class-ai-site-search-chatbot-admin.php:81
+msgid "No saved bearer token exists yet."
+msgstr "まだ保存済みの Bearer Token はありません。"
+
 #: includes/class-ai-site-search-chatbot.php:1017
 #: includes/class-ai-site-search-chatbot.php:1045
 msgid "%1$s Details: %2$s"

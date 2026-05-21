@@ -33,6 +33,16 @@ WordPress サイト訪問者向けに、サイト内検索と生成 AI を組み
 4. 必要に応じて「Validate API Key and Model」と「Run Admin Chat Test」で接続確認
 5. 「Enable chatbot display on the public site」を有効化して保存
 
+補足: API キー / Bearer Token はデータベースに平文ではなく暗号化して保存されます。入力欄は保存済み値を再表示しないため、空欄のまま保存すると既存の秘密情報は保持されます。
+
+必要に応じて、wp-config.php またはサーバー環境変数で以下を定義すると、管理画面の保存値よりそちらが優先されます。
+
+- OpenAI: AISCB_OPENAI_API_KEY または OPENAI_API_KEY
+- Claude API Key: AISCB_CLAUDE_API_KEY または ANTHROPIC_API_KEY
+- Claude Bearer Token: AISCB_CLAUDE_BEARER_TOKEN または ANTHROPIC_AUTH_TOKEN
+- GitHub Models: AISCB_GITHUB_MODELS_TOKEN または GITHUB_MODELS_TOKEN
+- Gemini: AISCB_GEMINI_API_KEY または GEMINI_API_KEY
+
 ### Claude (Anthropic) を使う場合
 
 [Anthropic コンソール](https://platform.claude.com/settings/keys) で API キーを発行し、モデル ID に `claude-sonnet-4-6` または `claude-opus-4-7` などを指定してください。公式 PHP SDK を通じてリクエストが送信され、システムプロンプトは自動的にキャッシュされます。
@@ -91,6 +101,13 @@ Display Location を Display only where the shortcode is placed に設定した�
 - GitHub Models を使う場合は、外部 API 用の models:read 権限付きトークンが必要です。
 
 ## 変更履歴
+
+### 0.4.1
+
+- API キー / Bearer Token を WordPress のソルト由来キーで暗号化して保存するよう改善
+- 環境変数 / 定数に設定した秘密情報を管理画面の保存値より優先して利用するよう対応
+- 管理画面で保存済みの秘密情報を再表示せず、空欄保存時は既存値を保持する挙動を追記
+- 翻訳ファイル（`.pot` / `ja.po` / `ja_JP.po` / `.mo`）を更新
 
 ### 0.4.0
 

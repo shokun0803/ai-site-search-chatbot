@@ -104,6 +104,34 @@ msgstr ""
 msgid "The request reached GitHub Models, but the inference endpoint returned an internal error. This usually indicates a temporary provider-side issue or a model-specific availability problem. Try another GitHub Models model such as openai/gpt-4.1, or retry later."
 msgstr ""
 
+#: includes/class-ai-site-search-chatbot.php:402
+msgid "The credential could not be stored securely on this server. The previous saved value was kept unchanged."
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot-admin.php:76
+msgid "A saved API key is available for this provider. Enter a new value only if you want to replace it."
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot-admin.php:77
+msgid "A server-defined API key is active for this provider. Enter a value here only if you want to save a database fallback."
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot-admin.php:78
+msgid "No saved API key exists for this provider yet."
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot-admin.php:79
+msgid "A saved bearer token is available. Enter a new value only if you want to replace it."
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot-admin.php:80
+msgid "A server-defined bearer token is active. Enter a value here only if you want to save a database fallback."
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot-admin.php:81
+msgid "No saved bearer token exists yet."
+msgstr ""
+
 #: includes/class-ai-site-search-chatbot.php:1017
 #: includes/class-ai-site-search-chatbot.php:1045
 msgid "%1$s Details: %2$s"
