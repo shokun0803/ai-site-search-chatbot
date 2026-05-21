@@ -20,6 +20,8 @@ WordPress サイト訪問者向けに、サイト内検索と生成 AI を組み
 - Claude 統合: 公式 Anthropic PHP SDK を使用。システムプロンプトキャッシュにより、同じシステムプロンプトを繰り返し送信する際の API コストを削減
 - 汎用サイト案内: サイト名、説明文、公開コンテンツ要約をもとに、サイトの使い方や掲載情報の種類などの案内質問にも AI が応答
 - 管理画面: API キー、モデル名、システムプロンプト、参照件数、表示場所、デザインの設定
+- Saved Knowledge Base: 一般化した質問・回答ペアを管理画面でレビューし、承認状態を切り替えながら再利用可能
+- ナレッジ管理: Saved Knowledge Base を CSV でエクスポート / インポート可能
 - 接続確認: API キーとモデル ID のバリデーション、および管理画面上でのチャットテスト
 - 利用状況確認: 最新 50 件の公開チャット履歴を管理画面で確認可能
 - フロント UI: 自動表示、ショートコード、Gutenberg ブロックに対応した訪問者向けチャット画面
@@ -89,8 +91,10 @@ Display Location を Display only where the shortcode is placed に設定した�
 - System Prompt: 回答方針を調整するシステムプロンプト
 - Maximum Sources: 回答時に参照する検索結果の上限件数
 - AI Reply Limit (10 minutes / 1 hour): 同一接続からの AI 応答回数の上限。まずは 10 分で 6 から 10 回、1 時間で 20 から 40 回程度を目安に調整
+- Saved Knowledge Base: 一般化した質問・回答ペアの確認、承認状態の切り替え、CSV のエクスポート / インポート
 - Display Location: 全ページ表示、トップページのみ表示、ショートコードまたはブロック設置箇所のみ表示
 - Chatbot Design: Business / Cute
+- Uninstall Data Policy: プラグイン削除時に設定・ログ・保存済みナレッジを保持するか削除するかを選択
 - Recent Visitor Chat Logs: 公開チャットの質問、回答、時刻、参照件数、マスク済み IP を管理画面で確認
 
 ## 補足
@@ -101,6 +105,14 @@ Display Location を Display only where the shortcode is placed に設定した�
 - GitHub Models を使う場合は、外部 API 用の models:read 権限付きトークンが必要です。
 
 ## 変更履歴
+
+### 0.5.0
+
+- Saved Knowledge Base タブを追加し、一般化した質問・回答ペアの作成、編集、削除、承認状態管理に対応
+- Saved Knowledge Base の CSV エクスポート / インポート、および検索・状態フィルタを追加
+- 管理画面のナレッジ導線と操作性を改善
+- Uninstall Data Policy と uninstall.php を追加し、プラグイン削除時のデータ保持 / 削除を選択可能に
+- 翻訳ファイル（`.pot` / `ja.po` / `ja_JP.po` / `.mo`）を更新
 
 ### 0.4.1
 

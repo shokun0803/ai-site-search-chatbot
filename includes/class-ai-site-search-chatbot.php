@@ -5,7 +5,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 final class AISite_Search_Chatbot {
-	const VERSION = '0.4.1';
+	const VERSION = '0.5.0';
 	const OPTION_KEY = 'aiscb_settings';
 	const OPTION_GROUP = 'aiscb_settings_group';
 	const REST_NAMESPACE = 'ai-site-search-chatbot/v1';
