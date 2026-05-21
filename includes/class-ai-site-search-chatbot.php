@@ -2980,24 +2980,28 @@ final class AISite_Search_Chatbot {
 
 	private static function generate_answer( string $message, array $results, array $route = array() ): array {
 		$settings = self::get_settings();
-		$sources = self::build_sources( $results, (int) $settings['max_sources'] );
+		$max_sources = (int) $settings['max_sources'];
 		$intent = isset( $route['intent'] ) ? (string) $route['intent'] : 'site-search';
 
 		if ( ! self::has_active_provider_credential( $settings ) ) {
+			$answer = self::build_fallback_answer( $message, $results );
+
 			return array(
-				'answer'   => self::build_fallback_answer( $message, $results ),
+				'answer'   => $answer,
 				'used_ai'  => false,
-				'sources'  => $sources,
+				'sources'  => self::build_sources( $results, $max_sources, $answer ),
 				'log_status' => 'fallback-no-config',
 			);
 		}
 
 		if ( 'site-guidance' === $intent ) {
 			if ( self::is_ai_usage_limited() ) {
+				$answer = self::build_ai_limited_fallback_answer( $message, $results );
+
 				return array(
-					'answer'      => self::build_ai_limited_fallback_answer( $message, $results ),
+					'answer'      => $answer,
 					'used_ai'     => false,
-					'sources'     => $sources,
+					'sources'     => self::build_sources( $results, $max_sources, $answer ),
 					'log_status'  => 'ai-limited-site-guidance',
 				);
 			}
@@ -3013,29 +3017,34 @@ final class AISite_Search_Chatbot {
 			);
 
 			if ( is_wp_error( $response_data ) || ! $response_data['success'] ) {
+				$answer = self::build_fallback_answer( $message, $results );
+
 				return array(
-					'answer'      => self::build_fallback_answer( $message, $results ),
+					'answer'      => $answer,
 					'used_ai'     => false,
-					'sources'     => $sources,
+					'sources'     => self::build_sources( $results, $max_sources, $answer ),
 					'log_status'  => 'fallback-site-guidance-provider-error',
 				);
 			}
 
 			self::register_ai_usage();
+			$answer = (string) $response_data['content'];
 
 			return array(
-				'answer'      => $response_data['content'],
+				'answer'      => $answer,
 				'used_ai'     => true,
-				'sources'     => $sources,
+				'sources'     => self::build_sources( $results, $max_sources, $answer ),
 				'log_status'  => 'ai-site-guidance',
 			);
 		}
 
 		if ( empty( $results ) ) {
+			$answer = self::build_fallback_answer( $message, $results );
+
 			return array(
-				'answer'   => self::build_fallback_answer( $message, $results ),
+				'answer'   => $answer,
 				'used_ai'  => false,
-				'sources'  => $sources,
+				'sources'  => self::build_sources( $results, $max_sources, $answer ),
 				'log_status' => 'fallback-no-results',
 			);
 		}
@@ -3046,7 +3055,7 @@ final class AISite_Search_Chatbot {
 			return array(
 				'answer'  => $cached_answer,
 				'used_ai' => true,
-				'sources' => $sources,
+				'sources' => self::build_sources( $results, $max_sources, $cached_answer ),
 				'log_status' => 'ai-cached',
 			);
 		}
@@ -3063,16 +3072,18 @@ final class AISite_Search_Chatbot {
 			return array(
 				'answer' => (string) $reused_knowledge['entry']['answer_generalized'],
 				'used_ai' => ! empty( $reused_knowledge['used_ai_selection'] ),
-				'sources' => $sources,
+				'sources' => self::build_sources( $results, $max_sources, (string) $reused_knowledge['entry']['answer_generalized'] ),
 				'log_status' => ! empty( $reused_knowledge['used_ai_selection'] ) ? 'ai-knowledge-reused' : 'knowledge-reused',
 			);
 		}
 
 		if ( self::is_ai_usage_limited() ) {
+			$answer = self::build_ai_limited_fallback_answer( $message, $results );
+
 			return array(
-				'answer'  => self::build_ai_limited_fallback_answer( $message, $results ),
+				'answer'  => $answer,
 				'used_ai' => false,
-				'sources' => $sources,
+				'sources' => self::build_sources( $results, $max_sources, $answer ),
 				'log_status' => 'ai-limited',
 			);
 		}
@@ -3080,22 +3091,25 @@ final class AISite_Search_Chatbot {
 		$response_data = self::request_ai_answer( $settings, $message, $results );
 
 		if ( is_wp_error( $response_data ) || ! $response_data['success'] ) {
+			$answer = self::build_fallback_answer( $message, $results );
+
 			return array(
-				'answer'  => self::build_fallback_answer( $message, $results ),
+				'answer'  => $answer,
 				'used_ai' => false,
-				'sources' => $sources,
+				'sources' => self::build_sources( $results, $max_sources, $answer ),
 				'log_status' => 'fallback-provider-error',
 			);
 		}
 
-		self::store_cached_ai_answer( $settings, $message, $results, (string) $response_data['content'] );
-		$knowledge_candidate = self::maybe_store_generated_knowledge_candidate( $settings, $message, (string) $response_data['content'], $results );
+		$answer = (string) $response_data['content'];
+		self::store_cached_ai_answer( $settings, $message, $results, $answer );
+		$knowledge_candidate = self::maybe_store_generated_knowledge_candidate( $settings, $message, $answer, $results );
 		self::register_ai_usage();
 
 		return array(
-			'answer'  => $response_data['content'],
+			'answer'  => $answer,
 			'used_ai' => true,
-			'sources' => $sources,
+			'sources' => self::build_sources( $results, $max_sources, $answer ),
 			'log_status' => 'ai-generated',
 			'knowledge_candidate' => $knowledge_candidate,
 		);
@@ -3887,10 +3901,51 @@ final class AISite_Search_Chatbot {
 		return $answer . "\n" . $notice;
 	}
 
-	private static function build_sources( array $results, int $max_sources ): array {
+	private static function build_sources( array $results, int $max_sources, string $answer = '' ): array {
+		$ranked_results = array_slice( $results, 0, max( $max_sources * 2, $max_sources ) );
+		$normalized_answer = self::normalize_message_for_cache( $answer );
+
+		if ( '' !== $normalized_answer && ! empty( $ranked_results ) ) {
+			foreach ( $ranked_results as $index => &$result ) {
+				$title = isset( $result['title'] ) ? (string) $result['title'] : '';
+				$excerpt = isset( $result['excerpt'] ) ? (string) $result['excerpt'] : '';
+				$content_snippet = isset( $result['content_snippet'] ) ? (string) $result['content_snippet'] : '';
+				$title_score = self::calculate_question_similarity_score( $answer, $title );
+				$excerpt_score = self::calculate_question_similarity_score( $answer, $excerpt );
+				$snippet_score = self::calculate_question_similarity_score( $answer, $content_snippet );
+				$contains_bonus = 0.0;
+
+				foreach ( array( $title, $excerpt, $content_snippet ) as $candidate_text ) {
+					$normalized_candidate = self::normalize_message_for_cache( $candidate_text );
+
+					if ( '' !== $normalized_candidate && 8 <= self::unicode_length( $normalized_candidate ) && false !== strpos( $normalized_answer, $normalized_candidate ) ) {
+						$contains_bonus = 0.35;
+						break;
+					}
+				}
+
+				$result['_source_score'] = ( $title_score * 0.45 ) + ( max( $excerpt_score, $snippet_score ) * 0.55 ) + $contains_bonus;
+				$result['_source_index'] = $index;
+			}
+			unset( $result );
+
+			usort(
+				$ranked_results,
+				static function ( array $left, array $right ): int {
+					$score_compare = ( $right['_source_score'] ?? 0 ) <=> ( $left['_source_score'] ?? 0 );
+
+					if ( 0 !== $score_compare ) {
+						return $score_compare;
+					}
+
+					return ( $left['_source_index'] ?? 0 ) <=> ( $right['_source_index'] ?? 0 );
+				}
+			);
+		}
+
 		$sources = array();
 
-		foreach ( array_slice( $results, 0, $max_sources ) as $result ) {
+		foreach ( array_slice( $ranked_results, 0, $max_sources ) as $result ) {
 			$sources[] = array(
 				'title'   => $result['title'],
 				'url'     => $result['url'],
