@@ -275,15 +275,19 @@
 }
 
 .aiscb-admin .aiscb-log-table__status {
-	min-width: 150px;
+	min-width: 240px;
 }
 
 .aiscb-admin .aiscb-log-table__time {
-	min-width: 150px;
+	min-width: 190px;
 }
 
 .aiscb-admin .aiscb-log-table__time > div:first-child {
 	white-space: nowrap;
+}
+
+.aiscb-admin .aiscb-log-table__status .aiscb-log-meta {
+	margin-top: 8px;
 }
 
 .aiscb-admin .aiscb-log-meta {

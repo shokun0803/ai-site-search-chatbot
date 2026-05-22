@@ -535,8 +535,8 @@ final class AISite_Search_Chatbot_Admin {
 					<table class="widefat fixed striped aiscb-log-table">
 						<thead>
 							<tr>
-								<th><?php echo esc_html( __( 'Status', 'ai-site-search-chatbot' ) ); ?></th>
-								<th><?php echo esc_html( __( 'Time', 'ai-site-search-chatbot' ) ); ?></th>
+								<th><?php echo esc_html( __( 'Status / AI', 'ai-site-search-chatbot' ) ); ?></th>
+								<th><?php echo esc_html( __( 'Details', 'ai-site-search-chatbot' ) ); ?></th>
 								<th><?php echo esc_html( __( 'Visitor Message', 'ai-site-search-chatbot' ) ); ?></th>
 								<th><?php echo esc_html( __( 'Reply', 'ai-site-search-chatbot' ) ); ?></th>
 							</tr>
@@ -554,6 +554,9 @@ final class AISite_Search_Chatbot_Admin {
 											<span class="dashicons <?php echo esc_attr( $status['icon'] ); ?>" aria-hidden="true"></span>
 											<?php echo esc_html( $status['label'] ); ?>
 										</span>
+										<?php if ( array_key_exists( 'ai_usage_summary', $log ) ) : ?>
+											<?php self::render_ai_usage_summary( isset( $log['ai_usage_summary'] ) && is_array( $log['ai_usage_summary'] ) ? $log['ai_usage_summary'] : array() ); ?>
+										<?php endif; ?>
 									</td>
 									<td class="aiscb-log-table__time">
 										<div><?php echo esc_html( $timestamp ? wp_date( 'Y-m-d H:i:s', $timestamp ) : '-' ); ?></div>
@@ -604,6 +607,111 @@ final class AISite_Search_Chatbot_Admin {
 			<div class="aiscb-log-details__body"><?php echo esc_html( $text ); ?></div>
 		</details>
 		<?php
+	}
+
+	private static function render_ai_usage_summary( array $summary ): void {
+		$total_requests = isset( $summary['total_requests'] ) ? absint( $summary['total_requests'] ) : 0;
+		$total_input_tokens = isset( $summary['total_input_tokens'] ) ? absint( $summary['total_input_tokens'] ) : 0;
+		$total_output_tokens = isset( $summary['total_output_tokens'] ) ? absint( $summary['total_output_tokens'] ) : 0;
+		$total_request_characters = isset( $summary['total_request_characters_in'] ) ? absint( $summary['total_request_characters_in'] ) : 0;
+		$total_response_characters = isset( $summary['total_response_characters_out'] ) ? absint( $summary['total_response_characters_out'] ) : 0;
+		$total_cache_creation_tokens = isset( $summary['total_cache_creation_tokens'] ) ? absint( $summary['total_cache_creation_tokens'] ) : 0;
+		$total_cache_read_tokens = isset( $summary['total_cache_read_tokens'] ) ? absint( $summary['total_cache_read_tokens'] ) : 0;
+		$usage_sources = isset( $summary['usage_sources'] ) && is_array( $summary['usage_sources'] ) ? $summary['usage_sources'] : array();
+
+		echo '<div class="aiscb-log-meta">' . esc_html( sprintf( __( 'AI Requests: %d', 'ai-site-search-chatbot' ), $total_requests ) ) . '</div>';
+
+		if ( 0 === $total_requests ) {
+			return;
+		}
+
+		$actual_count = isset( $usage_sources['actual'] ) ? absint( $usage_sources['actual'] ) : 0;
+		$estimated_count = isset( $usage_sources['estimated'] ) ? absint( $usage_sources['estimated'] ) : 0;
+		$unavailable_count = isset( $usage_sources['unavailable'] ) ? absint( $usage_sources['unavailable'] ) : 0;
+		$token_label = ( 0 === $actual_count && $estimated_count > 0 && 0 === $unavailable_count )
+			? __( 'Chat Token Estimate: in %1$d / out %2$d', 'ai-site-search-chatbot' )
+			: __( 'Chat Tokens: in %1$d / out %2$d', 'ai-site-search-chatbot' );
+
+		echo '<div class="aiscb-log-meta">' . esc_html( sprintf( $token_label, $total_input_tokens, $total_output_tokens ) ) . '</div>';
+		echo '<div class="aiscb-log-meta">' . esc_html( sprintf( __( 'Chat Characters: in %1$d / out %2$d', 'ai-site-search-chatbot' ), $total_request_characters, $total_response_characters ) ) . '</div>';
+
+		if ( $total_cache_creation_tokens > 0 || $total_cache_read_tokens > 0 ) {
+			echo '<div class="aiscb-log-meta">' . esc_html( sprintf( __( 'Cache Tokens: create %1$d / read %2$d', 'ai-site-search-chatbot' ), $total_cache_creation_tokens, $total_cache_read_tokens ) ) . '</div>';
+		}
+
+		echo '<div class="aiscb-log-meta">' . esc_html( sprintf( __( 'Usage Sources: %s', 'ai-site-search-chatbot' ), self::format_usage_source_breakdown( $usage_sources ) ) ) . '</div>';
+
+		$provider_breakdown = self::format_ai_usage_bucket_breakdown( isset( $summary['providers'] ) && is_array( $summary['providers'] ) ? $summary['providers'] : array(), 'provider' );
+		if ( '' !== $provider_breakdown ) {
+			echo '<div class="aiscb-log-meta">' . esc_html( sprintf( __( 'Providers: %s', 'ai-site-search-chatbot' ), $provider_breakdown ) ) . '</div>';
+		}
+
+		$purpose_breakdown = self::format_ai_usage_bucket_breakdown( isset( $summary['purposes'] ) && is_array( $summary['purposes'] ) ? $summary['purposes'] : array(), 'purpose' );
+		if ( '' !== $purpose_breakdown ) {
+			echo '<div class="aiscb-log-meta">' . esc_html( sprintf( __( 'AI Steps: %s', 'ai-site-search-chatbot' ), $purpose_breakdown ) ) . '</div>';
+		}
+	}
+
+	private static function format_usage_source_breakdown( array $sources ): string {
+		$labels = array(
+			'actual' => __( 'actual', 'ai-site-search-chatbot' ),
+			'estimated' => __( 'estimated', 'ai-site-search-chatbot' ),
+			'unavailable' => __( 'unavailable', 'ai-site-search-chatbot' ),
+		);
+		$parts = array();
+
+		foreach ( $labels as $key => $label ) {
+			$count = isset( $sources[ $key ] ) ? absint( $sources[ $key ] ) : 0;
+			if ( $count <= 0 ) {
+				continue;
+			}
+
+			$parts[] = sprintf( '%s %d', $label, $count );
+		}
+
+		return empty( $parts ) ? '-' : implode( ', ', $parts );
+	}
+
+	private static function format_ai_usage_bucket_breakdown( array $buckets, string $type ): string {
+		if ( empty( $buckets ) ) {
+			return '';
+		}
+
+		$providers = AISite_Search_Chatbot::get_providers_config();
+		$parts = array();
+
+		foreach ( $buckets as $key => $bucket ) {
+			if ( ! is_array( $bucket ) ) {
+				continue;
+			}
+
+			$requests = isset( $bucket['requests'] ) ? absint( $bucket['requests'] ) : 0;
+			if ( $requests <= 0 ) {
+				continue;
+			}
+
+			$input_tokens = isset( $bucket['input_tokens'] ) ? absint( $bucket['input_tokens'] ) : 0;
+			$output_tokens = isset( $bucket['output_tokens'] ) ? absint( $bucket['output_tokens'] ) : 0;
+			$label = 'provider' === $type
+				? ( isset( $providers[ $key ]['label'] ) ? (string) $providers[ $key ]['label'] : (string) $key )
+				: self::format_ai_purpose_label( (string) $key );
+
+			$parts[] = sprintf( '%1$s %2$d (%3$d/%4$d)', $label, $requests, $input_tokens, $output_tokens );
+		}
+
+		return implode( ', ', $parts );
+	}
+
+	private static function format_ai_purpose_label( string $purpose ): string {
+		$labels = array(
+			'route_classification' => __( 'Route', 'ai-site-search-chatbot' ),
+			'knowledge_selection' => __( 'Knowledge Match', 'ai-site-search-chatbot' ),
+			'answer_generation' => __( 'Answer', 'ai-site-search-chatbot' ),
+			'site_guidance_generation' => __( 'Site Guidance', 'ai-site-search-chatbot' ),
+			'knowledge_candidate_generation' => __( 'Knowledge Draft', 'ai-site-search-chatbot' ),
+		);
+
+		return $labels[ $purpose ] ?? $purpose;
 	}
 
 	private static function format_search_queries( array $queries ): string {

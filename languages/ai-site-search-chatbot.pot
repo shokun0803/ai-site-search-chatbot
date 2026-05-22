@@ -108,16 +108,68 @@ msgstr ""
 msgid "The credential could not be stored securely on this server. The previous saved value was kept unchanged."
 msgstr ""
 
-#: includes/class-ai-site-search-chatbot-admin.php:76
-msgid "A saved API key is available for this provider. Enter a new value only if you want to replace it."
+#: includes/class-ai-site-search-chatbot-admin.php:258
+msgid "Status / AI"
 msgstr ""
 
-#: includes/class-ai-site-search-chatbot-admin.php:77
+#: includes/class-ai-site-search-chatbot-admin.php:259
+msgid "Details"
+msgstr ""
+
+#: includes/class-ai-site-search-chatbot-admin.php:260
 msgid "A server-defined API key is active for this provider. Enter a value here only if you want to save a database fallback."
 msgstr ""
 
-#: includes/class-ai-site-search-chatbot-admin.php:78
+#: includes/class-ai-site-search-chatbot-admin.php:261
 msgid "No saved API key exists for this provider yet."
+msgstr ""
+
+msgid "AI Requests: %d"
+msgstr ""
+
+msgid "Chat Token Estimate: in %1$d / out %2$d"
+msgstr ""
+
+msgid "Chat Tokens: in %1$d / out %2$d"
+msgstr ""
+
+msgid "Chat Characters: in %1$d / out %2$d"
+msgstr ""
+
+msgid "Cache Tokens: create %1$d / read %2$d"
+msgstr ""
+
+msgid "Usage Sources: %s"
+msgstr ""
+
+msgid "Providers: %s"
+msgstr ""
+
+msgid "AI Steps: %s"
+msgstr ""
+
+msgid "actual"
+msgstr ""
+
+msgid "estimated"
+msgstr ""
+
+msgid "unavailable"
+msgstr ""
+
+msgid "Route"
+msgstr ""
+
+msgid "Knowledge Match"
+msgstr ""
+
+msgid "Answer"
+msgstr ""
+
+msgid "Site Guidance"
+msgstr ""
+
+msgid "Knowledge Draft"
 msgstr ""
 
 #: includes/class-ai-site-search-chatbot-admin.php:79

@@ -4,8 +4,107 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+final class AISCB_AI_Usage_Accumulator {
+	private $summary;
+
+	public function __construct() {
+		$this->summary = array(
+			'total_requests' => 0,
+			'completed_requests' => 0,
+			'failed_requests' => 0,
+			'total_input_tokens' => 0,
+			'total_output_tokens' => 0,
+			'total_cache_creation_tokens' => 0,
+			'total_cache_read_tokens' => 0,
+			'total_request_characters_in' => 0,
+			'total_response_characters_out' => 0,
+			'usage_sources' => array(),
+			'providers' => array(),
+			'purposes' => array(),
+		);
+	}
+
+	public function add_call( array $usage ): void {
+		$provider = isset( $usage['provider'] ) ? sanitize_key( (string) $usage['provider'] ) : 'unknown';
+		$purpose = isset( $usage['purpose'] ) ? sanitize_key( (string) $usage['purpose'] ) : 'unknown';
+		$source = isset( $usage['usage_source'] ) ? sanitize_key( (string) $usage['usage_source'] ) : 'unavailable';
+		$success = ! empty( $usage['success'] );
+		$input_tokens = isset( $usage['input_tokens'] ) ? max( 0, absint( $usage['input_tokens'] ) ) : 0;
+		$output_tokens = isset( $usage['output_tokens'] ) ? max( 0, absint( $usage['output_tokens'] ) ) : 0;
+		$cache_creation_tokens = isset( $usage['cache_creation_tokens'] ) ? max( 0, absint( $usage['cache_creation_tokens'] ) ) : 0;
+		$cache_read_tokens = isset( $usage['cache_read_tokens'] ) ? max( 0, absint( $usage['cache_read_tokens'] ) ) : 0;
+		$request_characters = isset( $usage['request_characters_in'] ) ? max( 0, absint( $usage['request_characters_in'] ) ) : 0;
+		$response_characters = isset( $usage['response_characters_out'] ) ? max( 0, absint( $usage['response_characters_out'] ) ) : 0;
+
+		++$this->summary['total_requests'];
+		$this->summary['completed_requests'] += $success ? 1 : 0;
+		$this->summary['failed_requests'] += $success ? 0 : 1;
+		$this->summary['total_input_tokens'] += $input_tokens;
+		$this->summary['total_output_tokens'] += $output_tokens;
+		$this->summary['total_cache_creation_tokens'] += $cache_creation_tokens;
+		$this->summary['total_cache_read_tokens'] += $cache_read_tokens;
+		$this->summary['total_request_characters_in'] += $request_characters;
+		$this->summary['total_response_characters_out'] += $response_characters;
+
+		if ( ! isset( $this->summary['usage_sources'][ $source ] ) ) {
+			$this->summary['usage_sources'][ $source ] = 0;
+		}
+
+		++$this->summary['usage_sources'][ $source ];
+
+		if ( ! isset( $this->summary['providers'][ $provider ] ) ) {
+			$this->summary['providers'][ $provider ] = $this->create_bucket();
+		}
+
+		if ( ! isset( $this->summary['purposes'][ $purpose ] ) ) {
+			$this->summary['purposes'][ $purpose ] = $this->create_bucket();
+		}
+
+		$this->add_to_bucket( $this->summary['providers'][ $provider ], $success, $source, $input_tokens, $output_tokens, $cache_creation_tokens, $cache_read_tokens, $request_characters, $response_characters );
+		$this->add_to_bucket( $this->summary['purposes'][ $purpose ], $success, $source, $input_tokens, $output_tokens, $cache_creation_tokens, $cache_read_tokens, $request_characters, $response_characters );
+	}
+
+	public function export_summary(): array {
+		return $this->summary;
+	}
+
+	private function create_bucket(): array {
+		return array(
+			'requests' => 0,
+			'completed_requests' => 0,
+			'failed_requests' => 0,
+			'input_tokens' => 0,
+			'output_tokens' => 0,
+			'cache_creation_tokens' => 0,
+			'cache_read_tokens' => 0,
+			'request_characters_in' => 0,
+			'response_characters_out' => 0,
+			'usage_sources' => array(),
+		);
+	}
+
+	private function add_to_bucket( array &$bucket, bool $success, string $source, int $input_tokens, int $output_tokens, int $cache_creation_tokens, int $cache_read_tokens, int $request_characters, int $response_characters ): void {
+		++$bucket['requests'];
+		$bucket['completed_requests'] += $success ? 1 : 0;
+		$bucket['failed_requests'] += $success ? 0 : 1;
+		$bucket['input_tokens'] += $input_tokens;
+		$bucket['output_tokens'] += $output_tokens;
+		$bucket['cache_creation_tokens'] += $cache_creation_tokens;
+		$bucket['cache_read_tokens'] += $cache_read_tokens;
+		$bucket['request_characters_in'] += $request_characters;
+		$bucket['response_characters_out'] += $response_characters;
+
+		if ( ! isset( $bucket['usage_sources'][ $source ] ) ) {
+			$bucket['usage_sources'][ $source ] = 0;
+		}
+
+		++$bucket['usage_sources'][ $source ];
+	}
+}
+
 final class AISite_Search_Chatbot {
 	const VERSION = '0.5.0';
+	const TOKEN_ESTIMATION_VERSION = 'char-mix-v1';
 	const OPTION_KEY = 'aiscb_settings';
 	const OPTION_GROUP = 'aiscb_settings_group';
 	const REST_NAMESPACE = 'ai-site-search-chatbot/v1';
@@ -1439,7 +1538,7 @@ final class AISite_Search_Chatbot {
 		return $result;
 	}
 
-	private static function choose_knowledge_base_entry_with_ai( array $settings, string $message, array $results, array $candidates ): array {
+	private static function choose_knowledge_base_entry_with_ai( array $settings, string $message, array $results, array $candidates, ?AISCB_AI_Usage_Accumulator $usage_accumulator = null ): array {
 		if ( empty( $candidates ) ) {
 			return array();
 		}
@@ -1449,9 +1548,11 @@ final class AISite_Search_Chatbot {
 			$message,
 			$results,
 			array(
+				'purpose' => 'knowledge_selection',
 				'system_prompt' => self::build_knowledge_base_match_system_prompt(),
 				'user_prompt' => self::build_knowledge_base_match_prompt( $message, $results, $candidates ),
-			)
+			),
+			$usage_accumulator
 		);
 
 		if ( is_wp_error( $response ) || empty( $response['success'] ) || empty( $response['content'] ) ) {
@@ -1485,7 +1586,7 @@ final class AISite_Search_Chatbot {
 		$wpdb->query( $wpdb->prepare( "UPDATE {$table_name} SET use_count = use_count + 1, last_used_at = %s WHERE id = %d", current_time( 'mysql', true ), $id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	}
 
-	private static function maybe_get_reusable_knowledge_base_entry( array $settings, string $message, array $results ): array {
+	private static function maybe_get_reusable_knowledge_base_entry( array $settings, string $message, array $results, ?AISCB_AI_Usage_Accumulator $usage_accumulator = null ): array {
 		if ( empty( $settings['knowledge_base_enabled'] ) ) {
 			return array();
 		}
@@ -1513,7 +1614,7 @@ final class AISite_Search_Chatbot {
 			return array();
 		}
 
-		$selected = self::choose_knowledge_base_entry_with_ai( $settings, $message, $results, $candidates );
+		$selected = self::choose_knowledge_base_entry_with_ai( $settings, $message, $results, $candidates, $usage_accumulator );
 
 		if ( empty( $selected['entry'] ) ) {
 			return array();
@@ -1603,7 +1704,7 @@ final class AISite_Search_Chatbot {
 		return false;
 	}
 
-	private static function maybe_store_generated_knowledge_candidate( array $settings, string $message, string $answer, array $results ): array {
+	private static function maybe_store_generated_knowledge_candidate( array $settings, string $message, string $answer, array $results, ?AISCB_AI_Usage_Accumulator $usage_accumulator = null ): array {
 		$status = array(
 			'attempted' => false,
 			'status' => '',
@@ -1624,9 +1725,11 @@ final class AISite_Search_Chatbot {
 			$message,
 			$results,
 			array(
+				'purpose' => 'knowledge_candidate_generation',
 				'system_prompt' => self::build_knowledge_candidate_generation_system_prompt(),
 				'user_prompt' => self::build_knowledge_candidate_generation_prompt( $message, $answer, $results ),
-			)
+			),
+			$usage_accumulator
 		);
 
 		if ( is_wp_error( $response ) || empty( $response['success'] ) || empty( $response['content'] ) ) {
@@ -1953,7 +2056,8 @@ final class AISite_Search_Chatbot {
 		}
 
 		$settings = self::get_settings();
-		$route = self::analyze_message_route( $message, $settings );
+		$usage_accumulator = new AISCB_AI_Usage_Accumulator();
+		$route = self::analyze_message_route( $message, $settings, $usage_accumulator );
 
 		if ( 'reject' === $route['intent'] ) {
 			self::append_chat_log(
@@ -1963,6 +2067,7 @@ final class AISite_Search_Chatbot {
 					'status'       => 'rejected-pre-ai',
 					'used_ai'      => false,
 					'source_count' => 0,
+					'ai_usage_summary' => $usage_accumulator->export_summary(),
 				)
 			);
 
@@ -1981,7 +2086,7 @@ final class AISite_Search_Chatbot {
 		$search_queries = self::resolve_search_queries( $message, $settings, $route );
 		$route['queries'] = $search_queries;
 		$results = self::search_site_content( $message, $settings, $route );
-		$answer = self::generate_answer( $message, $results, $route );
+		$answer = self::generate_answer( $message, $results, $route, $usage_accumulator );
 		self::append_chat_log(
 			array(
 				'question'     => $message,
@@ -1993,6 +2098,7 @@ final class AISite_Search_Chatbot {
 				'knowledge_candidate_status' => isset( $answer['knowledge_candidate']['status'] ) ? (string) $answer['knowledge_candidate']['status'] : '',
 				'knowledge_candidate_note' => isset( $answer['knowledge_candidate']['note'] ) ? (string) $answer['knowledge_candidate']['note'] : '',
 				'knowledge_candidate_pii_flag' => ! empty( $answer['knowledge_candidate']['pii_flag'] ),
+				'ai_usage_summary' => $usage_accumulator->export_summary(),
 			)
 		);
 
@@ -2306,7 +2412,7 @@ final class AISite_Search_Chatbot {
 		return self::build_search_queries( $message, $settings );
 	}
 
-	private static function analyze_message_route( string $message, array $settings ): array {
+	private static function analyze_message_route( string $message, array $settings, ?AISCB_AI_Usage_Accumulator $usage_accumulator = null ): array {
 		if ( self::is_obvious_spam_message( $message ) ) {
 			return array(
 				'intent'  => 'reject',
@@ -2324,7 +2430,7 @@ final class AISite_Search_Chatbot {
 			);
 		}
 
-		$response = self::request_ai_message_route( $settings, $message );
+		$response = self::request_ai_message_route( $settings, $message, $usage_accumulator );
 
 		if ( empty( $response['success'] ) || empty( $response['content'] ) ) {
 			return array(
@@ -2482,12 +2588,12 @@ final class AISite_Search_Chatbot {
 		return $queries;
 	}
 
-	private static function extract_search_queries_with_ai( string $message, array $settings ): array {
+	private static function extract_search_queries_with_ai( string $message, array $settings, ?AISCB_AI_Usage_Accumulator $usage_accumulator = null ): array {
 		if ( ! self::has_active_provider_credential( $settings ) || empty( $settings['model'] ) ) {
 			return array();
 		}
 
-		$response = self::request_ai_message_route( $settings, $message );
+		$response = self::request_ai_message_route( $settings, $message, $usage_accumulator );
 
 		if ( empty( $response['success'] ) || empty( $response['content'] ) ) {
 			return array();
@@ -2502,54 +2608,21 @@ final class AISite_Search_Chatbot {
 		return self::normalize_search_queries( $route['queries'] );
 	}
 
-	private static function request_ai_message_route( array $settings, string $message ): array {
+	private static function request_ai_message_route( array $settings, string $message, ?AISCB_AI_Usage_Accumulator $usage_accumulator = null ): array {
 		$system_prompt = self::get_search_query_system_prompt();
 		$user_prompt = self::build_search_query_prompt( $message );
-		$provider = $settings['ai_provider'] ?? 'openai';
 
-		switch ( $provider ) {
-			case 'claude':
-				return self::call_claude_api(
-					$settings,
-					$message,
-					array(),
-					array(
-						'system_prompt' => $system_prompt,
-						'user_prompt'   => $user_prompt,
-					)
-				);
-			case 'github-copilot':
-				return self::call_github_copilot_api(
-					$settings,
-					$message,
-					array(),
-					array(
-						'system_prompt' => $system_prompt,
-						'user_prompt'   => $user_prompt,
-					)
-				);
-			case 'gemini':
-				return self::call_gemini_api(
-					$settings,
-					$message,
-					array(),
-					array(
-						'system_prompt' => $system_prompt,
-						'user_prompt'   => $user_prompt,
-					)
-				);
-			case 'openai':
-			default:
-				return self::call_openai_api(
-					$settings,
-					$message,
-					array(),
-					array(
-						'system_prompt' => $system_prompt,
-						'user_prompt'   => $user_prompt,
-					)
-				);
-		}
+		return self::request_ai_completion(
+			$settings,
+			$message,
+			array(),
+			'route_classification',
+			array(
+				'system_prompt' => $system_prompt,
+				'user_prompt'   => $user_prompt,
+			),
+			$usage_accumulator
+		);
 	}
 
 	private static function parse_ai_message_route( string $content, string $message ): array {
@@ -2978,7 +3051,7 @@ final class AISite_Search_Chatbot {
 		return $snippet;
 	}
 
-	private static function generate_answer( string $message, array $results, array $route = array() ): array {
+	private static function generate_answer( string $message, array $results, array $route = array(), ?AISCB_AI_Usage_Accumulator $usage_accumulator = null ): array {
 		$settings = self::get_settings();
 		$max_sources = (int) $settings['max_sources'];
 		$intent = isset( $route['intent'] ) ? (string) $route['intent'] : 'site-search';
@@ -3011,9 +3084,11 @@ final class AISite_Search_Chatbot {
 				$message,
 				$results,
 				array(
+					'purpose' => 'site_guidance_generation',
 					'system_prompt' => self::get_site_guidance_system_prompt(),
 					'user_prompt'   => self::build_site_guidance_prompt( $message, $results ),
-				)
+				),
+				$usage_accumulator
 			);
 
 			if ( is_wp_error( $response_data ) || ! $response_data['success'] ) {
@@ -3060,7 +3135,7 @@ final class AISite_Search_Chatbot {
 			);
 		}
 
-		$reused_knowledge = self::maybe_get_reusable_knowledge_base_entry( $settings, $message, $results );
+		$reused_knowledge = self::maybe_get_reusable_knowledge_base_entry( $settings, $message, $results, $usage_accumulator );
 
 		if ( ! empty( $reused_knowledge['entry'] ) ) {
 			self::mark_knowledge_base_entry_as_used( (int) $reused_knowledge['entry']['id'] );
@@ -3088,7 +3163,7 @@ final class AISite_Search_Chatbot {
 			);
 		}
 
-		$response_data = self::request_ai_answer( $settings, $message, $results );
+		$response_data = self::request_ai_answer( $settings, $message, $results, array(), $usage_accumulator );
 
 		if ( is_wp_error( $response_data ) || ! $response_data['success'] ) {
 			$answer = self::build_fallback_answer( $message, $results );
@@ -3103,7 +3178,7 @@ final class AISite_Search_Chatbot {
 
 		$answer = (string) $response_data['content'];
 		self::store_cached_ai_answer( $settings, $message, $results, $answer );
-		$knowledge_candidate = self::maybe_store_generated_knowledge_candidate( $settings, $message, $answer, $results );
+		$knowledge_candidate = self::maybe_store_generated_knowledge_candidate( $settings, $message, $answer, $results, $usage_accumulator );
 		self::register_ai_usage();
 
 		return array(
@@ -3146,6 +3221,7 @@ final class AISite_Search_Chatbot {
 				'knowledge_candidate_status' => isset( $entry['knowledge_candidate_status'] ) ? sanitize_key( (string) $entry['knowledge_candidate_status'] ) : '',
 				'knowledge_candidate_note' => isset( $entry['knowledge_candidate_note'] ) ? self::trim_chat_log_text( (string) $entry['knowledge_candidate_note'], 1000 ) : '',
 				'knowledge_candidate_pii_flag' => ! empty( $entry['knowledge_candidate_pii_flag'] ),
+				'ai_usage_summary' => isset( $entry['ai_usage_summary'] ) ? self::sanitize_ai_usage_summary_for_log( (array) $entry['ai_usage_summary'] ) : array(),
 				'ip'           => self::get_client_ip_address(),
 			)
 		);
@@ -3195,20 +3271,179 @@ final class AISite_Search_Chatbot {
 		return $sanitized;
 	}
 
-	private static function request_ai_answer( array $settings, string $message, array $results, array $options = array() ): array {
+	private static function request_ai_answer( array $settings, string $message, array $results, array $options = array(), ?AISCB_AI_Usage_Accumulator $usage_accumulator = null ): array {
+		$purpose = isset( $options['purpose'] ) ? sanitize_key( (string) $options['purpose'] ) : 'answer_generation';
+
+		return self::request_ai_completion( $settings, $message, $results, $purpose, $options, $usage_accumulator );
+	}
+
+	private static function request_ai_completion( array $settings, string $message, array $results, string $purpose, array $options = array(), ?AISCB_AI_Usage_Accumulator $usage_accumulator = null ): array {
 		$provider = $settings['ai_provider'] ?? 'openai';
+		$request_payload = self::resolve_ai_request_payload( $settings, $message, $results, $options );
+		$options['resolved_system_prompt'] = $request_payload['system_prompt'];
+		$options['resolved_user_prompt'] = $request_payload['user_prompt'];
 
 		switch ( $provider ) {
 			case 'claude':
-				return self::call_claude_api( $settings, $message, $results, $options );
+				$response = self::call_claude_api( $settings, $message, $results, $options );
+				break;
 			case 'github-copilot':
-				return self::call_github_copilot_api( $settings, $message, $results, $options );
+				$response = self::call_github_copilot_api( $settings, $message, $results, $options );
+				break;
 			case 'gemini':
-				return self::call_gemini_api( $settings, $message, $results, $options );
+				$response = self::call_gemini_api( $settings, $message, $results, $options );
+				break;
 			case 'openai':
 			default:
-				return self::call_openai_api( $settings, $message, $results, $options );
+				$response = self::call_openai_api( $settings, $message, $results, $options );
+				break;
 		}
+
+		$response['usage_summary'] = self::build_ai_usage_summary( $settings, $purpose, $request_payload, $response );
+
+		if ( $usage_accumulator instanceof AISCB_AI_Usage_Accumulator ) {
+			$usage_accumulator->add_call( $response['usage_summary'] );
+		}
+
+		return $response;
+	}
+
+	private static function resolve_ai_request_payload( array $settings, string $message, array $results, array $options = array() ): array {
+		return array(
+			'system_prompt' => array_key_exists( 'system_prompt', $options ) ? (string) $options['system_prompt'] : (string) $settings['system_prompt'],
+			'user_prompt' => isset( $options['user_prompt'] ) ? (string) $options['user_prompt'] : self::build_ai_prompt( $message, $results, (int) $settings['max_sources'] ),
+		);
+	}
+
+	private static function build_ai_usage_summary( array $settings, string $purpose, array $request_payload, array $response ): array {
+		$request_text = trim( $request_payload['system_prompt'] . "\n" . $request_payload['user_prompt'] );
+		$response_text = isset( $response['content'] ) ? (string) $response['content'] : '';
+		$usage = isset( $response['usage'] ) && is_array( $response['usage'] ) ? $response['usage'] : array();
+		$has_actual_usage = self::response_has_usage_values( $usage );
+
+		$summary = array(
+			'provider' => self::get_valid_provider( (string) ( $settings['ai_provider'] ?? 'openai' ) ),
+			'model' => trim( (string) ( $settings['model'] ?? '' ) ),
+			'purpose' => sanitize_key( $purpose ),
+			'success' => ! empty( $response['success'] ),
+			'usage_source' => 'unavailable',
+			'input_tokens' => 0,
+			'output_tokens' => 0,
+			'cache_creation_tokens' => 0,
+			'cache_read_tokens' => 0,
+			'request_characters_in' => self::unicode_length( $request_text ),
+			'response_characters_out' => self::unicode_length( $response_text ),
+			'estimation_version' => self::TOKEN_ESTIMATION_VERSION,
+		);
+
+		if ( $has_actual_usage ) {
+			$summary['usage_source'] = 'actual';
+			$summary['input_tokens'] = self::usage_value( $usage, array( 'input_tokens', 'inputTokens', 'prompt_tokens', 'promptTokenCount' ) );
+			$summary['output_tokens'] = self::usage_value( $usage, array( 'output_tokens', 'outputTokens', 'completion_tokens', 'candidatesTokenCount' ) );
+			$summary['cache_creation_tokens'] = self::usage_value( $usage, array( 'cache_creation_tokens', 'cacheCreationInputTokens' ) );
+			$summary['cache_read_tokens'] = self::usage_value( $usage, array( 'cache_read_tokens', 'cacheReadInputTokens', 'cachedContentTokenCount' ) );
+		} elseif ( ! empty( $response['success'] ) ) {
+			$summary['usage_source'] = 'estimated';
+			$summary['input_tokens'] = self::estimate_text_token_count( $request_text );
+			$summary['output_tokens'] = self::estimate_text_token_count( $response_text );
+		}
+
+		return $summary;
+	}
+
+	private static function response_has_usage_values( array $usage ): bool {
+		foreach ( array( 'input_tokens', 'inputTokens', 'prompt_tokens', 'promptTokenCount', 'output_tokens', 'outputTokens', 'completion_tokens', 'candidatesTokenCount', 'cacheCreationInputTokens', 'cacheReadInputTokens', 'cachedContentTokenCount' ) as $key ) {
+			if ( array_key_exists( $key, $usage ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	private static function usage_value( array $usage, array $keys ): int {
+		foreach ( $keys as $key ) {
+			if ( array_key_exists( $key, $usage ) ) {
+				return max( 0, absint( $usage[ $key ] ) );
+			}
+		}
+
+		return 0;
+	}
+
+	private static function estimate_text_token_count( string $text ): int {
+		$text = trim( $text );
+
+		if ( '' === $text ) {
+			return 0;
+		}
+
+		$total_characters = self::unicode_length( $text );
+		$ascii_characters = preg_match_all( '/[\x00-\x7F]/', $text, $matches );
+
+		if ( false === $ascii_characters ) {
+			$ascii_characters = 0;
+		}
+
+		$non_ascii_characters = max( 0, $total_characters - (int) $ascii_characters );
+
+		return (int) ceil( $ascii_characters / 4 ) + (int) ceil( $non_ascii_characters / 1.5 );
+	}
+
+	private static function sanitize_ai_usage_summary_for_log( array $summary ): array {
+		$sanitized = array(
+			'total_requests' => isset( $summary['total_requests'] ) ? absint( $summary['total_requests'] ) : 0,
+			'completed_requests' => isset( $summary['completed_requests'] ) ? absint( $summary['completed_requests'] ) : 0,
+			'failed_requests' => isset( $summary['failed_requests'] ) ? absint( $summary['failed_requests'] ) : 0,
+			'total_input_tokens' => isset( $summary['total_input_tokens'] ) ? absint( $summary['total_input_tokens'] ) : 0,
+			'total_output_tokens' => isset( $summary['total_output_tokens'] ) ? absint( $summary['total_output_tokens'] ) : 0,
+			'total_cache_creation_tokens' => isset( $summary['total_cache_creation_tokens'] ) ? absint( $summary['total_cache_creation_tokens'] ) : 0,
+			'total_cache_read_tokens' => isset( $summary['total_cache_read_tokens'] ) ? absint( $summary['total_cache_read_tokens'] ) : 0,
+			'total_request_characters_in' => isset( $summary['total_request_characters_in'] ) ? absint( $summary['total_request_characters_in'] ) : 0,
+			'total_response_characters_out' => isset( $summary['total_response_characters_out'] ) ? absint( $summary['total_response_characters_out'] ) : 0,
+			'usage_sources' => array(),
+			'providers' => array(),
+			'purposes' => array(),
+		);
+
+		foreach ( array( 'actual', 'estimated', 'unavailable' ) as $source ) {
+			if ( isset( $summary['usage_sources'][ $source ] ) ) {
+				$sanitized['usage_sources'][ $source ] = absint( $summary['usage_sources'][ $source ] );
+			}
+		}
+
+		foreach ( array( 'providers', 'purposes' ) as $group_key ) {
+			if ( empty( $summary[ $group_key ] ) || ! is_array( $summary[ $group_key ] ) ) {
+				continue;
+			}
+
+			foreach ( $summary[ $group_key ] as $key => $bucket ) {
+				if ( ! is_array( $bucket ) ) {
+					continue;
+				}
+
+				$sanitized[ $group_key ][ sanitize_key( (string) $key ) ] = array(
+					'requests' => isset( $bucket['requests'] ) ? absint( $bucket['requests'] ) : 0,
+					'completed_requests' => isset( $bucket['completed_requests'] ) ? absint( $bucket['completed_requests'] ) : 0,
+					'failed_requests' => isset( $bucket['failed_requests'] ) ? absint( $bucket['failed_requests'] ) : 0,
+					'input_tokens' => isset( $bucket['input_tokens'] ) ? absint( $bucket['input_tokens'] ) : 0,
+					'output_tokens' => isset( $bucket['output_tokens'] ) ? absint( $bucket['output_tokens'] ) : 0,
+					'cache_creation_tokens' => isset( $bucket['cache_creation_tokens'] ) ? absint( $bucket['cache_creation_tokens'] ) : 0,
+					'cache_read_tokens' => isset( $bucket['cache_read_tokens'] ) ? absint( $bucket['cache_read_tokens'] ) : 0,
+					'request_characters_in' => isset( $bucket['request_characters_in'] ) ? absint( $bucket['request_characters_in'] ) : 0,
+					'response_characters_out' => isset( $bucket['response_characters_out'] ) ? absint( $bucket['response_characters_out'] ) : 0,
+					'usage_sources' => array(),
+				);
+
+				foreach ( array( 'actual', 'estimated', 'unavailable' ) as $source ) {
+					if ( isset( $bucket['usage_sources'][ $source ] ) ) {
+						$sanitized[ $group_key ][ sanitize_key( (string) $key ) ]['usage_sources'][ $source ] = absint( $bucket['usage_sources'][ $source ] );
+					}
+				}
+			}
+		}
+
+		return $sanitized;
 	}
 
 	private static function get_site_guidance_system_prompt(): string {
@@ -3601,8 +3836,8 @@ final class AISite_Search_Chatbot {
 	}
 
 	private static function call_openai_api( array $settings, string $message, array $results, array $options = array() ): array {
-		$prompt = isset( $options['user_prompt'] ) ? (string) $options['user_prompt'] : self::build_ai_prompt( $message, $results, (int) $settings['max_sources'] );
-		$system_prompt = array_key_exists( 'system_prompt', $options ) ? (string) $options['system_prompt'] : (string) $settings['system_prompt'];
+		$prompt = isset( $options['resolved_user_prompt'] ) ? (string) $options['resolved_user_prompt'] : ( isset( $options['user_prompt'] ) ? (string) $options['user_prompt'] : self::build_ai_prompt( $message, $results, (int) $settings['max_sources'] ) );
+		$system_prompt = isset( $options['resolved_system_prompt'] ) ? (string) $options['resolved_system_prompt'] : ( array_key_exists( 'system_prompt', $options ) ? (string) $options['system_prompt'] : (string) $settings['system_prompt'] );
 		$payload = array(
 			'model'       => $settings['model'],
 			'messages'    => array(
@@ -3655,12 +3890,13 @@ final class AISite_Search_Chatbot {
 		return array(
 			'success' => true,
 			'content' => $content,
+			'usage' => isset( $body['usage'] ) && is_array( $body['usage'] ) ? $body['usage'] : array(),
 		);
 	}
 
 	private static function call_claude_api( array $settings, string $message, array $results, array $options = array() ): array {
-		$prompt        = isset( $options['user_prompt'] ) ? (string) $options['user_prompt'] : self::build_ai_prompt( $message, $results, (int) $settings['max_sources'] );
-		$system_prompt = array_key_exists( 'system_prompt', $options ) ? (string) $options['system_prompt'] : (string) $settings['system_prompt'];
+		$prompt        = isset( $options['resolved_user_prompt'] ) ? (string) $options['resolved_user_prompt'] : ( isset( $options['user_prompt'] ) ? (string) $options['user_prompt'] : self::build_ai_prompt( $message, $results, (int) $settings['max_sources'] ) );
+		$system_prompt = isset( $options['resolved_system_prompt'] ) ? (string) $options['resolved_system_prompt'] : ( array_key_exists( 'system_prompt', $options ) ? (string) $options['system_prompt'] : (string) $settings['system_prompt'] );
 
 		if ( ! class_exists( '\Anthropic\Client' ) ) {
 			return array(
@@ -3725,12 +3961,20 @@ final class AISite_Search_Chatbot {
 		return array(
 			'success' => true,
 			'content' => $content,
+			'usage' => isset( $response->usage )
+				? array(
+					'inputTokens' => isset( $response->usage->inputTokens ) ? (int) $response->usage->inputTokens : 0,
+					'outputTokens' => isset( $response->usage->outputTokens ) ? (int) $response->usage->outputTokens : 0,
+					'cacheCreationInputTokens' => isset( $response->usage->cacheCreationInputTokens ) ? (int) $response->usage->cacheCreationInputTokens : 0,
+					'cacheReadInputTokens' => isset( $response->usage->cacheReadInputTokens ) ? (int) $response->usage->cacheReadInputTokens : 0,
+				)
+				: array(),
 		);
 	}
 
 	private static function call_github_copilot_api( array $settings, string $message, array $results, array $options = array() ): array {
-		$prompt = isset( $options['user_prompt'] ) ? (string) $options['user_prompt'] : self::build_ai_prompt( $message, $results, (int) $settings['max_sources'] );
-		$system_prompt = array_key_exists( 'system_prompt', $options ) ? (string) $options['system_prompt'] : (string) $settings['system_prompt'];
+		$prompt = isset( $options['resolved_user_prompt'] ) ? (string) $options['resolved_user_prompt'] : ( isset( $options['user_prompt'] ) ? (string) $options['user_prompt'] : self::build_ai_prompt( $message, $results, (int) $settings['max_sources'] ) );
+		$system_prompt = isset( $options['resolved_system_prompt'] ) ? (string) $options['resolved_system_prompt'] : ( array_key_exists( 'system_prompt', $options ) ? (string) $options['system_prompt'] : (string) $settings['system_prompt'] );
 		$messages = array(
 			array(
 				'role'    => 'user',
@@ -3793,12 +4037,13 @@ final class AISite_Search_Chatbot {
 		return array(
 			'success' => true,
 			'content' => $content,
+			'usage' => isset( $body['usage'] ) && is_array( $body['usage'] ) ? $body['usage'] : array(),
 		);
 	}
 
 	private static function call_gemini_api( array $settings, string $message, array $results, array $options = array() ): array {
-		$prompt = isset( $options['user_prompt'] ) ? (string) $options['user_prompt'] : self::build_ai_prompt( $message, $results, (int) $settings['max_sources'] );
-		$system_prompt = array_key_exists( 'system_prompt', $options ) ? (string) $options['system_prompt'] : (string) $settings['system_prompt'];
+		$prompt = isset( $options['resolved_user_prompt'] ) ? (string) $options['resolved_user_prompt'] : ( isset( $options['user_prompt'] ) ? (string) $options['user_prompt'] : self::build_ai_prompt( $message, $results, (int) $settings['max_sources'] ) );
+		$system_prompt = isset( $options['resolved_system_prompt'] ) ? (string) $options['resolved_system_prompt'] : ( array_key_exists( 'system_prompt', $options ) ? (string) $options['system_prompt'] : (string) $settings['system_prompt'] );
 		$model = str_replace( '/', '%2F', $settings['model'] );
 
 		$payload = array(
@@ -3850,6 +4095,7 @@ final class AISite_Search_Chatbot {
 		return array(
 			'success' => true,
 			'content' => $content,
+			'usage' => isset( $body['usageMetadata'] ) && is_array( $body['usageMetadata'] ) ? $body['usageMetadata'] : array(),
 		);
 	}
 

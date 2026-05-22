@@ -543,14 +543,18 @@ msgid "Status"
 msgstr "状態"
 
 #: includes/class-ai-site-search-chatbot-admin.php:258
-msgid "Time"
-msgstr "日時"
+msgid "Status / AI"
+msgstr "状態 / AI"
 
 #: includes/class-ai-site-search-chatbot-admin.php:259
+msgid "Details"
+msgstr "詳細"
+
+#: includes/class-ai-site-search-chatbot-admin.php:260
 msgid "Visitor Message"
 msgstr "訪問者メッセージ"
 
-#: includes/class-ai-site-search-chatbot-admin.php:260
+#: includes/class-ai-site-search-chatbot-admin.php:261
 msgid "Reply"
 msgstr "返答"
 
@@ -628,6 +632,54 @@ msgstr "ナレッジ注記: %s"
 
 msgid "Knowledge candidate marked for privacy review."
 msgstr "ナレッジ候補はプライバシー確認が必要としてマークされました。"
+
+msgid "AI Requests: %d"
+msgstr "AI リクエスト: %d"
+
+msgid "Chat Token Estimate: in %1$d / out %2$d"
+msgstr "チャットの推定トークン: 入力 %1$d / 出力 %2$d"
+
+msgid "Chat Tokens: in %1$d / out %2$d"
+msgstr "チャットのトークン: 入力 %1$d / 出力 %2$d"
+
+msgid "Chat Characters: in %1$d / out %2$d"
+msgstr "チャットの文字数: 入力 %1$d / 出力 %2$d"
+
+msgid "Cache Tokens: create %1$d / read %2$d"
+msgstr "キャッシュトークン: 作成 %1$d / 読み込み %2$d"
+
+msgid "Usage Sources: %s"
+msgstr "集計元: %s"
+
+msgid "Providers: %s"
+msgstr "プロバイダー: %s"
+
+msgid "AI Steps: %s"
+msgstr "AI ステップ: %s"
+
+msgid "actual"
+msgstr "実測"
+
+msgid "estimated"
+msgstr "推定"
+
+msgid "unavailable"
+msgstr "未取得"
+
+msgid "Route"
+msgstr "経路判定"
+
+msgid "Knowledge Match"
+msgstr "ナレッジ一致判定"
+
+msgid "Answer"
+msgstr "回答生成"
+
+msgid "Site Guidance"
+msgstr "サイト案内"
+
+msgid "Knowledge Draft"
+msgstr "ナレッジ下書き生成"
 
 #: includes/class-ai-site-search-chatbot-admin.php:312
 msgid "Show full text"
