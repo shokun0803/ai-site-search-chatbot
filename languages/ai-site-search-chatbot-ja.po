@@ -757,6 +757,84 @@ msgstr "サイトトップのみに表示"
 msgid "Automatically show the chatbot only on the top page of the site."
 msgstr "サイトのトップページにのみチャットボットを自動表示します。"
 
+msgid "Logs"
+msgstr "ログ"
+
+msgid "Chat logs were deleted."
+msgstr "チャットログを削除しました。"
+
+msgid "Usage totals were deleted."
+msgstr "使用量集計を削除しました。"
+
+msgid "Chat logs and usage totals were deleted."
+msgstr "チャットログと使用量集計を削除しました。"
+
+msgid "The delete action could not be completed."
+msgstr "削除処理を完了できませんでした。"
+
+msgid "Today"
+msgstr "今日"
+
+msgid "Input / Output: %1$d / %2$d"
+msgstr "入力 / 出力: %1$d / %2$d"
+
+msgid "This Month"
+msgstr "今月"
+
+msgid "Last 30 Days Usage"
+msgstr "直近30日の使用量"
+
+msgid "This chart shows total tokens per day so you can spot configuration changes or unusual traffic quickly."
+msgstr "日ごとの総トークン数を表示し、設定変更の影響や通常と異なるアクセス増加にすばやく気づけるようにします。"
+
+msgid "Daily usage chart"
+msgstr "日次使用量グラフ"
+
+msgid "Day"
+msgstr "日付"
+
+msgid "Requests"
+msgstr "リクエスト数"
+
+msgid "Input Tokens"
+msgstr "入力トークン"
+
+msgid "Output Tokens"
+msgstr "出力トークン"
+
+msgid "Total Tokens"
+msgstr "総トークン"
+
+msgid "No usage totals have been recorded yet."
+msgstr "使用量集計はまだ記録されていません。"
+
+msgid "Delete Logs Only"
+msgstr "ログのみ削除"
+
+msgid "Delete Usage Only"
+msgstr "使用量のみ削除"
+
+msgid "Delete Logs and Usage"
+msgstr "ログと使用量を削除"
+
+msgid "Remove the stored visitor chat history while keeping daily usage totals."
+msgstr "日次使用量集計は残したまま、保存済みの訪問者チャット履歴だけを削除します。"
+
+msgid "Remove the daily usage totals while keeping detailed visitor chat logs."
+msgstr "詳細な訪問者チャットログは残したまま、日次使用量集計だけを削除します。"
+
+msgid "Remove both the visitor chat history and the aggregated usage totals."
+msgstr "訪問者チャット履歴と集計済み使用量の両方を削除します。"
+
+msgid "Delete Stored Data"
+msgstr "保存データを削除"
+
+msgid "Use these actions when you want to clear logs or usage totals without uninstalling the plugin."
+msgstr "プラグインをアンインストールせずに、ログや使用量集計を消去したい場合に使います。"
+
+msgid "This delete action cannot be undone. Continue?"
+msgstr "この削除操作は元に戻せません。続行しますか？"
+
 #: includes/class-ai-site-search-chatbot.php:232
 msgid "Display only where the shortcode is placed"
 msgstr "ショートコード配置箇所のみに表示"

@@ -111,6 +111,10 @@ final class AISite_Search_Chatbot {
 	const SHORTCODE = 'ai_site_search_chatbot';
 	const CHAT_LOG_OPTION = 'aiscb_chat_logs';
 	const CHAT_LOG_LIMIT = 50;
+	const DAILY_USAGE_TABLE = 'aiscb_daily_usage';
+	const DAILY_USAGE_SCHEMA_OPTION = 'aiscb_daily_usage_schema_version';
+	const DAILY_USAGE_SCHEMA_VERSION = '1.0.0';
+	const DAILY_USAGE_CURRENT_OPTION = 'aiscb_daily_usage_current';
 	const KNOWLEDGE_BASE_TABLE = 'aiscb_knowledge_base';
 	const KNOWLEDGE_BASE_SCHEMA_OPTION = 'aiscb_knowledge_base_schema_version';
 	const KNOWLEDGE_BASE_SCHEMA_VERSION = '1.0.0';
@@ -120,15 +124,18 @@ final class AISite_Search_Chatbot {
 
 	public static function activate(): void {
 		if ( false !== get_option( self::OPTION_KEY, false ) ) {
+			self::create_daily_usage_table();
 			self::create_knowledge_base_table();
 			return;
 		}
 
 		add_option( self::OPTION_KEY, self::default_settings(), '', false );
+		self::create_daily_usage_table();
 		self::create_knowledge_base_table();
 	}
 
 	public static function init(): void {
+		self::maybe_upgrade_daily_usage_schema();
 		self::maybe_upgrade_knowledge_base_schema();
 		self::load_textdomain();
 		add_action( 'admin_init', array( __CLASS__, 'register_settings' ) );
@@ -148,10 +155,53 @@ final class AISite_Search_Chatbot {
 		self::create_knowledge_base_table();
 	}
 
+	private static function maybe_upgrade_daily_usage_schema(): void {
+		$installed_version = (string) get_option( self::DAILY_USAGE_SCHEMA_OPTION, '' );
+
+		if ( self::DAILY_USAGE_SCHEMA_VERSION === $installed_version ) {
+			return;
+		}
+
+		self::create_daily_usage_table();
+	}
+
 	public static function get_knowledge_base_table_name(): string {
 		global $wpdb;
 
 		return $wpdb->prefix . self::KNOWLEDGE_BASE_TABLE;
+	}
+
+	public static function get_daily_usage_table_name(): string {
+		global $wpdb;
+
+		return $wpdb->prefix . self::DAILY_USAGE_TABLE;
+	}
+
+	private static function create_daily_usage_table(): void {
+		global $wpdb;
+
+		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+
+		$table_name      = self::get_daily_usage_table_name();
+		$charset_collate = $wpdb->get_charset_collate();
+		$sql             = "CREATE TABLE {$table_name} (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			local_day_key char(10) NOT NULL,
+			day_start_utc datetime NOT NULL,
+			day_end_utc datetime NOT NULL,
+			requests_count bigint(20) unsigned NOT NULL DEFAULT 0,
+			input_tokens bigint(20) unsigned NOT NULL DEFAULT 0,
+			output_tokens bigint(20) unsigned NOT NULL DEFAULT 0,
+			total_tokens bigint(20) unsigned NOT NULL DEFAULT 0,
+			created_at datetime NOT NULL,
+			updated_at datetime NOT NULL,
+			PRIMARY KEY  (id),
+			UNIQUE KEY local_day_key (local_day_key),
+			KEY day_start_utc (day_start_utc)
+		) {$charset_collate};";
+
+		dbDelta( $sql );
+		update_option( self::DAILY_USAGE_SCHEMA_OPTION, self::DAILY_USAGE_SCHEMA_VERSION, false );
 	}
 
 	private static function create_knowledge_base_table(): void {
@@ -194,7 +244,14 @@ final class AISite_Search_Chatbot {
 
 		delete_option( self::OPTION_KEY );
 		delete_option( self::CHAT_LOG_OPTION );
+		delete_option( self::DAILY_USAGE_CURRENT_OPTION );
+		delete_option( self::DAILY_USAGE_SCHEMA_OPTION );
 		delete_option( self::KNOWLEDGE_BASE_SCHEMA_OPTION );
+
+		self::clear_usage_metrics_cache();
+
+		$daily_usage_table = self::get_daily_usage_table_name();
+		$wpdb->query( "DROP TABLE IF EXISTS {$daily_usage_table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
 		$table_name = self::get_knowledge_base_table_name();
 		$wpdb->query( "DROP TABLE IF EXISTS {$table_name}" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
@@ -3200,6 +3257,96 @@ final class AISite_Search_Chatbot {
 		return array_values( $logs );
 	}
 
+	public static function delete_chat_logs(): void {
+		delete_option( self::CHAT_LOG_OPTION );
+	}
+
+	public static function delete_usage_metrics_data(): void {
+		global $wpdb;
+
+		delete_option( self::DAILY_USAGE_CURRENT_OPTION );
+		self::clear_usage_metrics_cache();
+
+		$table_name = self::get_daily_usage_table_name();
+		$wpdb->query( "TRUNCATE TABLE {$table_name}" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+	}
+
+	public static function maybe_flush_daily_usage_rollup(): void {
+		$current = self::get_current_daily_usage_buffer();
+
+		if ( empty( $current['local_day_key'] ) ) {
+			return;
+		}
+
+		$today = self::get_daily_usage_period();
+
+		if ( $current['local_day_key'] === $today['local_day_key'] ) {
+			return;
+		}
+
+		self::flush_daily_usage_buffer( $current );
+		delete_option( self::DAILY_USAGE_CURRENT_OPTION );
+	}
+
+	public static function get_usage_metrics_overview( int $days = 30 ): array {
+		$days = max( 1, min( 90, $days ) );
+		self::maybe_flush_daily_usage_rollup();
+
+		$cache_key = 'aiscb_usage_metrics_' . $days;
+		$cached = get_transient( $cache_key );
+
+		if ( is_array( $cached ) ) {
+			return $cached;
+		}
+
+		$today = self::get_daily_usage_period();
+		$current = self::get_current_daily_usage_buffer();
+		$rows = self::get_daily_usage_rows( $days );
+		$daily = array();
+
+		foreach ( $rows as $row ) {
+			$key = isset( $row['local_day_key'] ) ? (string) $row['local_day_key'] : '';
+
+			if ( '' === $key ) {
+				continue;
+			}
+
+			$daily[ $key ] = self::normalize_daily_usage_row( $row );
+		}
+
+		if ( ! empty( $current['local_day_key'] ) ) {
+			$daily[ $current['local_day_key'] ] = self::normalize_daily_usage_row( $current );
+		}
+
+		ksort( $daily );
+		$series = array();
+		$today_summary = self::empty_daily_usage_row( $today );
+		$month_summary = self::empty_daily_usage_row( $today );
+		$current_month = substr( $today['local_day_key'], 0, 7 );
+
+		foreach ( $daily as $key => $row ) {
+			$series[] = $row;
+
+			if ( $key === $today['local_day_key'] ) {
+				$today_summary = $row;
+			}
+
+			if ( 0 === strpos( $key, $current_month ) ) {
+				$month_summary = self::sum_daily_usage_rows( $month_summary, $row );
+			}
+		}
+
+		$overview = array(
+			'today' => $today_summary,
+			'this_month' => $month_summary,
+			'daily' => array_values( $series ),
+		);
+
+		set_transient( $cache_key, $overview, HOUR_IN_SECONDS );
+
+		return $overview;
+	}
+
 	private static function append_chat_log( array $entry ): void {
 		$question = isset( $entry['question'] ) ? self::trim_chat_log_text( (string) $entry['question'], 700 ) : '';
 
@@ -3231,6 +3378,195 @@ final class AISite_Search_Chatbot {
 		}
 
 		update_option( self::CHAT_LOG_OPTION, $logs, false );
+		self::record_daily_usage_from_log_entry( $entry );
+	}
+
+	private static function record_daily_usage_from_log_entry( array $entry ): void {
+		$summary = isset( $entry['ai_usage_summary'] ) && is_array( $entry['ai_usage_summary'] )
+			? self::sanitize_ai_usage_summary_for_log( (array) $entry['ai_usage_summary'] )
+			: array();
+
+		$requests_count = isset( $summary['total_requests'] ) ? absint( $summary['total_requests'] ) : 0;
+
+		if ( $requests_count <= 0 ) {
+			return;
+		}
+
+		self::maybe_flush_daily_usage_rollup();
+
+		$period = self::get_daily_usage_period();
+		$current = self::get_current_daily_usage_buffer();
+
+		if ( empty( $current['local_day_key'] ) || $current['local_day_key'] !== $period['local_day_key'] ) {
+			$current = self::empty_daily_usage_row( $period );
+		}
+
+		$current['requests_count'] += $requests_count;
+		$current['input_tokens'] += isset( $summary['total_input_tokens'] ) ? absint( $summary['total_input_tokens'] ) : 0;
+		$current['output_tokens'] += isset( $summary['total_output_tokens'] ) ? absint( $summary['total_output_tokens'] ) : 0;
+		$current['total_tokens'] = $current['input_tokens'] + $current['output_tokens'];
+
+		update_option( self::DAILY_USAGE_CURRENT_OPTION, self::prepare_daily_usage_buffer_for_storage( $current ), false );
+		self::clear_usage_metrics_cache();
+	}
+
+	private static function get_current_daily_usage_buffer(): array {
+		$current = get_option( self::DAILY_USAGE_CURRENT_OPTION, array() );
+
+		if ( ! is_array( $current ) ) {
+			return array();
+		}
+
+		return self::normalize_daily_usage_row( $current );
+	}
+
+	private static function get_daily_usage_period( ?int $timestamp = null ): array {
+		$timestamp = null === $timestamp ? time() : $timestamp;
+		$timezone = wp_timezone();
+		$local_now = new DateTimeImmutable( '@' . $timestamp );
+		$local_now = $local_now->setTimezone( $timezone );
+		$local_day = $local_now->format( 'Y-m-d' );
+		$local_start = new DateTimeImmutable( $local_day . ' 00:00:00', $timezone );
+		$local_end = $local_start->modify( '+1 day' );
+
+		return array(
+			'local_day_key' => $local_day,
+			'day_start_utc' => $local_start->setTimezone( new DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' ),
+			'day_end_utc' => $local_end->setTimezone( new DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' ),
+		);
+	}
+
+	private static function empty_daily_usage_row( array $period ): array {
+		return array(
+			'local_day_key' => isset( $period['local_day_key'] ) ? (string) $period['local_day_key'] : '',
+			'day_start_utc' => isset( $period['day_start_utc'] ) ? (string) $period['day_start_utc'] : '',
+			'day_end_utc' => isset( $period['day_end_utc'] ) ? (string) $period['day_end_utc'] : '',
+			'requests_count' => 0,
+			'input_tokens' => 0,
+			'output_tokens' => 0,
+			'total_tokens' => 0,
+		);
+	}
+
+	private static function normalize_daily_usage_row( array $row ): array {
+		$normalized = self::empty_daily_usage_row( $row );
+		$normalized['requests_count'] = isset( $row['requests_count'] ) ? absint( $row['requests_count'] ) : 0;
+		$normalized['input_tokens'] = isset( $row['input_tokens'] ) ? absint( $row['input_tokens'] ) : 0;
+		$normalized['output_tokens'] = isset( $row['output_tokens'] ) ? absint( $row['output_tokens'] ) : 0;
+		$normalized['total_tokens'] = isset( $row['total_tokens'] ) ? absint( $row['total_tokens'] ) : ( $normalized['input_tokens'] + $normalized['output_tokens'] );
+
+		return $normalized;
+	}
+
+	private static function prepare_daily_usage_buffer_for_storage( array $row ): array {
+		$row = self::normalize_daily_usage_row( $row );
+
+		return array(
+			'local_day_key' => $row['local_day_key'],
+			'day_start_utc' => $row['day_start_utc'],
+			'day_end_utc' => $row['day_end_utc'],
+			'requests_count' => $row['requests_count'],
+			'input_tokens' => $row['input_tokens'],
+			'output_tokens' => $row['output_tokens'],
+			'total_tokens' => $row['total_tokens'],
+		);
+	}
+
+	private static function flush_daily_usage_buffer( array $buffer ): void {
+		global $wpdb;
+
+		$buffer = self::normalize_daily_usage_row( $buffer );
+
+		if ( '' === $buffer['local_day_key'] ) {
+			return;
+		}
+
+		$table_name = self::get_daily_usage_table_name();
+		$now = current_time( 'mysql', true );
+		$existing_id = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT id FROM {$table_name} WHERE local_day_key = %s LIMIT 1",
+				$buffer['local_day_key']
+			)
+		);
+
+		if ( $existing_id > 0 ) {
+			$wpdb->query(
+				$wpdb->prepare(
+					"UPDATE {$table_name}
+					SET requests_count = requests_count + %d,
+						input_tokens = input_tokens + %d,
+						output_tokens = output_tokens + %d,
+						total_tokens = total_tokens + %d,
+						updated_at = %s
+					WHERE id = %d",
+					$buffer['requests_count'],
+					$buffer['input_tokens'],
+					$buffer['output_tokens'],
+					$buffer['total_tokens'],
+					$now,
+					$existing_id
+				)
+			);
+
+			self::clear_usage_metrics_cache();
+
+			return;
+		}
+
+		$wpdb->insert(
+			$table_name,
+			array(
+				'local_day_key' => $buffer['local_day_key'],
+				'day_start_utc' => $buffer['day_start_utc'],
+				'day_end_utc' => $buffer['day_end_utc'],
+				'requests_count' => $buffer['requests_count'],
+				'input_tokens' => $buffer['input_tokens'],
+				'output_tokens' => $buffer['output_tokens'],
+				'total_tokens' => $buffer['total_tokens'],
+				'created_at' => $now,
+				'updated_at' => $now,
+			),
+			array( '%s', '%s', '%s', '%d', '%d', '%d', '%d', '%s', '%s' )
+		);
+
+		self::clear_usage_metrics_cache();
+	}
+
+	private static function get_daily_usage_rows( int $days ): array {
+		global $wpdb;
+
+		$table_name = self::get_daily_usage_table_name();
+		$limit = max( 1, min( 90, $days ) );
+
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT local_day_key, day_start_utc, day_end_utc, requests_count, input_tokens, output_tokens, total_tokens
+				FROM {$table_name}
+				ORDER BY local_day_key DESC
+				LIMIT %d",
+				$limit
+			),
+			ARRAY_A
+		);
+
+		return is_array( $rows ) ? array_reverse( $rows ) : array();
+	}
+
+	private static function sum_daily_usage_rows( array $left, array $right ): array {
+		$left = self::normalize_daily_usage_row( $left );
+		$right = self::normalize_daily_usage_row( $right );
+
+		$left['requests_count'] += $right['requests_count'];
+		$left['input_tokens'] += $right['input_tokens'];
+		$left['output_tokens'] += $right['output_tokens'];
+		$left['total_tokens'] += $right['total_tokens'];
+
+		return $left;
+	}
+
+	private static function clear_usage_metrics_cache(): void {
+		delete_transient( 'aiscb_usage_metrics_30' );
 	}
 
 	private static function trim_chat_log_text( string $text, int $limit ): string {

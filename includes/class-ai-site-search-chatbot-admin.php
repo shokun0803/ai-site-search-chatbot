@@ -10,6 +10,7 @@ final class AISite_Search_Chatbot_Admin {
 	public static function init(): void {
 		add_action( 'admin_menu', array( __CLASS__, 'register_admin_menu' ) );
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'enqueue_assets' ) );
+		add_action( 'admin_post_aiscb_delete_data', array( __CLASS__, 'handle_delete_data_action' ) );
 	}
 
 	public static function register_admin_menu(): void {
@@ -27,6 +28,8 @@ final class AISite_Search_Chatbot_Admin {
 			return;
 		}
 
+		$current_tab = self::get_current_tab();
+
 		wp_enqueue_style(
 			'aiscb-admin',
 			plugins_url( 'assets/css/aiscb-admin.css', AISCB_FILE ),
@@ -41,6 +44,16 @@ final class AISite_Search_Chatbot_Admin {
 			AISite_Search_Chatbot::VERSION,
 			true
 		);
+
+		if ( 'logs' === $current_tab ) {
+			wp_enqueue_script(
+				'aiscb-metrics',
+				plugins_url( 'assets/js/aiscb-metrics.js', AISCB_FILE ),
+				array(),
+				AISite_Search_Chatbot::VERSION,
+				true
+			);
+		}
 
 		wp_localize_script(
 			'aiscb-admin',
@@ -144,12 +157,16 @@ final class AISite_Search_Chatbot_Admin {
 		$widget_display_modes = AISite_Search_Chatbot::get_widget_display_modes();
 		$knowledge_match_modes = AISite_Search_Chatbot::get_knowledge_base_match_modes();
 		$uninstall_cleanup_modes = AISite_Search_Chatbot::get_uninstall_cleanup_modes();
+		$usage_overview = 'logs' === $current_tab ? AISite_Search_Chatbot::get_usage_metrics_overview() : array();
 		?>
 		<div class="wrap aiscb-admin">
 			<h1><?php echo esc_html( __( 'AI Site Search Chatbot', 'ai-site-search-chatbot' ) ); ?></h1>
 			<?php self::render_page_tabs( $current_tab ); ?>
+			<?php self::render_admin_notice(); ?>
 			<?php if ( 'knowledge-base' === $current_tab ) : ?>
 				<?php self::render_knowledge_base_panel(); ?>
+			<?php elseif ( 'logs' === $current_tab ) : ?>
+				<?php self::render_chat_logs_panel( $chat_logs, $usage_overview ); ?>
 			<?php else : ?>
 			<p><?php echo esc_html( __( 'Configure the AI provider and the prompt used when answering visitors with site search results.', 'ai-site-search-chatbot' ) ); ?></p>
 			<form method="post" action="options.php" id="aiscb-settings-form">
@@ -381,31 +398,87 @@ final class AISite_Search_Chatbot_Admin {
 				</div>
 				<?php submit_button(); ?>
 			</form>
-
-			<?php self::render_chat_logs_panel( $chat_logs ); ?>
 			<?php endif; ?>
 		</div>
 		<?php
 	}
 
 	private static function get_current_tab(): string {
-		$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( (string) $_GET['tab'] ) ) : 'settings';
+		$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( (string) $_GET['tab'] ) ) : 'logs';
 
-		return in_array( $tab, array( 'settings', 'knowledge-base' ), true ) ? $tab : 'settings';
+		return in_array( $tab, array( 'logs', 'settings', 'knowledge-base' ), true ) ? $tab : 'logs';
 	}
 
 	private static function render_page_tabs( string $current_tab ): void {
 		$tabs = array(
+			'logs' => __( 'Logs', 'ai-site-search-chatbot' ),
 			'settings' => __( 'Settings', 'ai-site-search-chatbot' ),
 			'knowledge-base' => __( 'Saved Knowledge Base', 'ai-site-search-chatbot' ),
 		);
 		?>
 		<nav class="nav-tab-wrapper aiscb-nav-tabs" aria-label="<?php echo esc_attr( __( 'AI Site Search Chatbot sections', 'ai-site-search-chatbot' ) ); ?>">
 			<?php foreach ( $tabs as $tab_key => $label ) : ?>
-				<?php $url = admin_url( 'options-general.php?page=ai-site-search-chatbot' . ( 'settings' === $tab_key ? '' : '&tab=' . $tab_key ) ); ?>
+				<?php $url = admin_url( 'options-general.php?page=ai-site-search-chatbot' . ( 'logs' === $tab_key ? '' : '&tab=' . $tab_key ) ); ?>
 				<a href="<?php echo esc_url( $url ); ?>" class="nav-tab <?php echo esc_attr( $current_tab === $tab_key ? 'nav-tab-active' : '' ); ?>"><?php echo esc_html( $label ); ?></a>
 			<?php endforeach; ?>
 		</nav>
+		<?php
+	}
+
+	public static function handle_delete_data_action(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to perform this action.', 'ai-site-search-chatbot' ) );
+		}
+
+		check_admin_referer( 'aiscb_delete_data' );
+
+		$scope = isset( $_POST['delete_scope'] ) ? sanitize_key( wp_unslash( (string) $_POST['delete_scope'] ) ) : '';
+		$notice = 'delete-failed';
+
+		switch ( $scope ) {
+			case 'logs':
+				AISite_Search_Chatbot::delete_chat_logs();
+				$notice = 'logs-deleted';
+				break;
+			case 'usage':
+				AISite_Search_Chatbot::delete_usage_metrics_data();
+				$notice = 'usage-deleted';
+				break;
+			case 'all':
+				AISite_Search_Chatbot::delete_chat_logs();
+				AISite_Search_Chatbot::delete_usage_metrics_data();
+				$notice = 'logs-usage-deleted';
+				break;
+		}
+
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'page' => 'ai-site-search-chatbot',
+					'aiscb_notice' => $notice,
+				),
+				admin_url( 'options-general.php' )
+			)
+		);
+		exit;
+	}
+
+	private static function render_admin_notice(): void {
+		$notice_key = isset( $_GET['aiscb_notice'] ) ? sanitize_key( wp_unslash( (string) $_GET['aiscb_notice'] ) ) : '';
+		$notices = array(
+			'logs-deleted' => array( 'success', __( 'Chat logs were deleted.', 'ai-site-search-chatbot' ) ),
+			'usage-deleted' => array( 'success', __( 'Usage totals were deleted.', 'ai-site-search-chatbot' ) ),
+			'logs-usage-deleted' => array( 'success', __( 'Chat logs and usage totals were deleted.', 'ai-site-search-chatbot' ) ),
+			'delete-failed' => array( 'error', __( 'The delete action could not be completed.', 'ai-site-search-chatbot' ) ),
+		);
+
+		if ( ! isset( $notices[ $notice_key ] ) ) {
+			return;
+		}
+
+		list( $type, $message ) = $notices[ $notice_key ];
+		?>
+		<div class="notice notice-<?php echo esc_attr( $type ); ?> is-dismissible"><p><?php echo esc_html( $message ); ?></p></div>
 		<?php
 	}
 
@@ -507,7 +580,7 @@ final class AISite_Search_Chatbot_Admin {
 		<?php
 	}
 
-	private static function render_chat_logs_panel( array $chat_logs ): void {
+	private static function render_chat_logs_panel( array $chat_logs, array $usage_overview = array() ): void {
 		$status_map = self::get_chat_log_status_map();
 		?>
 		<div class="aiscb-log-panel">
@@ -518,6 +591,9 @@ final class AISite_Search_Chatbot_Admin {
 				</div>
 				<div class="aiscb-log-panel__count"><?php echo esc_html( sprintf( __( '%d entries', 'ai-site-search-chatbot' ), count( $chat_logs ) ) ); ?></div>
 			</div>
+
+			<?php self::render_usage_overview_panel( $usage_overview ); ?>
+			<?php self::render_delete_actions_panel(); ?>
 
 			<div class="aiscb-log-legend" aria-label="<?php echo esc_attr__( 'Chat log status legend', 'ai-site-search-chatbot' ); ?>">
 				<?php foreach ( $status_map as $status ) : ?>
@@ -581,6 +657,100 @@ final class AISite_Search_Chatbot_Admin {
 					</table>
 				</div>
 			<?php endif; ?>
+		</div>
+		<?php
+	}
+
+	private static function render_usage_overview_panel( array $usage_overview ): void {
+		$today = isset( $usage_overview['today'] ) && is_array( $usage_overview['today'] ) ? $usage_overview['today'] : array();
+		$this_month = isset( $usage_overview['this_month'] ) && is_array( $usage_overview['this_month'] ) ? $usage_overview['this_month'] : array();
+		$daily = isset( $usage_overview['daily'] ) && is_array( $usage_overview['daily'] ) ? $usage_overview['daily'] : array();
+		$metrics_payload = wp_json_encode( $usage_overview );
+		?>
+		<div class="aiscb-usage-panel"<?php echo is_string( $metrics_payload ) ? ' data-metrics="' . esc_attr( $metrics_payload ) . '"' : ''; ?>>
+			<div class="aiscb-usage-cards">
+				<div class="aiscb-usage-card">
+					<div class="aiscb-usage-card__label"><?php echo esc_html( __( 'Today', 'ai-site-search-chatbot' ) ); ?></div>
+					<div class="aiscb-usage-card__value"><?php echo esc_html( number_format_i18n( isset( $today['total_tokens'] ) ? absint( $today['total_tokens'] ) : 0 ) ); ?></div>
+					<div class="aiscb-usage-card__meta"><?php echo esc_html( sprintf( __( 'Requests: %d', 'ai-site-search-chatbot' ), isset( $today['requests_count'] ) ? absint( $today['requests_count'] ) : 0 ) ); ?></div>
+					<div class="aiscb-usage-card__meta"><?php echo esc_html( sprintf( __( 'Input / Output: %1$d / %2$d', 'ai-site-search-chatbot' ), isset( $today['input_tokens'] ) ? absint( $today['input_tokens'] ) : 0, isset( $today['output_tokens'] ) ? absint( $today['output_tokens'] ) : 0 ) ); ?></div>
+				</div>
+				<div class="aiscb-usage-card">
+					<div class="aiscb-usage-card__label"><?php echo esc_html( __( 'This Month', 'ai-site-search-chatbot' ) ); ?></div>
+					<div class="aiscb-usage-card__value"><?php echo esc_html( number_format_i18n( isset( $this_month['total_tokens'] ) ? absint( $this_month['total_tokens'] ) : 0 ) ); ?></div>
+					<div class="aiscb-usage-card__meta"><?php echo esc_html( sprintf( __( 'Requests: %d', 'ai-site-search-chatbot' ), isset( $this_month['requests_count'] ) ? absint( $this_month['requests_count'] ) : 0 ) ); ?></div>
+					<div class="aiscb-usage-card__meta"><?php echo esc_html( sprintf( __( 'Input / Output: %1$d / %2$d', 'ai-site-search-chatbot' ), isset( $this_month['input_tokens'] ) ? absint( $this_month['input_tokens'] ) : 0, isset( $this_month['output_tokens'] ) ? absint( $this_month['output_tokens'] ) : 0 ) ); ?></div>
+				</div>
+			</div>
+
+			<div class="aiscb-usage-chart-panel">
+				<div class="aiscb-usage-chart-panel__header">
+					<h3><?php echo esc_html( __( 'Last 30 Days Usage', 'ai-site-search-chatbot' ) ); ?></h3>
+					<p class="description"><?php echo esc_html( __( 'This chart shows total tokens per day so you can spot configuration changes or unusual traffic quickly.', 'ai-site-search-chatbot' ) ); ?></p>
+				</div>
+				<canvas class="aiscb-usage-chart" height="180" aria-label="<?php echo esc_attr__( 'Daily usage chart', 'ai-site-search-chatbot' ); ?>"></canvas>
+			</div>
+
+			<div class="aiscb-usage-table-wrap">
+				<table class="widefat striped aiscb-usage-table">
+					<thead>
+						<tr>
+							<th><?php echo esc_html( __( 'Day', 'ai-site-search-chatbot' ) ); ?></th>
+							<th><?php echo esc_html( __( 'Requests', 'ai-site-search-chatbot' ) ); ?></th>
+							<th><?php echo esc_html( __( 'Input Tokens', 'ai-site-search-chatbot' ) ); ?></th>
+							<th><?php echo esc_html( __( 'Output Tokens', 'ai-site-search-chatbot' ) ); ?></th>
+							<th><?php echo esc_html( __( 'Total Tokens', 'ai-site-search-chatbot' ) ); ?></th>
+						</tr>
+					</thead>
+					<tbody>
+						<?php if ( empty( $daily ) ) : ?>
+							<tr>
+								<td colspan="5"><?php echo esc_html( __( 'No usage totals have been recorded yet.', 'ai-site-search-chatbot' ) ); ?></td>
+							</tr>
+						<?php else : ?>
+							<?php foreach ( array_reverse( $daily ) as $row ) : ?>
+								<tr>
+									<td><?php echo esc_html( isset( $row['local_day_key'] ) ? (string) $row['local_day_key'] : '-' ); ?></td>
+									<td><?php echo esc_html( number_format_i18n( isset( $row['requests_count'] ) ? absint( $row['requests_count'] ) : 0 ) ); ?></td>
+									<td><?php echo esc_html( number_format_i18n( isset( $row['input_tokens'] ) ? absint( $row['input_tokens'] ) : 0 ) ); ?></td>
+									<td><?php echo esc_html( number_format_i18n( isset( $row['output_tokens'] ) ? absint( $row['output_tokens'] ) : 0 ) ); ?></td>
+									<td><?php echo esc_html( number_format_i18n( isset( $row['total_tokens'] ) ? absint( $row['total_tokens'] ) : 0 ) ); ?></td>
+								</tr>
+							<?php endforeach; ?>
+						<?php endif; ?>
+					</tbody>
+				</table>
+			</div>
+		</div>
+		<?php
+	}
+
+	private static function render_delete_actions_panel(): void {
+		$actions = array(
+			'logs' => __( 'Delete Logs Only', 'ai-site-search-chatbot' ),
+			'usage' => __( 'Delete Usage Only', 'ai-site-search-chatbot' ),
+			'all' => __( 'Delete Logs and Usage', 'ai-site-search-chatbot' ),
+		);
+		$descriptions = array(
+			'logs' => __( 'Remove the stored visitor chat history while keeping daily usage totals.', 'ai-site-search-chatbot' ),
+			'usage' => __( 'Remove the daily usage totals while keeping detailed visitor chat logs.', 'ai-site-search-chatbot' ),
+			'all' => __( 'Remove both the visitor chat history and the aggregated usage totals.', 'ai-site-search-chatbot' ),
+		);
+		?>
+		<div class="aiscb-danger-zone">
+			<h3><?php echo esc_html( __( 'Delete Stored Data', 'ai-site-search-chatbot' ) ); ?></h3>
+			<p class="description"><?php echo esc_html( __( 'Use these actions when you want to clear logs or usage totals without uninstalling the plugin.', 'ai-site-search-chatbot' ) ); ?></p>
+			<div class="aiscb-danger-zone__actions">
+				<?php foreach ( $actions as $scope => $label ) : ?>
+					<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="aiscb-danger-zone__form" onsubmit="return window.confirm('<?php echo esc_js( __( 'This delete action cannot be undone. Continue?', 'ai-site-search-chatbot' ) ); ?>');">
+						<?php wp_nonce_field( 'aiscb_delete_data' ); ?>
+						<input type="hidden" name="action" value="aiscb_delete_data" />
+						<input type="hidden" name="delete_scope" value="<?php echo esc_attr( $scope ); ?>" />
+						<button type="submit" class="button <?php echo esc_attr( 'all' === $scope ? 'button-primary' : '' ); ?>"><?php echo esc_html( $label ); ?></button>
+						<div class="aiscb-danger-zone__hint"><?php echo esc_html( $descriptions[ $scope ] ); ?></div>
+					</form>
+				<?php endforeach; ?>
+			</div>
 		</div>
 		<?php
 	}

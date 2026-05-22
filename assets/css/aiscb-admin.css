@@ -193,6 +193,139 @@
 	margin-bottom: 16px;
 }
 
+.aiscb-admin .aiscb-usage-panel {
+	margin-bottom: 20px;
+	padding: 16px;
+	background: #f8fafc;
+	border: 1px solid #e4e7ec;
+	border-radius: 8px;
+}
+
+.aiscb-admin .aiscb-usage-cards {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	gap: 12px;
+	margin-bottom: 16px;
+}
+
+.aiscb-admin .aiscb-usage-card {
+	padding: 14px;
+	background: #fff;
+	border: 1px solid #e4e7ec;
+	border-radius: 8px;
+}
+
+.aiscb-admin .aiscb-usage-card__label {
+	font-size: 12px;
+	font-weight: 600;
+	color: #667085;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.aiscb-admin .aiscb-usage-card__value {
+	margin-top: 8px;
+	font-size: 28px;
+	font-weight: 700;
+	line-height: 1.2;
+	color: #101828;
+}
+
+.aiscb-admin .aiscb-usage-card__meta {
+	margin-top: 6px;
+	font-size: 12px;
+	color: #667085;
+}
+
+.aiscb-admin .aiscb-usage-chart-panel {
+	margin-bottom: 16px;
+	padding: 14px;
+	background: #fff;
+	border: 1px solid #e4e7ec;
+	border-radius: 8px;
+}
+
+.aiscb-admin .aiscb-usage-chart-panel__header {
+	margin-bottom: 12px;
+}
+
+.aiscb-admin .aiscb-usage-chart-panel__header h3 {
+	margin: 0 0 6px;
+	font-size: 16px;
+}
+
+.aiscb-admin .aiscb-usage-chart-panel__header .description {
+	margin: 0;
+}
+
+.aiscb-admin .aiscb-usage-chart {
+	display: block;
+	width: 100%;
+	max-width: 100%;
+	background: #fff;
+	border-radius: 6px;
+}
+
+.aiscb-admin .aiscb-usage-table-wrap {
+	overflow: auto;
+	max-height: 280px;
+	border: 1px solid #e4e7ec;
+	border-radius: 8px;
+	background: #fff;
+	margin-bottom: 16px;
+}
+
+.aiscb-admin .aiscb-usage-table {
+	border: 0;
+	box-shadow: none;
+}
+
+.aiscb-admin .aiscb-usage-table th,
+.aiscb-admin .aiscb-usage-table td {
+	padding: 10px 12px;
+	vertical-align: top;
+}
+
+.aiscb-admin .aiscb-danger-zone {
+	margin-bottom: 16px;
+	padding: 16px;
+	background: #fff7f7;
+	border: 1px solid #f4c7c7;
+	border-radius: 8px;
+}
+
+.aiscb-admin .aiscb-danger-zone h3 {
+	margin: 0 0 6px;
+	font-size: 16px;
+}
+
+.aiscb-admin .aiscb-danger-zone .description {
+	margin: 0 0 14px;
+}
+
+.aiscb-admin .aiscb-danger-zone__actions {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	gap: 12px;
+}
+
+.aiscb-admin .aiscb-danger-zone__form {
+	padding: 12px;
+	background: #fff;
+	border: 1px solid #f2d6d6;
+	border-radius: 8px;
+}
+
+.aiscb-admin .aiscb-danger-zone__form .button {
+	margin-bottom: 8px;
+}
+
+.aiscb-admin .aiscb-danger-zone__hint {
+	font-size: 12px;
+	color: #667085;
+	line-height: 1.5;
+}
+
 .aiscb-admin .aiscb-log-pill {
 	display: inline-flex;
 	align-items: center;
@@ -412,6 +545,10 @@
 }
 
 @media (max-width: 960px) {
+	.aiscb-admin .aiscb-usage-card__value {
+		font-size: 24px;
+	}
+
 	.aiscb-admin .aiscb-log-panel__header {
 		flex-direction: column;
 	}

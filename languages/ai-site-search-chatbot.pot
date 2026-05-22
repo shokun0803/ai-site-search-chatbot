@@ -597,3 +597,81 @@ msgstr ""
 #: includes/class-ai-site-search-chatbot.php:1067
 msgid "If you want, I can search again with a narrower keyword."
 msgstr ""
+
+msgid "Logs"
+msgstr ""
+
+msgid "Chat logs were deleted."
+msgstr ""
+
+msgid "Usage totals were deleted."
+msgstr ""
+
+msgid "Chat logs and usage totals were deleted."
+msgstr ""
+
+msgid "The delete action could not be completed."
+msgstr ""
+
+msgid "Today"
+msgstr ""
+
+msgid "Input / Output: %1$d / %2$d"
+msgstr ""
+
+msgid "This Month"
+msgstr ""
+
+msgid "Last 30 Days Usage"
+msgstr ""
+
+msgid "This chart shows total tokens per day so you can spot configuration changes or unusual traffic quickly."
+msgstr ""
+
+msgid "Daily usage chart"
+msgstr ""
+
+msgid "Day"
+msgstr ""
+
+msgid "Requests"
+msgstr ""
+
+msgid "Input Tokens"
+msgstr ""
+
+msgid "Output Tokens"
+msgstr ""
+
+msgid "Total Tokens"
+msgstr ""
+
+msgid "No usage totals have been recorded yet."
+msgstr ""
+
+msgid "Delete Logs Only"
+msgstr ""
+
+msgid "Delete Usage Only"
+msgstr ""
+
+msgid "Delete Logs and Usage"
+msgstr ""
+
+msgid "Remove the stored visitor chat history while keeping daily usage totals."
+msgstr ""
+
+msgid "Remove the daily usage totals while keeping detailed visitor chat logs."
+msgstr ""
+
+msgid "Remove both the visitor chat history and the aggregated usage totals."
+msgstr ""
+
+msgid "Delete Stored Data"
+msgstr ""
+
+msgid "Use these actions when you want to clear logs or usage totals without uninstalling the plugin."
+msgstr ""
+
+msgid "This delete action cannot be undone. Continue?"
+msgstr ""
