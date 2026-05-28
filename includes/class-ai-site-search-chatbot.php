@@ -2142,7 +2142,7 @@ final class AISite_Search_Chatbot {
 
 		$search_queries = self::resolve_search_queries( $message, $settings, $route );
 		$route['queries'] = $search_queries;
-		$results = self::search_site_content( $message, $settings, $route );
+		$results = self::search_site_content( $message, $settings, $route, $usage_accumulator );
 		$answer = self::generate_answer( $message, $results, $route, $usage_accumulator );
 		self::append_chat_log(
 			array(
@@ -2393,11 +2393,11 @@ final class AISite_Search_Chatbot {
 		return function_exists( 'mb_strtolower' ) ? mb_strtolower( $message, 'UTF-8' ) : strtolower( $message );
 	}
 
-	private static function search_site_content( string $message, array $settings = array(), array $route = array() ): array {
+	private static function search_site_content( string $message, array $settings = array(), array $route = array(), ?AISCB_AI_Usage_Accumulator $usage_accumulator = null ): array {
 		$post_types = get_post_types( array( 'public' => true ), 'names' );
 		unset( $post_types['attachment'] );
 		$post_types = array_values( $post_types );
-		$queries = self::resolve_search_queries( $message, $settings, $route );
+		$queries = self::resolve_search_queries( $message, $settings, $route, $usage_accumulator );
 		$results = self::search_site_content_by_queries( $queries, $post_types );
 
 		if ( ! empty( $results ) ) {
@@ -2452,21 +2452,21 @@ final class AISite_Search_Chatbot {
 		return $results;
 	}
 
-	private static function build_search_queries( string $message, array $settings = array() ): array {
+	private static function build_search_queries( string $message, array $settings = array(), ?AISCB_AI_Usage_Accumulator $usage_accumulator = null ): array {
 		$queries = array_merge(
-			self::extract_search_queries_with_ai( $message, $settings ),
+			self::extract_search_queries_with_ai( $message, $settings, $usage_accumulator ),
 			self::build_rule_based_search_queries( $message )
 		);
 
 		return self::normalize_search_queries( $queries );
 	}
 
-	private static function resolve_search_queries( string $message, array $settings = array(), array $route = array() ): array {
+	private static function resolve_search_queries( string $message, array $settings = array(), array $route = array(), ?AISCB_AI_Usage_Accumulator $usage_accumulator = null ): array {
 		if ( ! empty( $route['queries'] ) && is_array( $route['queries'] ) ) {
 			return self::normalize_search_queries( $route['queries'] );
 		}
 
-		return self::build_search_queries( $message, $settings );
+		return self::build_search_queries( $message, $settings, $usage_accumulator );
 	}
 
 	private static function analyze_message_route( string $message, array $settings, ?AISCB_AI_Usage_Accumulator $usage_accumulator = null ): array {
