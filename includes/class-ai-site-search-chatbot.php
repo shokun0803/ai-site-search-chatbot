@@ -103,7 +103,7 @@ final class AISCB_AI_Usage_Accumulator {
 }
 
 final class AISite_Search_Chatbot {
-	const VERSION = '0.5.2';
+	const VERSION = '0.5.3';
 	const TOKEN_ESTIMATION_VERSION = 'char-mix-v1';
 	const OPTION_KEY = 'aiscb_settings';
 	const OPTION_GROUP = 'aiscb_settings_group';
@@ -256,9 +256,12 @@ final class AISite_Search_Chatbot {
 		$table_name = self::get_knowledge_base_table_name();
 		$wpdb->query( "DROP TABLE IF EXISTS {$table_name}" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
-		$option_name_like = $wpdb->esc_like( '_transient_aiscb_' ) . '%';
-		$timeout_name_like = $wpdb->esc_like( '_transient_timeout_aiscb_' ) . '%';
-		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s", $option_name_like, $timeout_name_like ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		self::delete_plugin_transient_options();
+	}
+
+	public static function clear_plugin_transients(): void {
+		self::clear_usage_metrics_cache();
+		self::delete_plugin_transient_options();
 	}
 
 	public static function load_textdomain(): void {
@@ -3567,6 +3570,20 @@ final class AISite_Search_Chatbot {
 
 	private static function clear_usage_metrics_cache(): void {
 		delete_transient( 'aiscb_usage_metrics_30' );
+	}
+
+	private static function delete_plugin_transient_options(): void {
+		global $wpdb;
+
+		$option_name_like = $wpdb->esc_like( '_transient_aiscb_' ) . '%';
+		$timeout_name_like = $wpdb->esc_like( '_transient_timeout_aiscb_' ) . '%';
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s", $option_name_like, $timeout_name_like ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		if ( is_multisite() && isset( $wpdb->sitemeta ) ) {
+			$site_option_name_like = $wpdb->esc_like( '_site_transient_aiscb_' ) . '%';
+			$site_timeout_name_like = $wpdb->esc_like( '_site_transient_timeout_aiscb_' ) . '%';
+			$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->sitemeta} WHERE meta_key LIKE %s OR meta_key LIKE %s", $site_option_name_like, $site_timeout_name_like ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		}
 	}
 
 	private static function trim_chat_log_text( string $text, int $limit ): string {

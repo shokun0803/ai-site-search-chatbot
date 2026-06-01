@@ -649,6 +649,9 @@ msgstr ""
 msgid "No usage totals have been recorded yet."
 msgstr ""
 
+msgid "Displayed token counts are estimates. Actual provider-side usage or billing may differ."
+msgstr ""
+
 msgid "Delete Logs Only"
 msgstr ""
 
@@ -673,5 +676,17 @@ msgstr ""
 msgid "Use these actions when you want to clear logs or usage totals without uninstalling the plugin."
 msgstr ""
 
+msgid "Clear cached AI replies and transient state for fresh verification?"
+msgstr ""
+
+msgid "Clear Plugin Cache"
+msgstr ""
+
+msgid "Remove cached AI replies and transient usage state so the next chat sends fresh provider requests."
+msgstr ""
+
 msgid "This delete action cannot be undone. Continue?"
+msgstr ""
+
+msgid "Plugin caches were cleared."
 msgstr ""

@@ -808,6 +808,9 @@ msgstr "総トークン"
 msgid "No usage totals have been recorded yet."
 msgstr "使用量集計はまだ記録されていません。"
 
+msgid "Displayed token counts are estimates. Actual provider-side usage or billing may differ."
+msgstr "表示しているトークン数は目安です。実際のプロバイダー側使用量や課金と差異が出る場合があります。"
+
 msgid "Delete Logs Only"
 msgstr "ログのみ削除"
 
@@ -832,8 +835,20 @@ msgstr "保存データを削除"
 msgid "Use these actions when you want to clear logs or usage totals without uninstalling the plugin."
 msgstr "プラグインをアンインストールせずに、ログや使用量集計を消去したい場合に使います。"
 
+msgid "Clear cached AI replies and transient state for fresh verification?"
+msgstr "検証用にキャッシュ済み AI 応答と transient 状態を消去しますか？"
+
+msgid "Clear Plugin Cache"
+msgstr "プラグインキャッシュを削除"
+
+msgid "Remove cached AI replies and transient usage state so the next chat sends fresh provider requests."
+msgstr "キャッシュ済み AI 応答と transient の使用量状態を削除し、次のチャットで新しいプロバイダーリクエストを送るようにします。"
+
 msgid "This delete action cannot be undone. Continue?"
 msgstr "この削除操作は元に戻せません。続行しますか？"
+
+msgid "Plugin caches were cleared."
+msgstr "プラグインキャッシュを削除しました。"
 
 #: includes/class-ai-site-search-chatbot.php:232
 msgid "Display only where the shortcode is placed"

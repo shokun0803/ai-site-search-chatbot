@@ -11,6 +11,7 @@ final class AISite_Search_Chatbot_Admin {
 		add_action( 'admin_menu', array( __CLASS__, 'register_admin_menu' ) );
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'enqueue_assets' ) );
 		add_action( 'admin_post_aiscb_delete_data', array( __CLASS__, 'handle_delete_data_action' ) );
+		add_action( 'admin_post_aiscb_clear_cache', array( __CLASS__, 'handle_clear_cache_action' ) );
 	}
 
 	public static function register_admin_menu(): void {
@@ -463,9 +464,36 @@ final class AISite_Search_Chatbot_Admin {
 		exit;
 	}
 
+	public static function handle_clear_cache_action(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to perform this action.', 'ai-site-search-chatbot' ) );
+		}
+
+		check_admin_referer( 'aiscb_clear_cache' );
+		self::clear_plugin_cache();
+
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'page' => 'ai-site-search-chatbot',
+					'aiscb_notice' => 'cache-cleared',
+				),
+				admin_url( 'options-general.php' )
+			)
+		);
+		exit;
+	}
+
+	private static function clear_plugin_cache(): void {
+		if ( is_callable( array( 'AISite_Search_Chatbot', 'clear_plugin_transients' ) ) ) {
+			call_user_func( array( 'AISite_Search_Chatbot', 'clear_plugin_transients' ) );
+		}
+	}
+
 	private static function render_admin_notice(): void {
 		$notice_key = isset( $_GET['aiscb_notice'] ) ? sanitize_key( wp_unslash( (string) $_GET['aiscb_notice'] ) ) : '';
 		$notices = array(
+			'cache-cleared' => array( 'success', __( 'Plugin caches were cleared.', 'ai-site-search-chatbot' ) ),
 			'logs-deleted' => array( 'success', __( 'Chat logs were deleted.', 'ai-site-search-chatbot' ) ),
 			'usage-deleted' => array( 'success', __( 'Usage totals were deleted.', 'ai-site-search-chatbot' ) ),
 			'logs-usage-deleted' => array( 'success', __( 'Chat logs and usage totals were deleted.', 'ai-site-search-chatbot' ) ),
@@ -593,6 +621,7 @@ final class AISite_Search_Chatbot_Admin {
 			</div>
 
 			<?php self::render_usage_overview_panel( $usage_overview ); ?>
+			<p class="description"><?php echo esc_html( __( 'Displayed token counts are estimates. Actual provider-side usage or billing may differ.', 'ai-site-search-chatbot' ) ); ?></p>
 			<?php self::render_delete_actions_panel(); ?>
 
 			<div class="aiscb-log-legend" aria-label="<?php echo esc_attr__( 'Chat log status legend', 'ai-site-search-chatbot' ); ?>">
@@ -740,6 +769,12 @@ final class AISite_Search_Chatbot_Admin {
 		<div class="aiscb-danger-zone">
 			<h3><?php echo esc_html( __( 'Delete Stored Data', 'ai-site-search-chatbot' ) ); ?></h3>
 			<p class="description"><?php echo esc_html( __( 'Use these actions when you want to clear logs or usage totals without uninstalling the plugin.', 'ai-site-search-chatbot' ) ); ?></p>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="aiscb-danger-zone__form" onsubmit="return window.confirm('<?php echo esc_js( __( 'Clear cached AI replies and transient state for fresh verification?', 'ai-site-search-chatbot' ) ); ?>');">
+				<?php wp_nonce_field( 'aiscb_clear_cache' ); ?>
+				<input type="hidden" name="action" value="aiscb_clear_cache" />
+				<button type="submit" class="button"><?php echo esc_html( __( 'Clear Plugin Cache', 'ai-site-search-chatbot' ) ); ?></button>
+				<div class="aiscb-danger-zone__hint"><?php echo esc_html( __( 'Remove cached AI replies and transient usage state so the next chat sends fresh provider requests.', 'ai-site-search-chatbot' ) ); ?></div>
+			</form>
 			<div class="aiscb-danger-zone__actions">
 				<?php foreach ( $actions as $scope => $label ) : ?>
 					<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="aiscb-danger-zone__form" onsubmit="return window.confirm('<?php echo esc_js( __( 'This delete action cannot be undone. Continue?', 'ai-site-search-chatbot' ) ); ?>');">
