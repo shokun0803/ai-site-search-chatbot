@@ -107,6 +107,12 @@ Display Location を Display only where the shortcode is placed に設定した�
 
 ## 変更履歴
 
+### 0.5.4
+
+- AI 利用量集計で thinking tokens を個別に追跡しつつ、Google Gemini の課金表示と揃うよう出力トークン集計を調整
+- Gemini の usageMetadata を HTTP エラー時も回収し、thinking model 応答の thought パートをスキップして回答本文を安定して抽出
+- thinking model 利用時のタイムアウトを避けるため、AI プロバイダーへのリクエストタイムアウトを 60 秒に延長
+
 ### 0.5.3
 
 - 管理画面に「Clear Plugin Cache」アクションを追加し、キャッシュ済み AI 応答と transient 状態を手動でクリア可能に
