@@ -817,9 +817,11 @@ final class AISite_Search_Chatbot_Admin {
 	private static function render_ai_usage_summary( array $summary ): void {
 		$total_requests = isset( $summary['total_requests'] ) ? absint( $summary['total_requests'] ) : 0;
 		$total_input_tokens = isset( $summary['total_input_tokens'] ) ? absint( $summary['total_input_tokens'] ) : 0;
-		$total_output_tokens = isset( $summary['total_output_tokens'] ) ? absint( $summary['total_output_tokens'] ) : 0;
+		$total_output_tokens = ( isset( $summary['total_output_tokens'] ) ? absint( $summary['total_output_tokens'] ) : 0 )
+			+ ( isset( $summary['total_thinking_tokens'] ) ? absint( $summary['total_thinking_tokens'] ) : 0 );
 		$total_request_characters = isset( $summary['total_request_characters_in'] ) ? absint( $summary['total_request_characters_in'] ) : 0;
 		$total_response_characters = isset( $summary['total_response_characters_out'] ) ? absint( $summary['total_response_characters_out'] ) : 0;
+		$total_thinking_tokens = isset( $summary['total_thinking_tokens'] ) ? absint( $summary['total_thinking_tokens'] ) : 0;
 		$total_cache_creation_tokens = isset( $summary['total_cache_creation_tokens'] ) ? absint( $summary['total_cache_creation_tokens'] ) : 0;
 		$total_cache_read_tokens = isset( $summary['total_cache_read_tokens'] ) ? absint( $summary['total_cache_read_tokens'] ) : 0;
 		$usage_sources = isset( $summary['usage_sources'] ) && is_array( $summary['usage_sources'] ) ? $summary['usage_sources'] : array();
@@ -839,6 +841,10 @@ final class AISite_Search_Chatbot_Admin {
 
 		echo '<div class="aiscb-log-meta">' . esc_html( sprintf( $token_label, $total_input_tokens, $total_output_tokens ) ) . '</div>';
 		echo '<div class="aiscb-log-meta">' . esc_html( sprintf( __( 'Chat Characters: in %1$d / out %2$d', 'ai-site-search-chatbot' ), $total_request_characters, $total_response_characters ) ) . '</div>';
+
+		if ( $total_thinking_tokens > 0 ) {
+			echo '<div class="aiscb-log-meta">' . esc_html( sprintf( __( 'Thinking Tokens: %d', 'ai-site-search-chatbot' ), $total_thinking_tokens ) ) . '</div>';
+		}
 
 		if ( $total_cache_creation_tokens > 0 || $total_cache_read_tokens > 0 ) {
 			echo '<div class="aiscb-log-meta">' . esc_html( sprintf( __( 'Cache Tokens: create %1$d / read %2$d', 'ai-site-search-chatbot' ), $total_cache_creation_tokens, $total_cache_read_tokens ) ) . '</div>';

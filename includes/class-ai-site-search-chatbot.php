@@ -14,6 +14,7 @@ final class AISCB_AI_Usage_Accumulator {
 			'failed_requests' => 0,
 			'total_input_tokens' => 0,
 			'total_output_tokens' => 0,
+			'total_thinking_tokens' => 0,
 			'total_cache_creation_tokens' => 0,
 			'total_cache_read_tokens' => 0,
 			'total_request_characters_in' => 0,
@@ -31,6 +32,7 @@ final class AISCB_AI_Usage_Accumulator {
 		$success = ! empty( $usage['success'] );
 		$input_tokens = isset( $usage['input_tokens'] ) ? max( 0, absint( $usage['input_tokens'] ) ) : 0;
 		$output_tokens = isset( $usage['output_tokens'] ) ? max( 0, absint( $usage['output_tokens'] ) ) : 0;
+		$thinking_tokens = isset( $usage['thinking_tokens'] ) ? max( 0, absint( $usage['thinking_tokens'] ) ) : 0;
 		$cache_creation_tokens = isset( $usage['cache_creation_tokens'] ) ? max( 0, absint( $usage['cache_creation_tokens'] ) ) : 0;
 		$cache_read_tokens = isset( $usage['cache_read_tokens'] ) ? max( 0, absint( $usage['cache_read_tokens'] ) ) : 0;
 		$request_characters = isset( $usage['request_characters_in'] ) ? max( 0, absint( $usage['request_characters_in'] ) ) : 0;
@@ -41,6 +43,7 @@ final class AISCB_AI_Usage_Accumulator {
 		$this->summary['failed_requests'] += $success ? 0 : 1;
 		$this->summary['total_input_tokens'] += $input_tokens;
 		$this->summary['total_output_tokens'] += $output_tokens;
+		$this->summary['total_thinking_tokens'] += $thinking_tokens;
 		$this->summary['total_cache_creation_tokens'] += $cache_creation_tokens;
 		$this->summary['total_cache_read_tokens'] += $cache_read_tokens;
 		$this->summary['total_request_characters_in'] += $request_characters;
@@ -60,8 +63,8 @@ final class AISCB_AI_Usage_Accumulator {
 			$this->summary['purposes'][ $purpose ] = $this->create_bucket();
 		}
 
-		$this->add_to_bucket( $this->summary['providers'][ $provider ], $success, $source, $input_tokens, $output_tokens, $cache_creation_tokens, $cache_read_tokens, $request_characters, $response_characters );
-		$this->add_to_bucket( $this->summary['purposes'][ $purpose ], $success, $source, $input_tokens, $output_tokens, $cache_creation_tokens, $cache_read_tokens, $request_characters, $response_characters );
+		$this->add_to_bucket( $this->summary['providers'][ $provider ], $success, $source, $input_tokens, $output_tokens, $thinking_tokens, $cache_creation_tokens, $cache_read_tokens, $request_characters, $response_characters );
+		$this->add_to_bucket( $this->summary['purposes'][ $purpose ], $success, $source, $input_tokens, $output_tokens, $thinking_tokens, $cache_creation_tokens, $cache_read_tokens, $request_characters, $response_characters );
 	}
 
 	public function export_summary(): array {
@@ -75,6 +78,7 @@ final class AISCB_AI_Usage_Accumulator {
 			'failed_requests' => 0,
 			'input_tokens' => 0,
 			'output_tokens' => 0,
+			'thinking_tokens' => 0,
 			'cache_creation_tokens' => 0,
 			'cache_read_tokens' => 0,
 			'request_characters_in' => 0,
@@ -83,12 +87,13 @@ final class AISCB_AI_Usage_Accumulator {
 		);
 	}
 
-	private function add_to_bucket( array &$bucket, bool $success, string $source, int $input_tokens, int $output_tokens, int $cache_creation_tokens, int $cache_read_tokens, int $request_characters, int $response_characters ): void {
+	private function add_to_bucket( array &$bucket, bool $success, string $source, int $input_tokens, int $output_tokens, int $thinking_tokens, int $cache_creation_tokens, int $cache_read_tokens, int $request_characters, int $response_characters ): void {
 		++$bucket['requests'];
 		$bucket['completed_requests'] += $success ? 1 : 0;
 		$bucket['failed_requests'] += $success ? 0 : 1;
 		$bucket['input_tokens'] += $input_tokens;
 		$bucket['output_tokens'] += $output_tokens;
+		$bucket['thinking_tokens'] += $thinking_tokens;
 		$bucket['cache_creation_tokens'] += $cache_creation_tokens;
 		$bucket['cache_read_tokens'] += $cache_read_tokens;
 		$bucket['request_characters_in'] += $request_characters;
@@ -3406,7 +3411,8 @@ final class AISite_Search_Chatbot {
 
 		$current['requests_count'] += $requests_count;
 		$current['input_tokens'] += isset( $summary['total_input_tokens'] ) ? absint( $summary['total_input_tokens'] ) : 0;
-		$current['output_tokens'] += isset( $summary['total_output_tokens'] ) ? absint( $summary['total_output_tokens'] ) : 0;
+		$current['output_tokens'] += ( isset( $summary['total_output_tokens'] ) ? absint( $summary['total_output_tokens'] ) : 0 )
+			+ ( isset( $summary['total_thinking_tokens'] ) ? absint( $summary['total_thinking_tokens'] ) : 0 );
 		$current['total_tokens'] = $current['input_tokens'] + $current['output_tokens'];
 
 		update_option( self::DAILY_USAGE_CURRENT_OPTION, self::prepare_daily_usage_buffer_for_storage( $current ), false );
@@ -3682,6 +3688,7 @@ final class AISite_Search_Chatbot {
 			'usage_source' => 'unavailable',
 			'input_tokens' => 0,
 			'output_tokens' => 0,
+			'thinking_tokens' => 0,
 			'cache_creation_tokens' => 0,
 			'cache_read_tokens' => 0,
 			'request_characters_in' => self::unicode_length( $request_text ),
@@ -3693,6 +3700,7 @@ final class AISite_Search_Chatbot {
 			$summary['usage_source'] = 'actual';
 			$summary['input_tokens'] = self::usage_value( $usage, array( 'input_tokens', 'inputTokens', 'prompt_tokens', 'promptTokenCount' ) );
 			$summary['output_tokens'] = self::usage_value( $usage, array( 'output_tokens', 'outputTokens', 'completion_tokens', 'candidatesTokenCount' ) );
+			$summary['thinking_tokens'] = self::usage_value( $usage, array( 'thoughtsTokenCount' ) );
 			$summary['cache_creation_tokens'] = self::usage_value( $usage, array( 'cache_creation_tokens', 'cacheCreationInputTokens' ) );
 			$summary['cache_read_tokens'] = self::usage_value( $usage, array( 'cache_read_tokens', 'cacheReadInputTokens', 'cachedContentTokenCount' ) );
 		} elseif ( ! empty( $response['success'] ) ) {
@@ -3750,6 +3758,7 @@ final class AISite_Search_Chatbot {
 			'failed_requests' => isset( $summary['failed_requests'] ) ? absint( $summary['failed_requests'] ) : 0,
 			'total_input_tokens' => isset( $summary['total_input_tokens'] ) ? absint( $summary['total_input_tokens'] ) : 0,
 			'total_output_tokens' => isset( $summary['total_output_tokens'] ) ? absint( $summary['total_output_tokens'] ) : 0,
+			'total_thinking_tokens' => isset( $summary['total_thinking_tokens'] ) ? absint( $summary['total_thinking_tokens'] ) : 0,
 			'total_cache_creation_tokens' => isset( $summary['total_cache_creation_tokens'] ) ? absint( $summary['total_cache_creation_tokens'] ) : 0,
 			'total_cache_read_tokens' => isset( $summary['total_cache_read_tokens'] ) ? absint( $summary['total_cache_read_tokens'] ) : 0,
 			'total_request_characters_in' => isset( $summary['total_request_characters_in'] ) ? absint( $summary['total_request_characters_in'] ) : 0,
@@ -3781,6 +3790,7 @@ final class AISite_Search_Chatbot {
 					'failed_requests' => isset( $bucket['failed_requests'] ) ? absint( $bucket['failed_requests'] ) : 0,
 					'input_tokens' => isset( $bucket['input_tokens'] ) ? absint( $bucket['input_tokens'] ) : 0,
 					'output_tokens' => isset( $bucket['output_tokens'] ) ? absint( $bucket['output_tokens'] ) : 0,
+					'thinking_tokens' => isset( $bucket['thinking_tokens'] ) ? absint( $bucket['thinking_tokens'] ) : 0,
 					'cache_creation_tokens' => isset( $bucket['cache_creation_tokens'] ) ? absint( $bucket['cache_creation_tokens'] ) : 0,
 					'cache_read_tokens' => isset( $bucket['cache_read_tokens'] ) ? absint( $bucket['cache_read_tokens'] ) : 0,
 					'request_characters_in' => isset( $bucket['request_characters_in'] ) ? absint( $bucket['request_characters_in'] ) : 0,
@@ -4034,9 +4044,12 @@ final class AISite_Search_Chatbot {
 			$message = $fallback_message;
 		}
 
+		$usage = isset( $body['usageMetadata'] ) && is_array( $body['usageMetadata'] ) ? $body['usageMetadata'] : array();
+
 		return array(
 			'success' => false,
 			'message' => self::append_response_request_id( $message, $response ),
+			'usage'   => $usage,
 		);
 	}
 
@@ -4208,7 +4221,7 @@ final class AISite_Search_Chatbot {
 		$response = wp_remote_post(
 			'https://api.openai.com/v1/chat/completions',
 			array(
-				'timeout' => 20,
+				'timeout' => 60,
 				'headers' => array(
 					'Authorization' => 'Bearer ' . $settings['api_key'],
 					'Content-Type'  => 'application/json',
@@ -4353,7 +4366,7 @@ final class AISite_Search_Chatbot {
 		$response = wp_remote_post(
 			'https://models.github.ai/inference/chat/completions',
 			array(
-				'timeout' => 45,
+				'timeout' => 60,
 				'headers' => array(
 					'Authorization' => 'Bearer ' . $settings['api_key'],
 					'Accept'        => 'application/vnd.github+json',
@@ -4414,7 +4427,7 @@ final class AISite_Search_Chatbot {
 		$response = wp_remote_post(
 			'https://generativelanguage.googleapis.com/v1beta/models/' . $model . ':generateContent?key=' . $settings['api_key'],
 			array(
-				'timeout' => 20,
+				'timeout' => 60,
 				'headers' => array(
 					'Content-Type' => 'application/json',
 				),
@@ -4434,21 +4447,33 @@ final class AISite_Search_Chatbot {
 		$body = json_decode( (string) wp_remote_retrieve_body( $response ), true );
 		$content = '';
 
-		if ( isset( $body['candidates'][0]['content']['parts'][0]['text'] ) ) {
-			$content = trim( (string) $body['candidates'][0]['content']['parts'][0]['text'] );
+		$parts = isset( $body['candidates'][0]['content']['parts'] ) && is_array( $body['candidates'][0]['content']['parts'] )
+			? $body['candidates'][0]['content']['parts']
+			: array();
+		foreach ( $parts as $part ) {
+			if ( ! empty( $part['thought'] ) ) {
+				continue;
+			}
+			if ( isset( $part['text'] ) ) {
+				$content = trim( (string) $part['text'] );
+				break;
+			}
 		}
+
+		$usage = isset( $body['usageMetadata'] ) && is_array( $body['usageMetadata'] ) ? $body['usageMetadata'] : array();
 
 		if ( '' === $content ) {
 			return array(
 				'success' => false,
 				'message' => __( 'Gemini returned an empty response.', 'ai-site-search-chatbot' ),
+				'usage'   => $usage,
 			);
 		}
 
 		return array(
 			'success' => true,
 			'content' => $content,
-			'usage' => isset( $body['usageMetadata'] ) && is_array( $body['usageMetadata'] ) ? $body['usageMetadata'] : array(),
+			'usage'   => $usage,
 		);
 	}
 
