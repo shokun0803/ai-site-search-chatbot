@@ -2,7 +2,7 @@
 /**
  * Plugin Name: AI Site Search Chatbot
  * Description: Provides a public chatbot that searches site content and can answer visitors with an AI provider.
- * Version: 0.5.5
+ * Version: 0.5.6
  * Author: GitHub Copilot, shokun0803
  * Text Domain: ai-site-search-chatbot
  * Domain Path: /languages
