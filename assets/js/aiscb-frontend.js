@@ -1,4 +1,29 @@
 ( function () {
+	var HISTORY_TTL = 3 * 60 * 60 * 1000; // 3 hours
+
+	function saveHistory( key, msgs ) {
+		try {
+			localStorage.setItem( key, JSON.stringify( { ts: Date.now(), messages: msgs } ) );
+		} catch ( e ) {}
+	}
+
+	function loadHistory( key ) {
+		try {
+			var raw = localStorage.getItem( key );
+			if ( ! raw ) {
+				return null;
+			}
+			var data = JSON.parse( raw );
+			if ( Date.now() - data.ts > HISTORY_TTL ) {
+				localStorage.removeItem( key );
+				return null;
+			}
+			return data.messages;
+		} catch ( e ) {
+			return null;
+		}
+	}
+
 	function openWidget( widget, shouldOpen ) {
 		var launcher = widget.querySelector( '.aiscb-widget__launcher' );
 		var panel = widget.querySelector( '.aiscb-widget__panel' );
@@ -62,6 +87,23 @@
 			var input = widget.querySelector( '.aiscb-widget__input' );
 			var submit = widget.querySelector( '.aiscb-widget__submit' );
 			var hasGreeting = false;
+			var historyMessages = [];
+			var storageKey = 'aiscb_chat_' + endpoint;
+
+			function restoreOrGreet() {
+				var saved = loadHistory( storageKey );
+				if ( saved && saved.length ) {
+					saved.forEach( function ( msg ) {
+						addMessage( messages, msg.role, msg.text, msg.sources || [] );
+					} );
+					historyMessages = saved.slice();
+				} else {
+					addMessage( messages, 'assistant', greeting );
+					historyMessages.push( { role: 'assistant', text: greeting, sources: [] } );
+					saveHistory( storageKey, historyMessages );
+				}
+				hasGreeting = true;
+			}
 
 			if ( launcher ) {
 				launcher.addEventListener( 'click', function () {
@@ -69,8 +111,7 @@
 					openWidget( widget, nextState );
 
 					if ( nextState && ! hasGreeting ) {
-						addMessage( messages, 'assistant', greeting );
-						hasGreeting = true;
+						restoreOrGreet();
 					}
 
 					if ( nextState ) {
@@ -96,8 +137,7 @@
 			} );
 
 			if ( panel && ! panel.hidden && ! hasGreeting ) {
-				addMessage( messages, 'assistant', greeting );
-				hasGreeting = true;
+				restoreOrGreet();
 			}
 
 			input.addEventListener( 'keydown', function ( event ) {
@@ -119,6 +159,8 @@
 				}
 
 				addMessage( messages, 'user', value );
+				historyMessages.push( { role: 'user', text: value, sources: [] } );
+				saveHistory( storageKey, historyMessages );
 				input.value = '';
 				submit.disabled = true;
 				input.disabled = true;
@@ -141,7 +183,11 @@
 
 					var data = await response.json();
 					messages.removeChild( pending );
-					addMessage( messages, 'assistant', data.answer || 'No answer was returned.', data.sources || [] );
+					var answerText = data.answer || 'No answer was returned.';
+					var answerSources = data.sources || [];
+					addMessage( messages, 'assistant', answerText, answerSources );
+					historyMessages.push( { role: 'assistant', text: answerText, sources: answerSources } );
+					saveHistory( storageKey, historyMessages );
 				} catch ( error ) {
 					messages.removeChild( pending );
 					addMessage( messages, 'assistant', errorLabel );
