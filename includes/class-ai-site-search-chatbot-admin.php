@@ -295,6 +295,23 @@ final class AISite_Search_Chatbot_Admin {
 						</td>
 					</tr>
 					<tr>
+						<th scope="row"><label for="aiscb_ai_limit_global_daily"><?php echo esc_html( __( 'AI Reply Limit (site-wide, daily)', 'ai-site-search-chatbot' ) ); ?></label></th>
+						<td>
+							<input type="number" min="0" max="100000" id="aiscb_ai_limit_global_daily" name="<?php echo esc_attr( AISite_Search_Chatbot::OPTION_KEY ); ?>[ai_limit_global_daily]" value="<?php echo esc_attr( (string) absint( $settings['ai_limit_global_daily'] ) ); ?>" />
+							<p class="description"><?php echo esc_html( __( 'Hard ceiling on the total number of AI provider calls made across the whole site each day, regardless of visitor IP. This is the main protection against runaway API costs from distributed or automated abuse. Set 0 to disable the cap (not recommended for public sites).', 'ai-site-search-chatbot' ) ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php echo esc_html( __( 'Trust Proxy Headers', 'ai-site-search-chatbot' ) ); ?></th>
+						<td>
+							<label for="aiscb_trust_proxy_headers">
+								<input type="checkbox" id="aiscb_trust_proxy_headers" name="<?php echo esc_attr( AISite_Search_Chatbot::OPTION_KEY ); ?>[trust_proxy_headers]" value="1" <?php checked( ! empty( $settings['trust_proxy_headers'] ) ); ?> />
+								<?php echo esc_html( __( 'This site sits behind a trusted reverse proxy or CDN (e.g. Cloudflare, nginx, a load balancer).', 'ai-site-search-chatbot' ) ); ?>
+							</label>
+							<p class="description"><?php echo esc_html( __( 'When enabled, the visitor IP used for rate limiting is read from forwarded headers (CF-Connecting-IP, X-Real-IP, X-Forwarded-For). Only enable this if a trusted proxy sets those headers; otherwise visitors could spoof them to bypass rate limits. Leave disabled if visitors connect directly to WordPress.', 'ai-site-search-chatbot' ) ); ?></p>
+						</td>
+					</tr>
+					<tr>
 						<th scope="row"><?php echo esc_html( __( 'Chatbot Display', 'ai-site-search-chatbot' ) ); ?></th>
 						<td>
 							<label for="aiscb_widget_enabled">

@@ -1,4 +1,6 @@
 .gitignore export-ignore
 .gitattributes export-ignore
 .vscode export-ignore
-README.md export-ignoreREADME.md export-ignore
+README.md export-ignore
+composer.json export-ignore
+composer.lock export-ignore

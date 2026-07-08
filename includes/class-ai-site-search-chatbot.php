@@ -108,7 +108,7 @@ final class AISCB_AI_Usage_Accumulator {
 }
 
 final class AISite_Search_Chatbot {
-	const VERSION = '0.5.6';
+	const VERSION = '0.5.7';
 	const TOKEN_ESTIMATION_VERSION = 'char-mix-v1';
 	const OPTION_KEY = 'aiscb_settings';
 	const OPTION_GROUP = 'aiscb_settings_group';
@@ -120,6 +120,7 @@ final class AISite_Search_Chatbot {
 	const DAILY_USAGE_SCHEMA_OPTION = 'aiscb_daily_usage_schema_version';
 	const DAILY_USAGE_SCHEMA_VERSION = '1.0.0';
 	const DAILY_USAGE_CURRENT_OPTION = 'aiscb_daily_usage_current';
+	const GLOBAL_AI_USAGE_OPTION = 'aiscb_ai_usage_global';
 	const KNOWLEDGE_BASE_TABLE = 'aiscb_knowledge_base';
 	const KNOWLEDGE_BASE_SCHEMA_OPTION = 'aiscb_knowledge_base_schema_version';
 	const KNOWLEDGE_BASE_SCHEMA_VERSION = '1.0.0';
@@ -250,6 +251,7 @@ final class AISite_Search_Chatbot {
 		delete_option( self::OPTION_KEY );
 		delete_option( self::CHAT_LOG_OPTION );
 		delete_option( self::DAILY_USAGE_CURRENT_OPTION );
+		delete_option( self::GLOBAL_AI_USAGE_OPTION );
 		delete_option( self::DAILY_USAGE_SCHEMA_OPTION );
 		delete_option( self::KNOWLEDGE_BASE_SCHEMA_OPTION );
 
@@ -312,6 +314,8 @@ final class AISite_Search_Chatbot {
 			'max_sources'         => 5,
 			'ai_limit_window_10m' => 8,
 			'ai_limit_window_1h'  => 24,
+			'ai_limit_global_daily' => 500,
+			'trust_proxy_headers' => 0,
 			'widget_enabled'      => 0,
 			'widget_display_mode' => 'all-pages',
 			'widget_theme'        => 'business',
@@ -780,6 +784,8 @@ final class AISite_Search_Chatbot {
 			'max_sources'         => isset( $input['max_sources'] ) ? max( 1, min( 10, absint( $input['max_sources'] ) ) ) : $defaults['max_sources'],
 			'ai_limit_window_10m' => isset( $input['ai_limit_window_10m'] ) ? max( 1, min( 30, absint( $input['ai_limit_window_10m'] ) ) ) : $defaults['ai_limit_window_10m'],
 			'ai_limit_window_1h'  => isset( $input['ai_limit_window_1h'] ) ? max( 1, min( 100, absint( $input['ai_limit_window_1h'] ) ) ) : $defaults['ai_limit_window_1h'],
+			'ai_limit_global_daily' => isset( $input['ai_limit_global_daily'] ) ? max( 0, min( 100000, absint( $input['ai_limit_global_daily'] ) ) ) : $defaults['ai_limit_global_daily'],
+			'trust_proxy_headers' => isset( $input['trust_proxy_headers'] ) ? 1 : 0,
 			'widget_enabled'      => isset( $input['widget_enabled'] ) ? 1 : 0,
 			'widget_display_mode' => $widget_display_mode,
 			'widget_theme'        => $widget_theme,
@@ -2250,12 +2256,24 @@ final class AISite_Search_Chatbot {
 	}
 
 	private static function get_client_ip_address(): string {
-		$candidates = array(
-			'HTTP_CF_CONNECTING_IP',
-			'HTTP_X_REAL_IP',
-			'HTTP_X_FORWARDED_FOR',
-			'REMOTE_ADDR',
-		);
+		$candidates = array( 'REMOTE_ADDR' );
+
+		/*
+		 * Forwarded-for style headers are trivially spoofable by the client, so
+		 * they are only honored when the site owner explicitly declares that the
+		 * site sits behind a trusted reverse proxy (Cloudflare, nginx, load
+		 * balancer, ...) that overwrites them. Otherwise the per-IP rate limiter
+		 * and AI spend throttle would be bypassable by sending a fresh fake IP
+		 * on every request.
+		 */
+		if ( self::should_trust_proxy_headers() ) {
+			$candidates = array(
+				'HTTP_CF_CONNECTING_IP',
+				'HTTP_X_REAL_IP',
+				'HTTP_X_FORWARDED_FOR',
+				'REMOTE_ADDR',
+			);
+		}
 
 		foreach ( $candidates as $server_key ) {
 			if ( empty( $_SERVER[ $server_key ] ) ) {
@@ -2277,6 +2295,61 @@ final class AISite_Search_Chatbot {
 		}
 
 		return 'unknown';
+	}
+
+	private static function should_trust_proxy_headers(): bool {
+		$settings = self::get_settings();
+
+		return ! empty( $settings['trust_proxy_headers'] );
+	}
+
+	/**
+	 * Site-wide daily ceiling on outbound AI provider calls.
+	 *
+	 * The per-IP throttle can be spread across many source addresses (a botnet,
+	 * or spoofed forwarded headers when a proxy is trusted). This global cap is
+	 * the hard backstop that bounds total paid API spend regardless of source.
+	 * It counts every real provider call (routing, query extraction, and answer
+	 * generation), enforced centrally in request_ai_completion().
+	 */
+	private static function get_global_ai_usage_daily_limit(): int {
+		$settings = self::get_settings();
+
+		return max( 0, min( 100000, absint( $settings['ai_limit_global_daily'] ?? 500 ) ) );
+	}
+
+	private static function get_global_ai_usage_state(): array {
+		$today = gmdate( 'Ymd' );
+		$state = get_option( self::GLOBAL_AI_USAGE_OPTION, array() );
+
+		if ( ! is_array( $state ) || ! isset( $state['day'] ) || $state['day'] !== $today ) {
+			$state = array(
+				'day'   => $today,
+				'count' => 0,
+			);
+		}
+
+		$state['count'] = isset( $state['count'] ) ? absint( $state['count'] ) : 0;
+
+		return $state;
+	}
+
+	private static function is_ai_usage_globally_limited(): bool {
+		$limit = self::get_global_ai_usage_daily_limit();
+
+		if ( $limit <= 0 ) {
+			return false;
+		}
+
+		$state = self::get_global_ai_usage_state();
+
+		return $state['count'] >= $limit;
+	}
+
+	private static function register_global_ai_usage(): void {
+		$state = self::get_global_ai_usage_state();
+		++$state['count'];
+		update_option( self::GLOBAL_AI_USAGE_OPTION, $state, false );
 	}
 
 	private static function is_ai_usage_limited(): bool {
@@ -2489,6 +2562,15 @@ final class AISite_Search_Chatbot {
 		$rule_based_queries = self::build_rule_based_search_queries( $message );
 
 		if ( ! self::has_active_provider_credential( $settings ) || empty( $settings['model'] ) ) {
+			return array(
+				'intent'  => 'site-search',
+				'queries' => self::normalize_search_queries( $rule_based_queries ),
+			);
+		}
+
+		// Do not spend an AI routing call once the caller's AI budget (per-IP or
+		// site-wide) is exhausted; fall back to rule-based routing instead.
+		if ( self::is_ai_usage_limited() || self::is_ai_usage_globally_limited() ) {
 			return array(
 				'intent'  => 'site-search',
 				'queries' => self::normalize_search_queries( $rule_based_queries ),
@@ -3643,6 +3725,16 @@ final class AISite_Search_Chatbot {
 		$options['resolved_system_prompt'] = $request_payload['system_prompt'];
 		$options['resolved_user_prompt'] = $request_payload['user_prompt'];
 
+		// Hard site-wide backstop against runaway API spend (distributed or
+		// spoofed abuse) before any paid provider call is made.
+		if ( self::is_ai_usage_globally_limited() ) {
+			return array(
+				'success' => false,
+				'content' => '',
+				'error'   => __( 'The daily AI usage limit for this site has been reached.', 'ai-site-search-chatbot' ),
+			);
+		}
+
 		switch ( $provider ) {
 			case 'claude':
 				$response = self::call_claude_api( $settings, $message, $results, $options );
@@ -3657,6 +3749,11 @@ final class AISite_Search_Chatbot {
 			default:
 				$response = self::call_openai_api( $settings, $message, $results, $options );
 				break;
+		}
+
+		// Count every real outbound provider call toward the site-wide daily cap.
+		if ( ! empty( $response['success'] ) ) {
+			self::register_global_ai_usage();
 		}
 
 		$response['usage_summary'] = self::build_ai_usage_summary( $settings, $purpose, $request_payload, $response );
