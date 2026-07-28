@@ -95,6 +95,48 @@
 	border-left: 3px solid #0073aa;
 }
 
+.aiscb-admin .aiscb-connector-status {
+	margin-bottom: 2rem;
+	padding: 1.5rem;
+	background: #fff;
+	border: 1px solid #ddd;
+	border-radius: 8px;
+}
+
+.aiscb-admin .aiscb-connector-list {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.75rem;
+	margin: 0 0 1rem;
+	padding: 0;
+	list-style: none;
+}
+
+.aiscb-admin .aiscb-connector-item {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.5rem 0.75rem;
+	background: #f5f5f5;
+	border-radius: 6px;
+}
+
+.aiscb-admin .aiscb-connector-badge {
+	padding: 0.15rem 0.5rem;
+	border-radius: 999px;
+	font-size: 0.8em;
+}
+
+.aiscb-admin .aiscb-connector-badge--connected {
+	background: #d4edda;
+	color: #155724;
+}
+
+.aiscb-admin .aiscb-connector-badge--disconnected {
+	background: #f8d7da;
+	color: #721c24;
+}
+
 .aiscb-admin .aiscb-model-container {
 	max-width: 840px;
 }

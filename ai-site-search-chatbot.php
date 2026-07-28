@@ -1,8 +1,10 @@
 <?php
 /**
  * Plugin Name: AI Site Search Chatbot
- * Description: Provides a public chatbot that searches site content and can answer visitors with an AI provider.
- * Version: 0.5.7
+ * Description: Provides a public chatbot that searches site content and can answer visitors with an AI provider connected through WordPress Settings > Connectors.
+ * Version: 0.6.0
+ * Requires at least: 7.0
+ * Requires PHP: 8.1
  * Author: GitHub Copilot, shokun0803
  * Text Domain: ai-site-search-chatbot
  * Domain Path: /languages
@@ -20,10 +22,6 @@ if ( ! defined( 'AISCB_FILE' ) ) {
 
 if ( ! defined( 'AISCB_DIR' ) ) {
 	define( 'AISCB_DIR', plugin_dir_path( AISCB_FILE ) );
-}
-
-if ( file_exists( AISCB_DIR . 'vendor/autoload.php' ) ) {
-	require_once AISCB_DIR . 'vendor/autoload.php';
 }
 
 require_once AISCB_DIR . 'includes/class-ai-site-search-chatbot.php';

@@ -68,7 +68,9 @@ final class AISite_Search_Chatbot_Admin {
 				),
 				'knowledgeBaseMatchModes' => AISite_Search_Chatbot::get_knowledge_base_match_modes(),
 				'uninstallCleanupModes' => AISite_Search_Chatbot::get_uninstall_cleanup_modes(),
-				'credentialStatus' => AISite_Search_Chatbot::get_admin_credential_status(),
+				'connectorStatus' => AISite_Search_Chatbot::get_connector_status(),
+				'connectorsPageUrl' => admin_url( 'options-connectors.php' ),
+				'pluginInstallUrl' => admin_url( 'plugin-install.php' ),
 				'validateEndpoint' => rest_url( AISite_Search_Chatbot::REST_NAMESPACE . '/validate' ),
 				'testChatEndpoint' => rest_url( AISite_Search_Chatbot::REST_NAMESPACE . '/test-chat' ),
 				'knowledgeBaseEndpoint' => rest_url( AISite_Search_Chatbot::REST_NAMESPACE . '/knowledge-base' ),
@@ -78,32 +80,27 @@ final class AISite_Search_Chatbot_Admin {
 				'restNonce'        => wp_create_nonce( 'wp_rest' ),
 				'optionKey'        => AISite_Search_Chatbot::OPTION_KEY,
 				'i18n'             => array(
-					'apiKeyHelpTitle'          => __( 'How to get your API Key:', 'ai-site-search-chatbot' ),
-					'bearerTokenHelpTitle'     => __( 'How to get your Bearer Token:', 'ai-site-search-chatbot' ),
 					'noteTitle'                => __( 'Note:', 'ai-site-search-chatbot' ),
 					'modelExample'             => __( 'Enter the exact model ID. Example:', 'ai-site-search-chatbot' ),
 					'modelReference'           => __( 'Model ID reference:', 'ai-site-search-chatbot' ),
 					'assistantReply'           => __( 'Assistant Reply', 'ai-site-search-chatbot' ),
 					'referencedSources'        => __( 'Referenced Sources', 'ai-site-search-chatbot' ),
-					'validationMissing'        => __( 'Enter an API key and model ID before running validation.', 'ai-site-search-chatbot' ),
-					'validationMissingBearer'  => __( 'Enter a bearer token and model ID before running validation.', 'ai-site-search-chatbot' ),
+					'validationMissing'        => __( 'Enter a model ID before running validation.', 'ai-site-search-chatbot' ),
 					'validationRunning'        => __( 'Validating connection...', 'ai-site-search-chatbot' ),
 					'validationSuccess'        => __( 'Validation succeeded.', 'ai-site-search-chatbot' ),
 					'validationFailed'         => __( 'Validation failed.', 'ai-site-search-chatbot' ),
 					'validationRequestFail'    => __( 'Validation request failed. Please try again.', 'ai-site-search-chatbot' ),
-					'adminTestMissingModel'    => __( 'Enter an API key and model ID before running the admin chat test.', 'ai-site-search-chatbot' ),
-					'adminTestMissingBearer'   => __( 'Enter a bearer token and model ID before running the admin chat test.', 'ai-site-search-chatbot' ),
+					'adminTestMissingModel'    => __( 'Enter a model ID before running the admin chat test.', 'ai-site-search-chatbot' ),
 					'adminTestMissingText'     => __( 'Enter a test question before running the admin chat test.', 'ai-site-search-chatbot' ),
 					'adminTestRunning'         => __( 'Running admin chat test...', 'ai-site-search-chatbot' ),
 					'adminTestSuccess'         => __( 'Admin chat test succeeded.', 'ai-site-search-chatbot' ),
 					'adminTestFailed'          => __( 'The admin chat test failed.', 'ai-site-search-chatbot' ),
 					'adminTestRequestFail'     => __( 'The admin chat test request failed. Please try again.', 'ai-site-search-chatbot' ),
-					'apiKeyStored'             => __( 'A saved API key is available for this provider. Enter a new value only if you want to replace it.', 'ai-site-search-chatbot' ),
-					'apiKeyConfig'             => __( 'A server-defined API key is active for this provider. Enter a value here only if you want to save a database fallback.', 'ai-site-search-chatbot' ),
-					'apiKeyEmpty'              => __( 'No saved API key exists for this provider yet.', 'ai-site-search-chatbot' ),
-					'bearerTokenStored'        => __( 'A saved bearer token is available. Enter a new value only if you want to replace it.', 'ai-site-search-chatbot' ),
-					'bearerTokenConfig'        => __( 'A server-defined bearer token is active. Enter a value here only if you want to save a database fallback.', 'ai-site-search-chatbot' ),
-					'bearerTokenEmpty'         => __( 'No saved bearer token exists yet.', 'ai-site-search-chatbot' ),
+					'connectorConnected'       => __( 'Connected via Settings > Connectors.', 'ai-site-search-chatbot' ),
+					'connectorNotConnected'    => __( 'Not connected yet.', 'ai-site-search-chatbot' ),
+					'connectorPluginMissing'   => __( 'The official AI provider plugin for this provider is not installed or active.', 'ai-site-search-chatbot' ),
+					'connectorManageLink'      => __( 'Manage connections in Settings > Connectors', 'ai-site-search-chatbot' ),
+					'connectorInstallLink'     => __( 'Install the provider plugin', 'ai-site-search-chatbot' ),
 					'knowledgeLoadFailed'      => __( 'The saved knowledge list could not be loaded.', 'ai-site-search-chatbot' ),
 					'knowledgeSaveFailed'      => __( 'The knowledge entry could not be saved.', 'ai-site-search-chatbot' ),
 					'knowledgeDeleteFailed'    => __( 'The knowledge entry could not be deleted.', 'ai-site-search-chatbot' ),
@@ -164,6 +161,7 @@ final class AISite_Search_Chatbot_Admin {
 			<h1><?php echo esc_html( __( 'AI Site Search Chatbot', 'ai-site-search-chatbot' ) ); ?></h1>
 			<?php self::render_page_tabs( $current_tab ); ?>
 			<?php self::render_admin_notice(); ?>
+			<?php self::render_legacy_provider_migration_notice(); ?>
 			<?php if ( 'knowledge-base' === $current_tab ) : ?>
 				<?php self::render_knowledge_base_panel(); ?>
 			<?php elseif ( 'logs' === $current_tab ) : ?>
@@ -197,50 +195,31 @@ final class AISite_Search_Chatbot_Admin {
 					<div id="aiscb-provider-info-content"></div>
 				</div>
 
+				<?php $connector_status = AISite_Search_Chatbot::get_connector_status(); ?>
+				<div class="aiscb-connector-status" id="aiscb-connector-status">
+					<h2 class="aiscb-section-title"><?php echo esc_html( __( 'Connection Status', 'ai-site-search-chatbot' ) ); ?></h2>
+					<p class="description"><?php echo esc_html( __( 'AI provider connections (API keys) are managed centrally in Settings > Connectors, shared by every compatible plugin. This screen only controls which connected provider and model this chatbot uses.', 'ai-site-search-chatbot' ) ); ?></p>
+					<ul class="aiscb-connector-list">
+						<?php foreach ( $providers as $provider_key => $provider_info ) : ?>
+							<?php $status = $connector_status[ $provider_key ] ?? array(); ?>
+							<li class="aiscb-connector-item" data-provider="<?php echo esc_attr( $provider_key ); ?>">
+								<strong class="aiscb-connector-item__label"><?php echo esc_html( $provider_info['label'] ); ?></strong>
+								<?php if ( ! empty( $status['connected'] ) ) : ?>
+									<span class="aiscb-connector-badge aiscb-connector-badge--connected"><?php echo esc_html( __( 'Connected', 'ai-site-search-chatbot' ) ); ?></span>
+								<?php elseif ( empty( $status['plugin_active'] ) ) : ?>
+									<span class="aiscb-connector-badge aiscb-connector-badge--disconnected"><?php echo esc_html( __( 'Provider plugin not active', 'ai-site-search-chatbot' ) ); ?></span>
+								<?php else : ?>
+									<span class="aiscb-connector-badge aiscb-connector-badge--disconnected"><?php echo esc_html( __( 'Not connected', 'ai-site-search-chatbot' ) ); ?></span>
+								<?php endif; ?>
+							</li>
+						<?php endforeach; ?>
+					</ul>
+					<p>
+						<a class="button button-secondary" href="<?php echo esc_url( admin_url( 'options-connectors.php' ) ); ?>"><?php echo esc_html( __( 'Manage connections in Settings > Connectors', 'ai-site-search-chatbot' ) ); ?></a>
+					</p>
+				</div>
+
 				<table class="form-table" role="presentation">
-					<tr id="aiscb_claude_auth_mode_row" hidden>
-						<th scope="row"><?php echo esc_html( __( 'Authentication Method', 'ai-site-search-chatbot' ) ); ?></th>
-						<td>
-							<fieldset>
-								<label>
-									<input type="radio"
-										name="<?php echo esc_attr( AISite_Search_Chatbot::OPTION_KEY ); ?>[claude_auth_mode]"
-										id="aiscb_claude_auth_mode_api_key"
-										value="api_key"
-										<?php checked( $settings['claude_auth_mode'] ?? 'api_key', 'api_key' ); ?>
-									/>
-									<?php echo esc_html( __( 'API Key (pay-per-use)', 'ai-site-search-chatbot' ) ); ?>
-								</label>
-								<br />
-								<label>
-									<input type="radio"
-										name="<?php echo esc_attr( AISite_Search_Chatbot::OPTION_KEY ); ?>[claude_auth_mode]"
-										id="aiscb_claude_auth_mode_bearer_token"
-										value="bearer_token"
-										<?php checked( $settings['claude_auth_mode'] ?? 'api_key', 'bearer_token' ); ?>
-									/>
-									<?php echo esc_html( __( 'Bearer Token (Agent SDK credits)', 'ai-site-search-chatbot' ) ); ?>
-								</label>
-							</fieldset>
-							<p class="description"><?php echo esc_html( __( 'API Key uses pay-per-use billing. Bearer Token uses your Claude subscription monthly credits (Pro, Max, Team, or Enterprise plan required).', 'ai-site-search-chatbot' ) ); ?></p>
-						</td>
-					</tr>
-					<tr id="aiscb_api_key_row">
-						<th scope="row"><label for="aiscb_api_key"><?php echo esc_html( __( 'API Key', 'ai-site-search-chatbot' ) ); ?></label></th>
-						<td>
-							<input type="password" class="regular-text" id="aiscb_api_key" name="<?php echo esc_attr( AISite_Search_Chatbot::OPTION_KEY ); ?>[api_key]" value="" autocomplete="off" />
-							<p class="description" id="aiscb_api_key_status"></p>
-							<p class="description" id="aiscb_api_key_help"></p>
-						</td>
-					</tr>
-					<tr id="aiscb_claude_bearer_token_row" hidden>
-						<th scope="row"><label for="aiscb_claude_bearer_token"><?php echo esc_html( __( 'Bearer Token', 'ai-site-search-chatbot' ) ); ?></label></th>
-						<td>
-							<input type="password" class="regular-text" id="aiscb_claude_bearer_token" name="<?php echo esc_attr( AISite_Search_Chatbot::OPTION_KEY ); ?>[claude_bearer_token]" value="" autocomplete="off" />
-							<p class="description" id="aiscb_claude_bearer_token_status"></p>
-							<p class="description"><?php echo esc_html( __( 'The auth token from your Claude account. Obtained by authenticating with Claude Code (claude auth login) and copying the session token.', 'ai-site-search-chatbot' ) ); ?></p>
-						</td>
-					</tr>
 					<tr>
 						<th scope="row"><label for="aiscb_model"><?php echo esc_html( __( 'Model', 'ai-site-search-chatbot' ) ); ?></label></th>
 						<td>
@@ -250,12 +229,12 @@ final class AISite_Search_Chatbot_Admin {
 								<p class="description" id="aiscb_model_help"></p>
 								<p class="description" id="aiscb_model_reference"></p>
 								<p>
-									<button type="button" class="button button-secondary" id="aiscb_validate_button"><?php echo esc_html( __( 'Validate API Key and Model', 'ai-site-search-chatbot' ) ); ?></button>
+									<button type="button" class="button button-secondary" id="aiscb_validate_button"><?php echo esc_html( __( 'Validate Connection and Model', 'ai-site-search-chatbot' ) ); ?></button>
 								</p>
 								<div id="aiscb_validation_result" class="notice inline aiscb-notice" hidden></div>
 								<div class="aiscb-admin-test">
 									<strong class="aiscb-admin-test-title"><?php echo esc_html( __( 'Admin Chat Test', 'ai-site-search-chatbot' ) ); ?></strong>
-									<p class="description aiscb-admin-test-description"><?php echo esc_html( __( 'Test a real chatbot reply in the admin screen with the current API key, model, and system prompt before exposing it publicly.', 'ai-site-search-chatbot' ) ); ?></p>
+									<p class="description aiscb-admin-test-description"><?php echo esc_html( __( 'Test a real chatbot reply in the admin screen with the connected provider, model, and system prompt before exposing it publicly.', 'ai-site-search-chatbot' ) ); ?></p>
 									<textarea class="large-text" rows="4" id="aiscb_test_message" placeholder="<?php echo esc_attr( __( 'Enter a sample visitor question to test the chatbot.', 'ai-site-search-chatbot' ) ); ?>"></textarea>
 									<p>
 										<button type="button" class="button button-secondary" id="aiscb_test_chat_button"><?php echo esc_html( __( 'Run Admin Chat Test', 'ai-site-search-chatbot' ) ); ?></button>
@@ -524,6 +503,23 @@ final class AISite_Search_Chatbot_Admin {
 		list( $type, $message ) = $notices[ $notice_key ];
 		?>
 		<div class="notice notice-<?php echo esc_attr( $type ); ?> is-dismissible"><p><?php echo esc_html( $message ); ?></p></div>
+		<?php
+	}
+
+	/**
+	 * Shows a one-time notice after the plugin drops the "GitHub Models" provider
+	 * and resets sites that had it selected back to the OpenAI default.
+	 */
+	private static function render_legacy_provider_migration_notice(): void {
+		if ( ! get_option( AISite_Search_Chatbot::LEGACY_PROVIDER_MIGRATION_NOTICE_OPTION ) ) {
+			return;
+		}
+
+		delete_option( AISite_Search_Chatbot::LEGACY_PROVIDER_MIGRATION_NOTICE_OPTION );
+		?>
+		<div class="notice notice-warning is-dismissible">
+			<p><?php echo esc_html( __( 'AI Site Search Chatbot no longer supports the GitHub Models provider and now connects through WordPress Settings > Connectors instead of its own saved API keys. The AI provider was reset to OpenAI — please review the Settings tab and connect a provider.', 'ai-site-search-chatbot' ) ); ?></p>
+		</div>
 		<?php
 	}
 

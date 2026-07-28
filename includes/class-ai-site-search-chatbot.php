@@ -108,10 +108,13 @@ final class AISCB_AI_Usage_Accumulator {
 }
 
 final class AISite_Search_Chatbot {
-	const VERSION = '0.5.7';
+	const VERSION = '0.6.0';
 	const TOKEN_ESTIMATION_VERSION = 'char-mix-v1';
 	const OPTION_KEY = 'aiscb_settings';
 	const OPTION_GROUP = 'aiscb_settings_group';
+	const LEGACY_PROVIDER_MIGRATION_OPTION = 'aiscb_legacy_provider_migration_version';
+	const LEGACY_PROVIDER_MIGRATION_VERSION = '1';
+	const LEGACY_PROVIDER_MIGRATION_NOTICE_OPTION = 'aiscb_legacy_provider_migration_notice';
 	const REST_NAMESPACE = 'ai-site-search-chatbot/v1';
 	const SHORTCODE = 'ai_site_search_chatbot';
 	const CHAT_LOG_OPTION = 'aiscb_chat_logs';
@@ -143,12 +146,64 @@ final class AISite_Search_Chatbot {
 	public static function init(): void {
 		self::maybe_upgrade_daily_usage_schema();
 		self::maybe_upgrade_knowledge_base_schema();
+		self::maybe_migrate_legacy_provider_settings();
 		self::load_textdomain();
 		add_action( 'admin_init', array( __CLASS__, 'register_settings' ) );
 		add_action( 'rest_api_init', array( __CLASS__, 'register_rest_routes' ) );
 		AISite_Search_Chatbot_Admin::init();
 		AISite_Search_Chatbot_Block::init();
 		AISite_Search_Chatbot_Frontend::init();
+	}
+
+	/**
+	 * One-time cleanup for sites upgrading from the pre-7.0 self-managed API key
+	 * storage to the WordPress 7.0 Connectors API / AI Client. Resets a no-longer
+	 * supported "github-copilot" provider selection to the default, and removes
+	 * stale encrypted credential options that are no longer read anywhere.
+	 */
+	private static function maybe_migrate_legacy_provider_settings(): void {
+		if ( self::LEGACY_PROVIDER_MIGRATION_VERSION === get_option( self::LEGACY_PROVIDER_MIGRATION_OPTION, '' ) ) {
+			return;
+		}
+
+		$raw_settings = get_option( self::OPTION_KEY, array() );
+
+		if ( is_array( $raw_settings ) ) {
+			$legacy_keys = array(
+				'api_key',
+				'openai_api_key_encrypted',
+				'claude_api_key_encrypted',
+				'github_models_api_key_encrypted',
+				'gemini_api_key_encrypted',
+				'claude_auth_mode',
+				'claude_bearer_token',
+				'claude_bearer_token_encrypted',
+			);
+
+			$had_unsupported_provider = isset( $raw_settings['ai_provider'] ) && 'github-copilot' === $raw_settings['ai_provider'];
+			$had_legacy_keys = false;
+
+			foreach ( $legacy_keys as $legacy_key ) {
+				if ( array_key_exists( $legacy_key, $raw_settings ) ) {
+					$had_legacy_keys = true;
+					unset( $raw_settings[ $legacy_key ] );
+				}
+			}
+
+			if ( $had_unsupported_provider ) {
+				$raw_settings['ai_provider'] = 'openai';
+			}
+
+			if ( $had_unsupported_provider || $had_legacy_keys ) {
+				update_option( self::OPTION_KEY, $raw_settings );
+			}
+
+			if ( $had_unsupported_provider ) {
+				update_option( self::LEGACY_PROVIDER_MIGRATION_NOTICE_OPTION, 1, false );
+			}
+		}
+
+		update_option( self::LEGACY_PROVIDER_MIGRATION_OPTION, self::LEGACY_PROVIDER_MIGRATION_VERSION, false );
 	}
 
 	private static function maybe_upgrade_knowledge_base_schema(): void {
@@ -304,11 +359,6 @@ final class AISite_Search_Chatbot {
 	public static function default_settings(): array {
 		return array(
 			'ai_provider'         => 'openai',
-			'api_key'             => '',
-			'openai_api_key_encrypted' => '',
-			'claude_api_key_encrypted' => '',
-			'github_models_api_key_encrypted' => '',
-			'gemini_api_key_encrypted' => '',
 			'model'               => '',
 			'system_prompt'       => self::get_default_system_prompt(),
 			'max_sources'         => 5,
@@ -319,9 +369,6 @@ final class AISite_Search_Chatbot {
 			'widget_enabled'      => 0,
 			'widget_display_mode' => 'all-pages',
 			'widget_theme'        => 'business',
-			'claude_auth_mode'    => 'api_key',
-			'claude_bearer_token' => '',
-			'claude_bearer_token_encrypted' => '',
 			'knowledge_base_enabled' => 1,
 			'knowledge_base_auto_draft' => 1,
 			'knowledge_base_match_mode' => self::KNOWLEDGE_BASE_MATCH_MODE_HYBRID,
@@ -380,7 +427,7 @@ final class AISite_Search_Chatbot {
 	}
 
 	private static function get_valid_provider( string $provider ): string {
-		$valid_providers = array( 'openai', 'claude', 'github-copilot', 'gemini' );
+		$valid_providers = array( 'openai', 'claude', 'gemini' );
 
 		if ( ! in_array( $provider, $valid_providers, true ) ) {
 			return 'openai';
@@ -389,253 +436,67 @@ final class AISite_Search_Chatbot {
 		return $provider;
 	}
 
-	private static function get_provider_secret_option_key( string $provider ): string {
-		$provider_secret_keys = array(
-			'openai'         => 'openai_api_key_encrypted',
-			'claude'         => 'claude_api_key_encrypted',
-			'github-copilot' => 'github_models_api_key_encrypted',
-			'gemini'         => 'gemini_api_key_encrypted',
+	/**
+	 * Maps a plugin provider key to the WordPress 7.0 Connectors API connector ID
+	 * registered by the corresponding official AI provider plugin.
+	 */
+	private static function get_provider_connector_id( string $provider ): string {
+		$connector_ids = array(
+			'openai' => 'openai',
+			'claude' => 'anthropic',
+			'gemini' => 'google',
 		);
 
-		return $provider_secret_keys[ $provider ] ?? '';
+		return $connector_ids[ $provider ] ?? '';
 	}
 
-	private static function get_secret_reference_map(): array {
-		return array(
-			'openai'         => array(
-				'api_key' => array(
-					'constants' => array( 'AISCB_OPENAI_API_KEY' ),
-					'env'       => array( 'AISCB_OPENAI_API_KEY', 'OPENAI_API_KEY' ),
-				),
-			),
-			'claude'         => array(
-				'api_key'      => array(
-					'constants' => array( 'AISCB_CLAUDE_API_KEY' ),
-					'env'       => array( 'AISCB_CLAUDE_API_KEY', 'ANTHROPIC_API_KEY' ),
-				),
-				'bearer_token' => array(
-					'constants' => array( 'AISCB_CLAUDE_BEARER_TOKEN' ),
-					'env'       => array( 'AISCB_CLAUDE_BEARER_TOKEN', 'ANTHROPIC_AUTH_TOKEN' ),
-				),
-			),
-			'github-copilot' => array(
-				'api_key' => array(
-					'constants' => array( 'AISCB_GITHUB_MODELS_TOKEN' ),
-					'env'       => array( 'AISCB_GITHUB_MODELS_TOKEN', 'GITHUB_MODELS_TOKEN', 'GITHUB_TOKEN' ),
-				),
-			),
-			'gemini'         => array(
-				'api_key' => array(
-					'constants' => array( 'AISCB_GEMINI_API_KEY' ),
-					'env'       => array( 'AISCB_GEMINI_API_KEY', 'GEMINI_API_KEY', 'GOOGLE_API_KEY' ),
-				),
-			),
-		);
+	private static function is_provider_connector_configured( string $provider ): bool {
+		$connector_id = self::get_provider_connector_id( $provider );
+
+		if ( '' === $connector_id || ! class_exists( '\WordPress\AiClient\AiClient' ) ) {
+			return false;
+		}
+
+		try {
+			$registry = \WordPress\AiClient\AiClient::defaultRegistry();
+
+			return $registry->hasProvider( $connector_id ) && $registry->isProviderConfigured( $connector_id );
+		} catch ( \Exception $e ) {
+			return false;
+		}
 	}
 
-	private static function get_config_secret( string $provider, string $type = 'api_key' ): string {
-		$provider = self::get_valid_provider( $provider );
-		$references = self::get_secret_reference_map();
-		$reference = $references[ $provider ][ $type ] ?? null;
+	/**
+	 * Builds a per-provider connection status snapshot for the settings screen,
+	 * based on WordPress core's Connectors API (Settings > Connectors).
+	 */
+	public static function get_connector_status(): array {
+		$status = array();
 
-		if ( ! is_array( $reference ) ) {
-			return '';
-		}
+		foreach ( array( 'openai', 'claude', 'gemini' ) as $provider ) {
+			$connector_id = self::get_provider_connector_id( $provider );
+			$connector = function_exists( 'wp_get_connector' ) ? wp_get_connector( $connector_id ) : null;
+			$is_active_callback = is_array( $connector ) ? ( $connector['plugin']['is_active'] ?? null ) : null;
 
-		foreach ( $reference['constants'] ?? array() as $constant_name ) {
-			if ( defined( $constant_name ) ) {
-				$value = trim( (string) constant( $constant_name ) );
-
-				if ( '' !== $value ) {
-					return $value;
-				}
-			}
-		}
-
-		foreach ( $reference['env'] ?? array() as $env_name ) {
-			$value = getenv( $env_name );
-
-			if ( false === $value ) {
-				continue;
-			}
-
-			$value = trim( (string) $value );
-
-			if ( '' !== $value ) {
-				return $value;
-			}
-		}
-
-		return '';
-	}
-
-	private static function get_secret_encryption_key(): string {
-		$site_salt = wp_salt( 'auth' );
-
-		if ( '' === trim( (string) $site_salt ) ) {
-			return '';
-		}
-
-		return hash_hkdf( 'sha256', (string) $site_salt, 32, 'ai-site-search-chatbot/secret-storage' );
-	}
-
-	private static function encrypt_secret( string $secret ): string {
-		$secret = trim( $secret );
-
-		if ( '' === $secret ) {
-			return '';
-		}
-
-		$key = self::get_secret_encryption_key();
-
-		if ( '' === $key || ! function_exists( 'openssl_encrypt' ) ) {
-			return '';
-		}
-
-		$iv = random_bytes( 12 );
-		$tag = '';
-		$ciphertext = openssl_encrypt( $secret, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag, '', 16 );
-
-		if ( false === $ciphertext ) {
-			return '';
-		}
-
-		$payload = wp_json_encode(
-			array(
-				'v'    => 1,
-				'alg'  => 'aes-256-gcm',
-				'iv'   => base64_encode( $iv ),
-				'tag'  => base64_encode( $tag ),
-				'data' => base64_encode( $ciphertext ),
-			)
-		);
-
-		return is_string( $payload ) ? base64_encode( $payload ) : '';
-	}
-
-	private static function decrypt_secret( string $payload ): string {
-		$payload = trim( $payload );
-
-		if ( '' === $payload ) {
-			return '';
-		}
-
-		$key = self::get_secret_encryption_key();
-
-		if ( '' === $key || ! function_exists( 'openssl_decrypt' ) ) {
-			return '';
-		}
-
-		$decoded_payload = base64_decode( $payload, true );
-
-		if ( false === $decoded_payload ) {
-			return '';
-		}
-
-		$data = json_decode( $decoded_payload, true );
-
-		if ( ! is_array( $data ) || 'aes-256-gcm' !== ( $data['alg'] ?? '' ) ) {
-			return '';
-		}
-
-		$iv = base64_decode( (string) ( $data['iv'] ?? '' ), true );
-		$tag = base64_decode( (string) ( $data['tag'] ?? '' ), true );
-		$ciphertext = base64_decode( (string) ( $data['data'] ?? '' ), true );
-
-		if ( false === $iv || false === $tag || false === $ciphertext ) {
-			return '';
-		}
-
-		$plaintext = openssl_decrypt( $ciphertext, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag );
-
-		return is_string( $plaintext ) ? $plaintext : '';
-	}
-
-	private static function get_stored_secret( array $settings, string $provider, string $type = 'api_key' ): string {
-		$provider = self::get_valid_provider( $provider );
-
-		if ( 'bearer_token' === $type ) {
-			$encrypted = trim( (string) ( $settings['claude_bearer_token_encrypted'] ?? '' ) );
-
-			if ( '' !== $encrypted ) {
-				$decrypted = self::decrypt_secret( $encrypted );
-
-				if ( '' !== $decrypted ) {
-					return $decrypted;
-				}
-			}
-
-			return trim( (string) ( $settings['claude_bearer_token'] ?? '' ) );
-		}
-
-		$option_key = self::get_provider_secret_option_key( $provider );
-
-		if ( '' !== $option_key ) {
-			$encrypted = trim( (string) ( $settings[ $option_key ] ?? '' ) );
-
-			if ( '' !== $encrypted ) {
-				$decrypted = self::decrypt_secret( $encrypted );
-
-				if ( '' !== $decrypted ) {
-					return $decrypted;
-				}
-			}
-		}
-
-		$legacy_provider = self::get_valid_provider( (string) ( $settings['ai_provider'] ?? 'openai' ) );
-
-		if ( $provider === $legacy_provider ) {
-			return trim( (string) ( $settings['api_key'] ?? '' ) );
-		}
-
-		return '';
-	}
-
-	private static function get_effective_secret( array $settings, string $provider, string $type = 'api_key' ): array {
-		$config_secret = self::get_config_secret( $provider, $type );
-
-		if ( '' !== $config_secret ) {
-			return array(
-				'value'  => $config_secret,
-				'source' => 'config',
+			$status[ $provider ] = array(
+				'connector_id'    => $connector_id,
+				'plugin_file'     => is_array( $connector ) ? (string) ( $connector['plugin']['file'] ?? '' ) : '',
+				'plugin_active'   => is_callable( $is_active_callback ) ? (bool) call_user_func( $is_active_callback ) : false,
+				'credentials_url' => is_array( $connector ) ? (string) ( $connector['authentication']['credentials_url'] ?? '' ) : '',
+				'connected'       => self::is_provider_connector_configured( $provider ),
 			);
 		}
 
-		$stored_secret = self::get_stored_secret( $settings, $provider, $type );
-
-		if ( '' !== $stored_secret ) {
-			return array(
-				'value'  => $stored_secret,
-				'source' => 'database',
-			);
-		}
-
-		return array(
-			'value'  => '',
-			'source' => 'none',
-		);
+		return $status;
 	}
 
-	private static function normalize_runtime_settings( array $settings, ?array $raw_settings = null, bool $prefer_explicit_secret = false ): array {
+	private static function normalize_runtime_settings( array $settings ): array {
 		$defaults = self::default_settings();
 		$settings = wp_parse_args( $settings, $defaults );
-		$raw_settings = is_array( $raw_settings ) ? wp_parse_args( $raw_settings, $defaults ) : wp_parse_args( self::get_raw_settings(), $defaults );
 
-		$provider = self::get_valid_provider( (string) ( $settings['ai_provider'] ?? $raw_settings['ai_provider'] ?? $defaults['ai_provider'] ) );
+		$provider = self::get_valid_provider( (string) ( $settings['ai_provider'] ?? $defaults['ai_provider'] ) );
 		$settings['ai_provider'] = $provider;
-
-		$api_key_status = self::get_effective_secret( $raw_settings, $provider, 'api_key' );
-		$bearer_token_status = self::get_effective_secret( $raw_settings, 'claude', 'bearer_token' );
-
-		$explicit_api_key = trim( (string) ( $settings['api_key'] ?? '' ) );
-		$explicit_bearer_token = trim( (string) ( $settings['claude_bearer_token'] ?? '' ) );
-
-		$settings['api_key'] = ( $prefer_explicit_secret && '' !== $explicit_api_key ) ? $explicit_api_key : $api_key_status['value'];
-		$settings['claude_bearer_token'] = ( $prefer_explicit_secret && '' !== $explicit_bearer_token ) ? $explicit_bearer_token : $bearer_token_status['value'];
-		$settings['api_key_configured'] = '' !== trim( (string) $api_key_status['value'] );
-		$settings['api_key_source'] = $api_key_status['source'];
-		$settings['claude_bearer_token_configured'] = '' !== trim( (string) $bearer_token_status['value'] );
-		$settings['claude_bearer_token_source'] = $bearer_token_status['source'];
+		$settings['provider_connected'] = self::is_provider_connector_configured( $provider );
 
 		return $settings;
 	}
@@ -643,86 +504,7 @@ final class AISite_Search_Chatbot {
 	private static function has_active_provider_credential( array $settings ): bool {
 		$provider = self::get_valid_provider( (string) ( $settings['ai_provider'] ?? 'openai' ) );
 
-		if ( 'claude' === $provider && 'bearer_token' === ( $settings['claude_auth_mode'] ?? 'api_key' ) ) {
-			return '' !== trim( (string) ( $settings['claude_bearer_token'] ?? '' ) );
-		}
-
-		return '' !== trim( (string) ( $settings['api_key'] ?? '' ) );
-	}
-
-	private static function remember_secret_for_provider( array &$sanitized, array $existing_settings, string $provider, string $secret, string $type = 'api_key' ): void {
-		$secret = trim( $secret );
-
-		if ( 'bearer_token' === $type ) {
-			$storage_key = 'claude_bearer_token_encrypted';
-			$legacy_plain_secret = trim( (string) ( $existing_settings['claude_bearer_token'] ?? '' ) );
-		} else {
-			$storage_key = self::get_provider_secret_option_key( $provider );
-			$legacy_provider = self::get_valid_provider( (string) ( $existing_settings['ai_provider'] ?? 'openai' ) );
-			$legacy_plain_secret = ( $provider === $legacy_provider ) ? trim( (string) ( $existing_settings['api_key'] ?? '' ) ) : '';
-		}
-
-		if ( '' === $storage_key ) {
-			return;
-		}
-
-		if ( '' !== $secret ) {
-			$encrypted_secret = self::encrypt_secret( $secret );
-
-			if ( '' === $encrypted_secret ) {
-				add_settings_error(
-					self::OPTION_KEY,
-					'aiscb_secret_storage_failed',
-					__( 'The credential could not be stored securely on this server. The previous saved value was kept unchanged.', 'ai-site-search-chatbot' ),
-					'error'
-				);
-
-				$sanitized[ $storage_key ] = (string) ( $existing_settings[ $storage_key ] ?? '' );
-
-				return;
-			}
-
-			$sanitized[ $storage_key ] = $encrypted_secret;
-
-			return;
-		}
-
-		if ( ! empty( $existing_settings[ $storage_key ] ) ) {
-			$sanitized[ $storage_key ] = (string) $existing_settings[ $storage_key ];
-
-			return;
-		}
-
-		if ( '' !== $legacy_plain_secret ) {
-			$encrypted_secret = self::encrypt_secret( $legacy_plain_secret );
-
-			if ( '' !== $encrypted_secret ) {
-				$sanitized[ $storage_key ] = $encrypted_secret;
-			}
-		}
-	}
-
-	public static function get_admin_credential_status(): array {
-		$raw_settings = wp_parse_args( self::get_raw_settings(), self::default_settings() );
-		$status = array();
-
-		foreach ( array( 'openai', 'claude', 'github-copilot', 'gemini' ) as $provider ) {
-			$api_key = self::get_effective_secret( $raw_settings, $provider, 'api_key' );
-			$status[ $provider ] = array(
-				'api_key' => array(
-					'configured' => '' !== trim( (string) $api_key['value'] ),
-					'source'     => $api_key['source'],
-				),
-			);
-		}
-
-		$bearer_token = self::get_effective_secret( $raw_settings, 'claude', 'bearer_token' );
-		$status['claude']['bearer_token'] = array(
-			'configured' => '' !== trim( (string) $bearer_token['value'] ),
-			'source'     => $bearer_token['source'],
-		);
-
-		return $status;
+		return self::is_provider_connector_configured( $provider );
 	}
 
 	public static function get_settings(): array {
@@ -736,12 +518,11 @@ final class AISite_Search_Chatbot {
 			$settings['system_prompt'] = self::get_default_system_prompt();
 		}
 
-		return self::normalize_runtime_settings( $settings, $settings );
+		return self::normalize_runtime_settings( $settings );
 	}
 
 	public static function sanitize_settings( $input ): array {
 		$defaults = self::default_settings();
-		$existing_settings = wp_parse_args( self::get_raw_settings(), $defaults );
 		$input = is_array( $input ) ? $input : array();
 
 		$provider = isset( $input['ai_provider'] ) ? sanitize_text_field( wp_unslash( $input['ai_provider'] ) ) : $defaults['ai_provider'];
@@ -757,11 +538,6 @@ final class AISite_Search_Chatbot {
 			$widget_display_mode = $defaults['widget_display_mode'];
 		}
 
-		$claude_auth_mode = isset( $input['claude_auth_mode'] ) ? sanitize_key( wp_unslash( $input['claude_auth_mode'] ) ) : $defaults['claude_auth_mode'];
-		if ( ! in_array( $claude_auth_mode, array( 'api_key', 'bearer_token' ), true ) ) {
-			$claude_auth_mode = $defaults['claude_auth_mode'];
-		}
-
 		$knowledge_base_match_mode = isset( $input['knowledge_base_match_mode'] ) ? sanitize_key( wp_unslash( $input['knowledge_base_match_mode'] ) ) : $defaults['knowledge_base_match_mode'];
 		if ( ! array_key_exists( $knowledge_base_match_mode, self::get_knowledge_base_match_modes() ) ) {
 			$knowledge_base_match_mode = $defaults['knowledge_base_match_mode'];
@@ -772,13 +548,8 @@ final class AISite_Search_Chatbot {
 			$uninstall_cleanup_mode = $defaults['uninstall_cleanup_mode'];
 		}
 
-		$sanitized = array(
+		return array(
 			'ai_provider'         => $provider,
-			'api_key'             => '',
-			'openai_api_key_encrypted' => (string) ( $existing_settings['openai_api_key_encrypted'] ?? '' ),
-			'claude_api_key_encrypted' => (string) ( $existing_settings['claude_api_key_encrypted'] ?? '' ),
-			'github_models_api_key_encrypted' => (string) ( $existing_settings['github_models_api_key_encrypted'] ?? '' ),
-			'gemini_api_key_encrypted' => (string) ( $existing_settings['gemini_api_key_encrypted'] ?? '' ),
 			'model'               => isset( $input['model'] ) ? sanitize_text_field( wp_unslash( $input['model'] ) ) : $defaults['model'],
 			'system_prompt'       => isset( $input['system_prompt'] ) ? sanitize_textarea_field( wp_unslash( $input['system_prompt'] ) ) : $defaults['system_prompt'],
 			'max_sources'         => isset( $input['max_sources'] ) ? max( 1, min( 10, absint( $input['max_sources'] ) ) ) : $defaults['max_sources'],
@@ -789,23 +560,12 @@ final class AISite_Search_Chatbot {
 			'widget_enabled'      => isset( $input['widget_enabled'] ) ? 1 : 0,
 			'widget_display_mode' => $widget_display_mode,
 			'widget_theme'        => $widget_theme,
-			'claude_auth_mode'    => $claude_auth_mode,
-			'claude_bearer_token' => '',
-			'claude_bearer_token_encrypted' => (string) ( $existing_settings['claude_bearer_token_encrypted'] ?? '' ),
 			'knowledge_base_enabled' => isset( $input['knowledge_base_enabled'] ) ? 1 : 0,
 			'knowledge_base_auto_draft' => isset( $input['knowledge_base_auto_draft'] ) ? 1 : 0,
 			'knowledge_base_match_mode' => $knowledge_base_match_mode,
 			'knowledge_base_candidate_ttl_hours' => isset( $input['knowledge_base_candidate_ttl_hours'] ) ? max( 1, min( 720, absint( $input['knowledge_base_candidate_ttl_hours'] ) ) ) : $defaults['knowledge_base_candidate_ttl_hours'],
 			'uninstall_cleanup_mode' => $uninstall_cleanup_mode,
 		);
-
-		$api_key = isset( $input['api_key'] ) ? sanitize_text_field( wp_unslash( $input['api_key'] ) ) : '';
-		$bearer_token = isset( $input['claude_bearer_token'] ) ? sanitize_text_field( wp_unslash( $input['claude_bearer_token'] ) ) : '';
-
-		self::remember_secret_for_provider( $sanitized, $existing_settings, $provider, $api_key, 'api_key' );
-		self::remember_secret_for_provider( $sanitized, $existing_settings, 'claude', $bearer_token, 'bearer_token' );
-
-		return $sanitized;
 	}
 
 	public static function register_settings(): void {
@@ -822,79 +582,29 @@ final class AISite_Search_Chatbot {
 
 	public static function get_providers_config(): array {
 		return array(
-			'openai'         => array(
+			'openai' => array(
 				'label'        => __( 'OpenAI', 'ai-site-search-chatbot' ),
 				'description'  => __( 'GPT-4, GPT-3.5 Turbo and more', 'ai-site-search-chatbot' ),
 				'example_model' => 'gpt-4o-mini',
 				'model_docs_url' => 'https://developers.openai.com/api/docs/models',
 				'model_docs_label' => __( 'OpenAI models documentation', 'ai-site-search-chatbot' ),
-				'setup_steps'  => array(
-					__( 'Go to https://platform.openai.com/api-keys', 'ai-site-search-chatbot' ),
-					__( 'Sign in or create an OpenAI account', 'ai-site-search-chatbot' ),
-					__( 'Click "Create new secret key"', 'ai-site-search-chatbot' ),
-					__( 'Copy the generated API key and paste it above', 'ai-site-search-chatbot' ),
-				),
-				'note'         => __( 'Requires a paid OpenAI account with available credits.', 'ai-site-search-chatbot' ),
+				'note'         => __( 'Connect your OpenAI account under Settings > Connectors, then choose the exact OpenAI model ID to use here.', 'ai-site-search-chatbot' ),
 			),
-			'claude'         => array(
+			'claude' => array(
 				'label'        => __( 'Claude (Anthropic)', 'ai-site-search-chatbot' ),
 				'description'  => __( 'Claude Sonnet, Opus, Haiku and more', 'ai-site-search-chatbot' ),
 				'example_model' => 'claude-sonnet-4-6',
 				'model_docs_url' => 'https://platform.claude.com/docs/en/docs/about-claude/models',
 				'model_docs_label' => __( 'Anthropic model documentation', 'ai-site-search-chatbot' ),
-				'auth_modes'   => array(
-					'api_key'      => __( 'API Key (pay-per-use)', 'ai-site-search-chatbot' ),
-					'bearer_token' => __( 'Bearer Token (Agent SDK credits)', 'ai-site-search-chatbot' ),
-				),
-				'setup_steps'  => array(
-					__( 'Visit https://platform.claude.com/settings/keys', 'ai-site-search-chatbot' ),
-					__( 'Sign in or create an Anthropic account', 'ai-site-search-chatbot' ),
-					__( 'Navigate to the API keys section', 'ai-site-search-chatbot' ),
-					__( 'Generate a new API key', 'ai-site-search-chatbot' ),
-					__( 'Copy and paste the key above', 'ai-site-search-chatbot' ),
-				),
-				'note'         => __( 'Uses the official Anthropic PHP SDK with automatic system prompt caching, which reduces API costs when the system prompt is reused across requests. Claude Sonnet 4.6 is a good balance of performance and cost; Claude Opus 4.7 offers the highest capability. See the Anthropic model documentation for available model IDs.', 'ai-site-search-chatbot' ),
-				'bearer_token_setup_steps' => array(
-					__( 'Ensure you have a Pro, Max, Team, or Enterprise Claude plan', 'ai-site-search-chatbot' ),
-					__( 'Claim your Agent SDK credits at claude.ai → Settings → Agent SDK (available from June 15, 2026)', 'ai-site-search-chatbot' ),
-					__( 'On your computer (Windows or Mac), install Node.js if not already installed: https://nodejs.org', 'ai-site-search-chatbot' ),
-					__( 'Windows only: open PowerShell as administrator and run: Set-ExecutionPolicy RemoteSigned — then press Y to confirm', 'ai-site-search-chatbot' ),
-					__( 'On your computer (Windows or Mac), install Claude Code: npm install -g @anthropic-ai/claude-code', 'ai-site-search-chatbot' ),
-					__( 'On your computer (Windows or Mac), sign in: claude auth login', 'ai-site-search-chatbot' ),
-					__( 'Windows: run in PowerShell: Get-Content "$env:USERPROFILE\.claude\.credentials.json" / Mac: run in Terminal: cat ~/.claude/.credentials.json', 'ai-site-search-chatbot' ),
-					__( 'Copy the accessToken value (starting with sk-ant-oat01-) and paste it in the Bearer Token field below', 'ai-site-search-chatbot' ),
-				),
-				'bearer_token_note' => __( 'Consumes your Claude plan monthly Agent SDK credits (e.g. $20/month for Pro). Credits reset each billing cycle and are not shared across team members. When credits run out, requests stop unless additional usage billing is enabled. Available from June 15, 2026.', 'ai-site-search-chatbot' ),
+				'note'         => __( 'Connect your Anthropic account under Settings > Connectors, then choose the exact Claude model ID to use here. Claude Sonnet 4.6 is a good balance of performance and cost; Claude Opus 4.7 offers the highest capability.', 'ai-site-search-chatbot' ),
 			),
-			'github-copilot' => array(
-				'label'        => __( 'GitHub Models', 'ai-site-search-chatbot' ),
-				'description'  => __( 'GitHub Models API with a token that has models:read permission', 'ai-site-search-chatbot' ),
-				'example_model' => 'openai/gpt-4.1',
-				'model_docs_url' => 'https://github.com/marketplace/models',
-				'model_docs_label' => __( 'GitHub Models catalog', 'ai-site-search-chatbot' ),
-				'setup_steps'  => array(
-					__( 'Visit https://github.com/settings/tokens', 'ai-site-search-chatbot' ),
-					__( 'Create a fine-grained personal access token or a token that supports the models:read permission', 'ai-site-search-chatbot' ),
-					__( 'Grant the token the "models:read" permission', 'ai-site-search-chatbot' ),
-					__( 'Generate and copy the token', 'ai-site-search-chatbot' ),
-					__( 'Paste it above as your API key', 'ai-site-search-chatbot' ),
-				),
-				'note'         => __( 'Use GitHub Models for external API access. Personal access tokens are not supported on the internal Copilot endpoint. For Japanese site content, a multilingual model such as openai/gpt-4.1 is recommended over openai/gpt-5-nano.', 'ai-site-search-chatbot' ),
-			),
-			'gemini'         => array(
+			'gemini' => array(
 				'label'        => __( 'Google Gemini', 'ai-site-search-chatbot' ),
 				'description'  => __( 'Gemini 2.5 Flash, Gemini 2.5 Pro and more', 'ai-site-search-chatbot' ),
 				'example_model' => 'gemini-2.5-flash',
 				'model_docs_url' => 'https://ai.google.dev/gemini-api/docs/models',
 				'model_docs_label' => __( 'Google Gemini model documentation', 'ai-site-search-chatbot' ),
-				'setup_steps'  => array(
-					__( 'Go to https://aistudio.google.com/app/apikey', 'ai-site-search-chatbot' ),
-					__( 'Click "Get API key"', 'ai-site-search-chatbot' ),
-					__( 'Create a new project or select an existing one', 'ai-site-search-chatbot' ),
-					__( 'Generate an API key for use in the application', 'ai-site-search-chatbot' ),
-					__( 'Copy and paste the key above', 'ai-site-search-chatbot' ),
-				),
-				'note'         => __( 'Use a current stable Gemini model such as gemini-2.5-flash. Older Gemini 2.0 model IDs are being deprecated.', 'ai-site-search-chatbot' ),
+				'note'         => __( 'Connect your Google account under Settings > Connectors, then choose a current stable Gemini model such as gemini-2.5-flash. Older Gemini 2.0 model IDs are being deprecated.', 'ai-site-search-chatbot' ),
 			),
 		);
 	}
@@ -1972,33 +1682,21 @@ final class AISite_Search_Chatbot {
 	}
 
 	public static function handle_validate_request( WP_REST_Request $request ) {
-		$claude_auth_mode = sanitize_key( (string) $request->get_param( 'claude_auth_mode' ) );
-		if ( ! in_array( $claude_auth_mode, array( 'api_key', 'bearer_token' ), true ) ) {
-			$claude_auth_mode = 'api_key';
-		}
-
-		$settings = array(
-			'ai_provider'         => sanitize_text_field( (string) $request->get_param( 'ai_provider' ) ),
-			'api_key'             => sanitize_text_field( (string) $request->get_param( 'api_key' ) ),
-			'model'               => sanitize_text_field( (string) $request->get_param( 'model' ) ),
-			'system_prompt'       => sanitize_textarea_field( (string) $request->get_param( 'system_prompt' ) ),
-			'max_sources'         => 1,
-			'claude_auth_mode'    => $claude_auth_mode,
-			'claude_bearer_token' => sanitize_text_field( (string) $request->get_param( 'claude_bearer_token' ) ),
+		$settings = wp_parse_args(
+			array(
+				'ai_provider'   => self::get_valid_provider( sanitize_text_field( (string) $request->get_param( 'ai_provider' ) ) ),
+				'model'         => sanitize_text_field( (string) $request->get_param( 'model' ) ),
+				'system_prompt' => sanitize_textarea_field( (string) $request->get_param( 'system_prompt' ) ),
+				'max_sources'   => 1,
+			),
+			self::default_settings()
 		);
 
-		$settings = self::normalize_runtime_settings( $settings, null, true );
-
-		$is_bearer_mode = 'claude' === $settings['ai_provider'] && 'bearer_token' === $settings['claude_auth_mode'];
-		$credential     = $is_bearer_mode ? $settings['claude_bearer_token'] : $settings['api_key'];
-
-		if ( '' === trim( $credential ) || '' === trim( $settings['model'] ) ) {
+		if ( '' === trim( (string) $settings['model'] ) ) {
 			return new WP_REST_Response(
 				array(
 					'success' => false,
-					'message' => $is_bearer_mode
-						? __( 'Enter a bearer token and model ID before running validation.', 'ai-site-search-chatbot' )
-						: __( 'Enter an API key and model ID before running validation.', 'ai-site-search-chatbot' ),
+					'message' => __( 'Enter a model ID before running validation.', 'ai-site-search-chatbot' ),
 				),
 				400
 			);
@@ -2012,34 +1710,22 @@ final class AISite_Search_Chatbot {
 	}
 
 	public static function handle_test_chat_request( WP_REST_Request $request ) {
-		$claude_auth_mode = sanitize_key( (string) $request->get_param( 'claude_auth_mode' ) );
-		if ( ! in_array( $claude_auth_mode, array( 'api_key', 'bearer_token' ), true ) ) {
-			$claude_auth_mode = 'api_key';
-		}
-
-		$settings = array(
-			'ai_provider'         => sanitize_text_field( (string) $request->get_param( 'ai_provider' ) ),
-			'api_key'             => sanitize_text_field( (string) $request->get_param( 'api_key' ) ),
-			'model'               => sanitize_text_field( (string) $request->get_param( 'model' ) ),
-			'system_prompt'       => sanitize_textarea_field( (string) $request->get_param( 'system_prompt' ) ),
-			'max_sources'         => max( 1, min( 10, absint( $request->get_param( 'max_sources' ) ) ) ),
-			'claude_auth_mode'    => $claude_auth_mode,
-			'claude_bearer_token' => sanitize_text_field( (string) $request->get_param( 'claude_bearer_token' ) ),
+		$settings = wp_parse_args(
+			array(
+				'ai_provider'   => self::get_valid_provider( sanitize_text_field( (string) $request->get_param( 'ai_provider' ) ) ),
+				'model'         => sanitize_text_field( (string) $request->get_param( 'model' ) ),
+				'system_prompt' => sanitize_textarea_field( (string) $request->get_param( 'system_prompt' ) ),
+				'max_sources'   => max( 1, min( 10, absint( $request->get_param( 'max_sources' ) ) ) ),
+			),
+			self::default_settings()
 		);
-
-		$settings = self::normalize_runtime_settings( $settings, null, true );
 		$message = self::sanitize_message( (string) $request->get_param( 'message' ) );
 
-		$is_bearer_mode = 'claude' === $settings['ai_provider'] && 'bearer_token' === $settings['claude_auth_mode'];
-		$credential     = $is_bearer_mode ? $settings['claude_bearer_token'] : $settings['api_key'];
-
-		if ( '' === trim( $credential ) || '' === trim( $settings['model'] ) ) {
+		if ( '' === trim( (string) $settings['model'] ) ) {
 			return new WP_REST_Response(
 				array(
 					'success' => false,
-					'message' => $is_bearer_mode
-						? __( 'Enter a bearer token and model ID before running the admin chat test.', 'ai-site-search-chatbot' )
-						: __( 'Enter an API key and model ID before running the admin chat test.', 'ai-site-search-chatbot' ),
+					'message' => __( 'Enter a model ID before running the admin chat test.', 'ai-site-search-chatbot' ),
 				),
 				400
 			);
@@ -3720,7 +3406,6 @@ final class AISite_Search_Chatbot {
 	}
 
 	private static function request_ai_completion( array $settings, string $message, array $results, string $purpose, array $options = array(), ?AISCB_AI_Usage_Accumulator $usage_accumulator = null ): array {
-		$provider = $settings['ai_provider'] ?? 'openai';
 		$request_payload = self::resolve_ai_request_payload( $settings, $message, $results, $options );
 		$options['resolved_system_prompt'] = $request_payload['system_prompt'];
 		$options['resolved_user_prompt'] = $request_payload['user_prompt'];
@@ -3735,21 +3420,7 @@ final class AISite_Search_Chatbot {
 			);
 		}
 
-		switch ( $provider ) {
-			case 'claude':
-				$response = self::call_claude_api( $settings, $message, $results, $options );
-				break;
-			case 'github-copilot':
-				$response = self::call_github_copilot_api( $settings, $message, $results, $options );
-				break;
-			case 'gemini':
-				$response = self::call_gemini_api( $settings, $message, $results, $options );
-				break;
-			case 'openai':
-			default:
-				$response = self::call_openai_api( $settings, $message, $results, $options );
-				break;
-		}
+		$response = self::call_ai_client_api( $settings, $message, $results, $options );
 
 		// Count every real outbound provider call toward the site-wide daily cap.
 		if ( ! empty( $response['success'] ) ) {
@@ -3798,7 +3469,7 @@ final class AISite_Search_Chatbot {
 			$summary['usage_source'] = 'actual';
 			$summary['input_tokens'] = self::usage_value( $usage, array( 'input_tokens', 'inputTokens', 'prompt_tokens', 'promptTokenCount' ) );
 			$summary['output_tokens'] = self::usage_value( $usage, array( 'output_tokens', 'outputTokens', 'completion_tokens', 'candidatesTokenCount' ) );
-			$summary['thinking_tokens'] = self::usage_value( $usage, array( 'thoughtsTokenCount' ) );
+			$summary['thinking_tokens'] = self::usage_value( $usage, array( 'thinking_tokens', 'thoughtsTokenCount' ) );
 			$summary['cache_creation_tokens'] = self::usage_value( $usage, array( 'cache_creation_tokens', 'cacheCreationInputTokens' ) );
 			$summary['cache_read_tokens'] = self::usage_value( $usage, array( 'cache_read_tokens', 'cacheReadInputTokens', 'cachedContentTokenCount' ) );
 		} elseif ( ! empty( $response['success'] ) ) {
@@ -4020,63 +3691,44 @@ final class AISite_Search_Chatbot {
 	}
 
 	private static function validate_provider_settings( array $settings ): array {
-		if ( 'github-copilot' === $settings['ai_provider'] && false === strpos( (string) $settings['model'], '/' ) ) {
-			return array(
-				'success' => false,
-				'message' => __( 'For GitHub Models, enter the model ID in the format publisher/model_name, for example openai/gpt-5-nano.', 'ai-site-search-chatbot' ),
-			);
-		}
-
-		if ( 'github-copilot' === $settings['ai_provider'] ) {
-			$model_check = self::validate_github_models_catalog( $settings );
-
-			if ( ! empty( $model_check ) ) {
-				return $model_check;
-			}
-		}
-
 		$probe_message = 'Reply with OK only.';
 		$probe_results = array();
 
-		switch ( $settings['ai_provider'] ) {
-			case 'claude':
-				$result = self::call_claude_api( $settings, $probe_message, $probe_results );
-				break;
-			case 'github-copilot':
-					$result = self::call_github_copilot_api(
-						$settings,
-						$probe_message,
-						$probe_results,
-						array(
-							'system_prompt' => '',
-							'user_prompt'   => $probe_message,
-						)
-					);
-				break;
-			case 'gemini':
-				$result = self::call_gemini_api( $settings, $probe_message, $probe_results );
-				break;
-			case 'openai':
-			default:
-				$result = self::call_openai_api( $settings, $probe_message, $probe_results );
-				break;
+		$result = self::call_ai_client_api(
+			$settings,
+			$probe_message,
+			$probe_results,
+			array(
+				'system_prompt' => '',
+				'user_prompt'   => $probe_message,
+			)
+		);
+
+		if ( empty( $result['success'] ) ) {
+			return array(
+				'success' => false,
+				'message' => ! empty( $result['message'] ) ? $result['message'] : __( 'Validation failed.', 'ai-site-search-chatbot' ),
+			);
 		}
 
-		if ( ! empty( $result['success'] ) ) {
-			return array(
-				'success' => true,
-				'message' => sprintf(
-					/* translators: 1: provider name, 2: model id */
-					__( 'Validation succeeded for %1$s using model %2$s.', 'ai-site-search-chatbot' ),
-					self::get_provider_label( (string) $settings['ai_provider'] ),
-					(string) $settings['model']
-				),
+		$message = sprintf(
+			/* translators: 1: provider name, 2: model id */
+			__( 'Validation succeeded for %1$s using model %2$s.', 'ai-site-search-chatbot' ),
+			self::get_provider_label( (string) $settings['ai_provider'] ),
+			(string) $settings['model']
+		);
+
+		if ( ! empty( $result['model_mismatch'] ) ) {
+			$message .= ' ' . sprintf(
+				/* translators: %s: the model ID actually used by the provider */
+				__( 'Note: the connected provider actually used model %s instead of the exact model requested.', 'ai-site-search-chatbot' ),
+				(string) $result['model_mismatch']
 			);
 		}
 
 		return array(
-			'success' => false,
-			'message' => ! empty( $result['message'] ) ? $result['message'] : __( 'Validation failed.', 'ai-site-search-chatbot' ),
+			'success' => true,
+			'message' => $message,
 		);
 	}
 
@@ -4090,489 +3742,98 @@ final class AISite_Search_Chatbot {
 		return $provider;
 	}
 
-	private static function build_api_error_result( $response, string $fallback_message ): array {
-		if ( is_wp_error( $response ) ) {
-			return array(
-				'success' => false,
-				'message' => self::append_response_request_id(
-					sprintf(
+	private static function ai_client_error_to_result( WP_Error $error, string $fallback_message ): array {
+		$message = trim( (string) $error->get_error_message() );
+
+		return array(
+			'success' => false,
+			'message' => '' !== $message
+				? sprintf(
 					/* translators: 1: fallback message, 2: detailed error message */
 					__( '%1$s Details: %2$s', 'ai-site-search-chatbot' ),
 					$fallback_message,
-					$response->get_error_message()
-					),
-					$response
-				),
-			);
-		}
-
-		$status_code = (int) wp_remote_retrieve_response_code( $response );
-		$response_message = (string) wp_remote_retrieve_response_message( $response );
-		$raw_body = (string) wp_remote_retrieve_body( $response );
-		$body = json_decode( $raw_body, true );
-		$detail = self::extract_api_error_detail( $body, $raw_body );
-
-		if ( '' === $detail ) {
-			$detail = $response_message;
-		}
-
-		if ( '' !== $detail && 0 < $status_code ) {
-			$message = sprintf(
-				/* translators: 1: fallback message, 2: HTTP status code, 3: detailed error message */
-				__( '%1$s HTTP %2$d: %3$s', 'ai-site-search-chatbot' ),
-				$fallback_message,
-				$status_code,
-				$detail
-			);
-		} elseif ( '' !== $detail ) {
-			$message = sprintf(
-				/* translators: 1: fallback message, 2: detailed error message */
-				__( '%1$s Details: %2$s', 'ai-site-search-chatbot' ),
-				$fallback_message,
-				$detail
-			);
-		} elseif ( 0 < $status_code ) {
-			$message = sprintf(
-				/* translators: 1: fallback message, 2: HTTP status code */
-				__( '%1$s HTTP %2$d', 'ai-site-search-chatbot' ),
-				$fallback_message,
-				$status_code
-			);
-		} else {
-			$message = $fallback_message;
-		}
-
-		$usage = isset( $body['usageMetadata'] ) && is_array( $body['usageMetadata'] ) ? $body['usageMetadata'] : array();
-
-		return array(
-			'success' => false,
-			'message' => self::append_response_request_id( $message, $response ),
-			'usage'   => $usage,
+					$message
+				)
+				: $fallback_message,
 		);
 	}
 
-	private static function append_response_request_id( string $message, $response ): string {
-		$request_id = '';
-
-		if ( ! is_wp_error( $response ) ) {
-			$request_id = (string) wp_remote_retrieve_header( $response, 'x-request-id' );
-
-			if ( '' === $request_id ) {
-				$request_id = (string) wp_remote_retrieve_header( $response, 'x-github-request-id' );
-			}
-		}
-
-		if ( '' === trim( $request_id ) ) {
-			return $message;
-		}
-
-		return sprintf(
-			/* translators: 1: message, 2: upstream request id */
-			__( '%1$s Request ID: %2$s', 'ai-site-search-chatbot' ),
-			$message,
-			trim( $request_id )
-		);
-	}
-
-	private static function build_github_models_inference_error_result( $response ): array {
-		$message = self::build_api_error_result( $response, __( 'GitHub Models validation failed.', 'ai-site-search-chatbot' ) );
-		$status_code = (int) wp_remote_retrieve_response_code( $response );
-
-		if ( 500 !== $status_code || empty( $message['message'] ) ) {
-			return $message;
-		}
-
-		$message['message'] .= ' ' . __( 'The request reached GitHub Models, but the inference endpoint returned an internal error. This usually indicates a temporary provider-side issue or a model-specific availability problem. Try another GitHub Models model such as openai/gpt-4.1, or retry later.', 'ai-site-search-chatbot' );
-
-		return $message;
-	}
-
-	private static function validate_github_models_catalog( array $settings ): array {
-		$response = wp_remote_get(
-			'https://models.github.ai/catalog/models',
-			array(
-				'timeout' => 20,
-				'headers' => array(
-					'Authorization'         => 'Bearer ' . $settings['api_key'],
-					'Accept'                => 'application/vnd.github+json',
-					'X-GitHub-Api-Version'  => '2026-03-10',
-				),
-			)
-		);
-
-		if ( is_wp_error( $response ) ) {
-			return array(
-				'success' => false,
-				'message' => sprintf(
-					/* translators: 1: fallback message, 2: detailed error message */
-					__( '%1$s Details: %2$s', 'ai-site-search-chatbot' ),
-					__( 'GitHub Models catalog check failed.', 'ai-site-search-chatbot' ),
-					$response->get_error_message()
-				),
-			);
-		}
-
-		$status_code = (int) wp_remote_retrieve_response_code( $response );
-		if ( $status_code < 200 || $status_code >= 300 ) {
-			return self::build_api_error_result( $response, __( 'GitHub Models catalog check failed.', 'ai-site-search-chatbot' ) );
-		}
-
-		$body = json_decode( (string) wp_remote_retrieve_body( $response ), true );
-		if ( ! is_array( $body ) ) {
-			return array(
-				'success' => false,
-				'message' => __( 'GitHub Models catalog check failed. The catalog response could not be parsed.', 'ai-site-search-chatbot' ),
-			);
-		}
-
-		foreach ( $body as $model ) {
-			if ( is_array( $model ) && isset( $model['id'] ) && (string) $model['id'] === (string) $settings['model'] ) {
-				return array();
-			}
-		}
-
-		return array(
-			'success' => false,
-			'message' => sprintf(
-				/* translators: %s: model id */
-				__( 'The model %s was not found in the GitHub Models catalog for this token. Open the model catalog reference and choose a model ID listed there.', 'ai-site-search-chatbot' ),
-				(string) $settings['model']
-			),
-		);
-	}
-
-	private static function extract_api_error_detail( $body, string $raw_body ): string {
-		$candidates = array();
-
-		if ( is_array( $body ) ) {
-			$paths = array(
-				array( 'error', 'message' ),
-				array( 'error', 'status' ),
-				array( 'error', 'type' ),
-				array( 'message' ),
-				array( 'detail' ),
-				array( 'error_description' ),
-				array( 'details' ),
-				array( 'errors', 0, 'message' ),
-				array( 'errors', 0, 'detail' ),
-				array( 'error' ),
-			);
-
-			foreach ( $paths as $path ) {
-				$value = $body;
-
-				foreach ( $path as $segment ) {
-					if ( is_array( $value ) && isset( $value[ $segment ] ) ) {
-						$value = $value[ $segment ];
-					} else {
-						$value = null;
-						break;
-					}
-				}
-
-				if ( is_string( $value ) && '' !== trim( $value ) ) {
-					$candidates[] = trim( $value );
-				} elseif ( is_array( $value ) ) {
-					$flattened = wp_json_encode( $value );
-
-					if ( is_string( $flattened ) && '' !== trim( $flattened ) ) {
-						$candidates[] = trim( $flattened );
-					}
-				}
-			}
-		}
-
-		if ( empty( $candidates ) ) {
-			$stripped_body = trim( wp_strip_all_tags( $raw_body ) );
-
-			if ( '' !== $stripped_body ) {
-				$candidates[] = preg_replace( '/\s+/', ' ', $stripped_body );
-			}
-		}
-
-		foreach ( $candidates as $candidate ) {
-			if ( '' !== $candidate ) {
-				return mb_substr( $candidate, 0, 220 );
-			}
-		}
-
-		return '';
-	}
-
-	private static function call_openai_api( array $settings, string $message, array $results, array $options = array() ): array {
-		$prompt = isset( $options['resolved_user_prompt'] ) ? (string) $options['resolved_user_prompt'] : ( isset( $options['user_prompt'] ) ? (string) $options['user_prompt'] : self::build_ai_prompt( $message, $results, (int) $settings['max_sources'] ) );
-		$system_prompt = isset( $options['resolved_system_prompt'] ) ? (string) $options['resolved_system_prompt'] : ( array_key_exists( 'system_prompt', $options ) ? (string) $options['system_prompt'] : (string) $settings['system_prompt'] );
-		$payload = array(
-			'model'       => $settings['model'],
-			'messages'    => array(
-				array(
-					'role'    => 'system',
-					'content' => $system_prompt,
-				),
-				array(
-					'role'    => 'user',
-					'content' => $prompt,
-				),
-			),
-		);
-
-		$response = wp_remote_post(
-			'https://api.openai.com/v1/chat/completions',
-			array(
-				'timeout' => 60,
-				'headers' => array(
-					'Authorization' => 'Bearer ' . $settings['api_key'],
-					'Content-Type'  => 'application/json',
-				),
-				'body'    => wp_json_encode( $payload ),
-			)
-		);
-
-		if ( is_wp_error( $response ) ) {
-			return self::build_api_error_result( $response, __( 'OpenAI validation failed.', 'ai-site-search-chatbot' ) );
-		}
-
-		$status_code = (int) wp_remote_retrieve_response_code( $response );
-		if ( $status_code < 200 || $status_code >= 300 ) {
-			return self::build_api_error_result( $response, __( 'OpenAI validation failed.', 'ai-site-search-chatbot' ) );
-		}
-
-		$body = json_decode( (string) wp_remote_retrieve_body( $response ), true );
-		$content = '';
-
-		if ( isset( $body['choices'][0]['message']['content'] ) ) {
-			$content = trim( (string) $body['choices'][0]['message']['content'] );
-		}
-
-		if ( '' === $content ) {
-			return array(
-				'success' => false,
-				'message' => __( 'OpenAI returned an empty response.', 'ai-site-search-chatbot' ),
-			);
-		}
-
-		return array(
-			'success' => true,
-			'content' => $content,
-			'usage' => isset( $body['usage'] ) && is_array( $body['usage'] ) ? $body['usage'] : array(),
-		);
-	}
-
-	private static function call_claude_api( array $settings, string $message, array $results, array $options = array() ): array {
+	/**
+	 * Requests a text completion through the WordPress 7.0 Connectors API / AI Client
+	 * (wp_ai_client_prompt()), scoped to the connector belonging to the configured
+	 * provider so that a missing exact model falls back only within that same
+	 * provider's catalog rather than to an unrelated connected provider.
+	 */
+	private static function call_ai_client_api( array $settings, string $message, array $results, array $options = array() ): array {
 		$prompt        = isset( $options['resolved_user_prompt'] ) ? (string) $options['resolved_user_prompt'] : ( isset( $options['user_prompt'] ) ? (string) $options['user_prompt'] : self::build_ai_prompt( $message, $results, (int) $settings['max_sources'] ) );
 		$system_prompt = isset( $options['resolved_system_prompt'] ) ? (string) $options['resolved_system_prompt'] : ( array_key_exists( 'system_prompt', $options ) ? (string) $options['system_prompt'] : (string) $settings['system_prompt'] );
+		$provider      = self::get_valid_provider( (string) ( $settings['ai_provider'] ?? 'openai' ) );
+		$connector_id  = self::get_provider_connector_id( $provider );
+		$model         = trim( (string) $settings['model'] );
 
-		if ( ! class_exists( '\Anthropic\Client' ) ) {
+		if ( ! function_exists( 'wp_ai_client_prompt' ) ) {
 			return array(
 				'success' => false,
-				'message' => __( 'Anthropic PHP SDK is not installed. Run composer install in the plugin directory.', 'ai-site-search-chatbot' ),
+				'message' => __( 'The WordPress AI Client is not available. WordPress 7.0 or later with a connected AI provider plugin is required.', 'ai-site-search-chatbot' ),
 			);
 		}
+
+		$builder = wp_ai_client_prompt( $prompt )->using_system_instruction( $system_prompt );
+
+		if ( '' !== $connector_id ) {
+			$builder = $builder->using_provider( $connector_id );
+		}
+
+		if ( '' !== $model ) {
+			$builder = $builder->using_model_preference( $model );
+		}
+
+		$result = $builder->generate_text_result();
+
+		if ( is_wp_error( $result ) ) {
+			return self::ai_client_error_to_result(
+				$result,
+				sprintf(
+					/* translators: %s: AI provider label */
+					__( '%s request failed.', 'ai-site-search-chatbot' ),
+					self::get_provider_label( $provider )
+				)
+			);
+		}
+
+		$content = '';
 
 		try {
-			if ( 'bearer_token' === ( $settings['claude_auth_mode'] ?? 'api_key' ) && ! empty( $settings['claude_bearer_token'] ) ) {
-				$client = new \Anthropic\Client( authToken: $settings['claude_bearer_token'] );
-			} else {
-				$client = new \Anthropic\Client( apiKey: $settings['api_key'] );
-			}
-
-			$response = $client->messages->create(
-				model: $settings['model'],
-				maxTokens: 4096,
-				system: array(
-					array(
-						'type'         => 'text',
-						'text'         => $system_prompt,
-						'cacheControl' => array( 'type' => 'ephemeral' ),
-					),
-				),
-				messages: array(
-					array(
-						'role'    => 'user',
-						'content' => $prompt,
-					),
-				),
-			);
-		} catch ( \Anthropic\Core\Exceptions\APIStatusException $e ) {
-			return array(
-				'success' => false,
-				/* translators: %s: API error message */
-				'message' => sprintf( __( 'Claude API error (%s): %s', 'ai-site-search-chatbot' ), $e->getCode(), $e->getMessage() ),
-			);
+			$content = trim( $result->toText() );
 		} catch ( \Exception $e ) {
-			return array(
-				'success' => false,
-				/* translators: %s: error message */
-				'message' => sprintf( __( 'Claude request failed: %s', 'ai-site-search-chatbot' ), $e->getMessage() ),
-			);
-		}
-
-		$content = '';
-		foreach ( $response->content as $block ) {
-			if ( 'text' === $block->type ) {
-				$content = trim( (string) $block->text );
-				break;
-			}
+			$content = '';
 		}
 
 		if ( '' === $content ) {
 			return array(
 				'success' => false,
-				'message' => __( 'Claude returned an empty response.', 'ai-site-search-chatbot' ),
+				'message' => __( 'The AI provider returned an empty response.', 'ai-site-search-chatbot' ),
 			);
 		}
 
-		return array(
+		$token_usage = $result->getTokenUsage();
+		$response    = array(
 			'success' => true,
 			'content' => $content,
-			'usage' => isset( $response->usage )
-				? array(
-					'inputTokens' => isset( $response->usage->inputTokens ) ? (int) $response->usage->inputTokens : 0,
-					'outputTokens' => isset( $response->usage->outputTokens ) ? (int) $response->usage->outputTokens : 0,
-					'cacheCreationInputTokens' => isset( $response->usage->cacheCreationInputTokens ) ? (int) $response->usage->cacheCreationInputTokens : 0,
-					'cacheReadInputTokens' => isset( $response->usage->cacheReadInputTokens ) ? (int) $response->usage->cacheReadInputTokens : 0,
-				)
-				: array(),
-		);
-	}
-
-	private static function call_github_copilot_api( array $settings, string $message, array $results, array $options = array() ): array {
-		$prompt = isset( $options['resolved_user_prompt'] ) ? (string) $options['resolved_user_prompt'] : ( isset( $options['user_prompt'] ) ? (string) $options['user_prompt'] : self::build_ai_prompt( $message, $results, (int) $settings['max_sources'] ) );
-		$system_prompt = isset( $options['resolved_system_prompt'] ) ? (string) $options['resolved_system_prompt'] : ( array_key_exists( 'system_prompt', $options ) ? (string) $options['system_prompt'] : (string) $settings['system_prompt'] );
-		$messages = array(
-			array(
-				'role'    => 'user',
-				'content' => $prompt,
+			'usage'   => array(
+				'input_tokens'    => max( 0, $token_usage->getPromptTokens() ),
+				'output_tokens'   => max( 0, $token_usage->getCompletionTokens() ),
+				'thinking_tokens' => max( 0, (int) $token_usage->getThoughtTokens() ),
 			),
 		);
 
-		if ( '' !== trim( $system_prompt ) ) {
-			array_unshift(
-				$messages,
-				array(
-					'role'    => 'system',
-					'content' => $system_prompt,
-				)
-			);
+		$used_model = $result->getModelMetadata()->getId();
+
+		if ( '' !== $model && $used_model !== $model ) {
+			$response['model_mismatch'] = $used_model;
 		}
 
-		$payload = array(
-			'model'    => $settings['model'],
-			'messages' => $messages,
-		);
-
-		$response = wp_remote_post(
-			'https://models.github.ai/inference/chat/completions',
-			array(
-				'timeout' => 60,
-				'headers' => array(
-					'Authorization' => 'Bearer ' . $settings['api_key'],
-					'Accept'        => 'application/vnd.github+json',
-					'X-GitHub-Api-Version' => '2026-03-10',
-					'Content-Type'  => 'application/json',
-				),
-				'body'    => wp_json_encode( $payload ),
-			)
-		);
-
-		if ( is_wp_error( $response ) ) {
-			return self::build_github_models_inference_error_result( $response );
-		}
-
-		$status_code = (int) wp_remote_retrieve_response_code( $response );
-		if ( $status_code < 200 || $status_code >= 300 ) {
-			return self::build_github_models_inference_error_result( $response );
-		}
-
-		$body = json_decode( (string) wp_remote_retrieve_body( $response ), true );
-		$content = '';
-
-		if ( isset( $body['choices'][0]['message']['content'] ) ) {
-			$content = trim( (string) $body['choices'][0]['message']['content'] );
-		}
-
-		if ( '' === $content ) {
-			return array(
-				'success' => false,
-				'message' => __( 'GitHub Models returned an empty response.', 'ai-site-search-chatbot' ),
-			);
-		}
-
-		return array(
-			'success' => true,
-			'content' => $content,
-			'usage' => isset( $body['usage'] ) && is_array( $body['usage'] ) ? $body['usage'] : array(),
-		);
-	}
-
-	private static function call_gemini_api( array $settings, string $message, array $results, array $options = array() ): array {
-		$prompt = isset( $options['resolved_user_prompt'] ) ? (string) $options['resolved_user_prompt'] : ( isset( $options['user_prompt'] ) ? (string) $options['user_prompt'] : self::build_ai_prompt( $message, $results, (int) $settings['max_sources'] ) );
-		$system_prompt = isset( $options['resolved_system_prompt'] ) ? (string) $options['resolved_system_prompt'] : ( array_key_exists( 'system_prompt', $options ) ? (string) $options['system_prompt'] : (string) $settings['system_prompt'] );
-		$model = str_replace( '/', '%2F', $settings['model'] );
-
-		$payload = array(
-			'contents' => array(
-				array(
-					'parts' => array(
-						array(
-							'text' => $system_prompt . "\n\n" . $prompt,
-						),
-					),
-				),
-			),
-		);
-
-		$response = wp_remote_post(
-			'https://generativelanguage.googleapis.com/v1beta/models/' . $model . ':generateContent?key=' . $settings['api_key'],
-			array(
-				'timeout' => 60,
-				'headers' => array(
-					'Content-Type' => 'application/json',
-				),
-				'body'    => wp_json_encode( $payload ),
-			)
-		);
-
-		if ( is_wp_error( $response ) ) {
-			return self::build_api_error_result( $response, __( 'Gemini validation failed.', 'ai-site-search-chatbot' ) );
-		}
-
-		$status_code = (int) wp_remote_retrieve_response_code( $response );
-		if ( $status_code < 200 || $status_code >= 300 ) {
-			return self::build_api_error_result( $response, __( 'Gemini validation failed.', 'ai-site-search-chatbot' ) );
-		}
-
-		$body = json_decode( (string) wp_remote_retrieve_body( $response ), true );
-		$content = '';
-
-		$parts = isset( $body['candidates'][0]['content']['parts'] ) && is_array( $body['candidates'][0]['content']['parts'] )
-			? $body['candidates'][0]['content']['parts']
-			: array();
-		foreach ( $parts as $part ) {
-			if ( ! empty( $part['thought'] ) ) {
-				continue;
-			}
-			if ( isset( $part['text'] ) ) {
-				$content = trim( (string) $part['text'] );
-				break;
-			}
-		}
-
-		$usage = isset( $body['usageMetadata'] ) && is_array( $body['usageMetadata'] ) ? $body['usageMetadata'] : array();
-
-		if ( '' === $content ) {
-			return array(
-				'success' => false,
-				'message' => __( 'Gemini returned an empty response.', 'ai-site-search-chatbot' ),
-				'usage'   => $usage,
-			);
-		}
-
-		return array(
-			'success' => true,
-			'content' => $content,
-			'usage'   => $usage,
-		);
+		return $response;
 	}
 
 	private static function build_ai_prompt( string $message, array $results, int $max_sources ): string {
