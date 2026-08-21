@@ -6,12 +6,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 final class AISite_Search_Chatbot_Admin {
 	private static $settings_page_hook = '';
+	private static $knowledge_page_hook = '';
 
 	public static function init(): void {
 		add_action( 'admin_menu', array( __CLASS__, 'register_admin_menu' ) );
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'enqueue_assets' ) );
 		add_action( 'admin_post_aiscb_delete_data', array( __CLASS__, 'handle_delete_data_action' ) );
 		add_action( 'admin_post_aiscb_clear_cache', array( __CLASS__, 'handle_clear_cache_action' ) );
+		add_action( 'admin_post_aiscb_update_knowledge_editors', array( __CLASS__, 'handle_update_knowledge_editors_action' ) );
 	}
 
 	public static function register_admin_menu(): void {
@@ -22,10 +24,19 @@ final class AISite_Search_Chatbot_Admin {
 			'ai-site-search-chatbot',
 			array( __CLASS__, 'render_settings_page' )
 		);
+
+		self::$knowledge_page_hook = (string) add_menu_page(
+			__( 'AI Site Search Chatbot - Saved Knowledge Base', 'ai-site-search-chatbot' ),
+			__( 'Saved Knowledge Base', 'ai-site-search-chatbot' ),
+			AISite_Search_Chatbot::KNOWLEDGE_EDITOR_CAP,
+			'ai-site-search-chatbot-knowledge',
+			array( __CLASS__, 'render_knowledge_only_page' ),
+			'dashicons-database'
+		);
 	}
 
 	public static function enqueue_assets( string $hook_suffix ): void {
-		if ( self::$settings_page_hook !== $hook_suffix ) {
+		if ( self::$settings_page_hook !== $hook_suffix && self::$knowledge_page_hook !== $hook_suffix ) {
 			return;
 		}
 
@@ -46,7 +57,7 @@ final class AISite_Search_Chatbot_Admin {
 			true
 		);
 
-		if ( 'logs' === $current_tab ) {
+		if ( self::$settings_page_hook === $hook_suffix && 'logs' === $current_tab ) {
 			wp_enqueue_script(
 				'aiscb-metrics',
 				plugins_url( 'assets/js/aiscb-metrics.js', AISCB_FILE ),
@@ -77,6 +88,7 @@ final class AISite_Search_Chatbot_Admin {
 				'knowledgeBaseExportEndpoint' => rest_url( AISite_Search_Chatbot::REST_NAMESPACE . '/knowledge-base/export' ),
 				'knowledgeBaseImportEndpoint' => rest_url( AISite_Search_Chatbot::REST_NAMESPACE . '/knowledge-base/import' ),
 				'knowledgeBasePageUrl' => admin_url( 'options-general.php?page=ai-site-search-chatbot&tab=knowledge-base' ),
+				'knowledgeFullAccess' => current_user_can( 'manage_options' ),
 				'restNonce'        => wp_create_nonce( 'wp_rest' ),
 				'optionKey'        => AISite_Search_Chatbot::OPTION_KEY,
 				'i18n'             => array(
@@ -395,9 +407,80 @@ final class AISite_Search_Chatbot_Admin {
 				</div>
 				<?php submit_button(); ?>
 			</form>
+			<?php self::render_knowledge_editor_access_panel(); ?>
 			<?php endif; ?>
 		</div>
 		<?php
+	}
+
+	public static function render_knowledge_only_page(): void {
+		if ( ! AISite_Search_Chatbot::is_knowledge_editor_or_admin() ) {
+			return;
+		}
+		?>
+		<div class="wrap aiscb-admin">
+			<h1><?php echo esc_html( __( 'Saved Knowledge Base', 'ai-site-search-chatbot' ) ); ?></h1>
+			<?php self::render_knowledge_base_panel(); ?>
+		</div>
+		<?php
+	}
+
+	private static function render_knowledge_editor_access_panel(): void {
+		$users = get_users( array( 'orderby' => 'display_name', 'order' => 'ASC' ) );
+		?>
+		<div class="aiscb-inline-callout">
+			<strong><?php echo esc_html( __( 'Knowledge Base Editors', 'ai-site-search-chatbot' ) ); ?></strong>
+			<p><?php echo esc_html( __( 'Grant users who are not administrators access to create and edit entries on the Saved Knowledge Base screen only. Deleting entries and CSV import/export remain administrator-only actions.', 'ai-site-search-chatbot' ) ); ?></p>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="aiscb-danger-zone__form">
+				<?php wp_nonce_field( 'aiscb_update_knowledge_editors' ); ?>
+				<input type="hidden" name="action" value="aiscb_update_knowledge_editors" />
+				<div class="aiscb-user-access-list">
+					<?php foreach ( $users as $user ) : ?>
+						<?php $is_admin = user_can( $user, 'manage_options' ); ?>
+						<label class="aiscb-user-access-list__item">
+							<input
+								type="checkbox"
+								name="knowledge_editor_user_ids[]"
+								value="<?php echo esc_attr( (string) $user->ID ); ?>"
+								<?php checked( $is_admin || user_can( $user, AISite_Search_Chatbot::KNOWLEDGE_EDITOR_CAP ) ); ?>
+								<?php disabled( $is_admin ); ?>
+							/>
+							<?php echo esc_html( $user->display_name . ' (' . $user->user_login . ')' ); ?>
+							<?php if ( $is_admin ) : ?>
+								<span class="description"><?php echo esc_html( __( '— Administrator (full access)', 'ai-site-search-chatbot' ) ); ?></span>
+							<?php endif; ?>
+						</label>
+					<?php endforeach; ?>
+				</div>
+				<p><button type="submit" class="button button-secondary"><?php echo esc_html( __( 'Save Knowledge Editors', 'ai-site-search-chatbot' ) ); ?></button></p>
+			</form>
+		</div>
+		<?php
+	}
+
+	public static function handle_update_knowledge_editors_action(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to perform this action.', 'ai-site-search-chatbot' ) );
+		}
+
+		check_admin_referer( 'aiscb_update_knowledge_editors' );
+
+		$user_ids = isset( $_POST['knowledge_editor_user_ids'] ) && is_array( $_POST['knowledge_editor_user_ids'] )
+			? array_map( 'absint', wp_unslash( $_POST['knowledge_editor_user_ids'] ) )
+			: array();
+
+		AISite_Search_Chatbot::sync_knowledge_editor_capabilities( $user_ids );
+
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'page' => 'ai-site-search-chatbot',
+					'aiscb_notice' => 'knowledge-editors-updated',
+				),
+				admin_url( 'options-general.php' )
+			)
+		);
+		exit;
 	}
 
 	private static function get_current_tab(): string {
@@ -494,6 +577,7 @@ final class AISite_Search_Chatbot_Admin {
 			'usage-deleted' => array( 'success', __( 'Usage totals were deleted.', 'ai-site-search-chatbot' ) ),
 			'logs-usage-deleted' => array( 'success', __( 'Chat logs and usage totals were deleted.', 'ai-site-search-chatbot' ) ),
 			'delete-failed' => array( 'error', __( 'The delete action could not be completed.', 'ai-site-search-chatbot' ) ),
+			'knowledge-editors-updated' => array( 'success', __( 'Knowledge base editor access was updated.', 'ai-site-search-chatbot' ) ),
 		);
 
 		if ( ! isset( $notices[ $notice_key ] ) ) {
@@ -524,6 +608,7 @@ final class AISite_Search_Chatbot_Admin {
 	}
 
 	private static function render_knowledge_base_panel(): void {
+		$full_access = current_user_can( 'manage_options' );
 		?>
 		<p><?php echo esc_html( __( 'Manage generalized question and answer pairs that can be approved for reuse. This screen is separate from the public chat logs.', 'ai-site-search-chatbot' ) ); ?></p>
 
@@ -539,13 +624,17 @@ final class AISite_Search_Chatbot_Admin {
 						</select>
 						<button type="button" class="button" id="aiscb_knowledge_refresh"><?php echo esc_html( __( 'Refresh', 'ai-site-search-chatbot' ) ); ?></button>
 						<button type="button" class="button button-primary" id="aiscb_knowledge_create"><?php echo esc_html( __( 'Create entry', 'ai-site-search-chatbot' ) ); ?></button>
-						<button type="button" class="button" id="aiscb_knowledge_export"><?php echo esc_html( __( 'Export CSV', 'ai-site-search-chatbot' ) ); ?></button>
+						<?php if ( $full_access ) : ?>
+							<button type="button" class="button" id="aiscb_knowledge_export"><?php echo esc_html( __( 'Export CSV', 'ai-site-search-chatbot' ) ); ?></button>
+						<?php endif; ?>
 					</div>
 
-					<div class="aiscb-knowledge-import-row">
-						<input type="file" id="aiscb_knowledge_import_file" accept=".csv,text/csv" />
-						<button type="button" class="button" id="aiscb_knowledge_import"><?php echo esc_html( __( 'Import CSV', 'ai-site-search-chatbot' ) ); ?></button>
-					</div>
+					<?php if ( $full_access ) : ?>
+						<div class="aiscb-knowledge-import-row">
+							<input type="file" id="aiscb_knowledge_import_file" accept=".csv,text/csv" />
+							<button type="button" class="button" id="aiscb_knowledge_import"><?php echo esc_html( __( 'Import CSV', 'ai-site-search-chatbot' ) ); ?></button>
+						</div>
+					<?php endif; ?>
 
 					<div id="aiscb_knowledge_notice" class="notice inline aiscb-notice" hidden></div>
 

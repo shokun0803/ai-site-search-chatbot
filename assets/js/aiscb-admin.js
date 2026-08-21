@@ -288,7 +288,7 @@
 								'<button type="button" class="button button-small" data-knowledge-action="status" data-knowledge-id="' + escapeHtml( String( item.id || '' ) ) + '">' + escapeHtml( i18n.knowledgeApplyStatus ) + '</button>' +
 								'<div class="aiscb-knowledge-actions">' +
 									'<button type="button" class="button button-small" data-knowledge-action="edit" data-knowledge-id="' + escapeHtml( String( item.id || '' ) ) + '">' + escapeHtml( i18n.knowledgeEdit ) + '</button> ' +
-									'<button type="button" class="button button-small" data-knowledge-action="delete" data-knowledge-id="' + escapeHtml( String( item.id || '' ) ) + '">' + escapeHtml( i18n.knowledgeDelete ) + '</button>' +
+									( AISCBAdmin.knowledgeFullAccess ? '<button type="button" class="button button-small" data-knowledge-action="delete" data-knowledge-id="' + escapeHtml( String( item.id || '' ) ) + '">' + escapeHtml( i18n.knowledgeDelete ) + '</button>' : '' ) +
 								'</div>' +
 							'</div>' +
 						'</td>' +
@@ -640,8 +640,18 @@
 			document.getElementById( 'aiscb_knowledge_cancel' ).addEventListener( 'click', resetKnowledgeForm );
 			document.getElementById( 'aiscb_knowledge_refresh' ).addEventListener( 'click', loadKnowledgeEntries );
 			document.getElementById( 'aiscb_knowledge_create' ).addEventListener( 'click', resetKnowledgeForm );
-			document.getElementById( 'aiscb_knowledge_export' ).addEventListener( 'click', exportKnowledgeEntries );
-			document.getElementById( 'aiscb_knowledge_import' ).addEventListener( 'click', importKnowledgeEntries );
+
+			var knowledgeExportButton = document.getElementById( 'aiscb_knowledge_export' );
+			var knowledgeImportButton = document.getElementById( 'aiscb_knowledge_import' );
+
+			if ( knowledgeExportButton ) {
+				knowledgeExportButton.addEventListener( 'click', exportKnowledgeEntries );
+			}
+
+			if ( knowledgeImportButton ) {
+				knowledgeImportButton.addEventListener( 'click', importKnowledgeEntries );
+			}
+
 			document.getElementById( 'aiscb_knowledge_search' ).addEventListener( 'change', loadKnowledgeEntries );
 			document.getElementById( 'aiscb_knowledge_status_filter' ).addEventListener( 'change', loadKnowledgeEntries );
 			loadKnowledgeEntries();

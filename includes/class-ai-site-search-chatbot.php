@@ -108,7 +108,7 @@ final class AISCB_AI_Usage_Accumulator {
 }
 
 final class AISite_Search_Chatbot {
-	const VERSION = '0.6.0';
+	const VERSION = '0.7.0';
 	const TOKEN_ESTIMATION_VERSION = 'char-mix-v1';
 	const OPTION_KEY = 'aiscb_settings';
 	const OPTION_GROUP = 'aiscb_settings_group';
@@ -130,8 +130,13 @@ final class AISite_Search_Chatbot {
 	const KNOWLEDGE_BASE_MATCH_MODE_AI_ONLY = 'ai_only';
 	const KNOWLEDGE_BASE_MATCH_MODE_HYBRID = 'hybrid';
 	const KNOWLEDGE_BASE_STATUSES = array( 'draft', 'approved', 'archived' );
+	const KNOWLEDGE_EDITOR_CAP = 'aiscb_manage_knowledge_base';
+	const CAPABILITIES_SCHEMA_OPTION = 'aiscb_capabilities_schema_version';
+	const CAPABILITIES_SCHEMA_VERSION = '1.0.0';
 
 	public static function activate(): void {
+		self::grant_default_capabilities();
+
 		if ( false !== get_option( self::OPTION_KEY, false ) ) {
 			self::create_daily_usage_table();
 			self::create_knowledge_base_table();
@@ -146,6 +151,7 @@ final class AISite_Search_Chatbot {
 	public static function init(): void {
 		self::maybe_upgrade_daily_usage_schema();
 		self::maybe_upgrade_knowledge_base_schema();
+		self::maybe_upgrade_capabilities();
 		self::maybe_migrate_legacy_provider_settings();
 		self::load_textdomain();
 		add_action( 'admin_init', array( __CLASS__, 'register_settings' ) );
@@ -224,6 +230,73 @@ final class AISite_Search_Chatbot {
 		}
 
 		self::create_daily_usage_table();
+	}
+
+	private static function maybe_upgrade_capabilities(): void {
+		$installed_version = (string) get_option( self::CAPABILITIES_SCHEMA_OPTION, '' );
+
+		if ( self::CAPABILITIES_SCHEMA_VERSION === $installed_version ) {
+			return;
+		}
+
+		self::grant_default_capabilities();
+	}
+
+	private static function grant_default_capabilities(): void {
+		$role = get_role( 'administrator' );
+
+		if ( $role && ! $role->has_cap( self::KNOWLEDGE_EDITOR_CAP ) ) {
+			$role->add_cap( self::KNOWLEDGE_EDITOR_CAP );
+		}
+
+		update_option( self::CAPABILITIES_SCHEMA_OPTION, self::CAPABILITIES_SCHEMA_VERSION, false );
+	}
+
+	/**
+	 * Grants or revokes the plugin's knowledge-editor capability directly on
+	 * individual user accounts so it can be assigned without changing anyone's
+	 * existing role. Users who already have manage_options are left untouched;
+	 * they always have full access through their role.
+	 */
+	public static function sync_knowledge_editor_capabilities( array $user_ids ): void {
+		$desired = array_unique( array_filter( array_map( 'absint', $user_ids ) ) );
+
+		foreach ( get_users( array( 'fields' => array( 'ID' ) ) ) as $user_row ) {
+			$user = get_userdata( (int) $user_row->ID );
+
+			if ( ! $user || $user->has_cap( 'manage_options' ) ) {
+				continue;
+			}
+
+			$should_have = in_array( $user->ID, $desired, true );
+			$has_cap = array_key_exists( self::KNOWLEDGE_EDITOR_CAP, $user->caps );
+
+			if ( $should_have && ! $has_cap ) {
+				$user->add_cap( self::KNOWLEDGE_EDITOR_CAP );
+			} elseif ( ! $should_have && $has_cap ) {
+				$user->remove_cap( self::KNOWLEDGE_EDITOR_CAP );
+			}
+		}
+	}
+
+	public static function remove_all_knowledge_editor_capabilities(): void {
+		$role = get_role( 'administrator' );
+
+		if ( $role ) {
+			$role->remove_cap( self::KNOWLEDGE_EDITOR_CAP );
+		}
+
+		foreach ( get_users( array( 'fields' => array( 'ID' ) ) ) as $user_row ) {
+			$user = get_userdata( (int) $user_row->ID );
+
+			if ( $user && array_key_exists( self::KNOWLEDGE_EDITOR_CAP, $user->caps ) ) {
+				$user->remove_cap( self::KNOWLEDGE_EDITOR_CAP );
+			}
+		}
+	}
+
+	public static function is_knowledge_editor_or_admin(): bool {
+		return current_user_can( 'manage_options' ) || current_user_can( self::KNOWLEDGE_EDITOR_CAP );
 	}
 
 	public static function get_knowledge_base_table_name(): string {
@@ -701,16 +774,12 @@ final class AISite_Search_Chatbot {
 				array(
 					'methods'             => 'GET',
 					'callback'            => array( __CLASS__, 'handle_knowledge_base_list_request' ),
-					'permission_callback' => function () {
-						return current_user_can( 'manage_options' );
-					},
+					'permission_callback' => array( __CLASS__, 'is_knowledge_editor_or_admin' ),
 				),
 				array(
 					'methods'             => 'POST',
 					'callback'            => array( __CLASS__, 'handle_knowledge_base_create_request' ),
-					'permission_callback' => function () {
-						return current_user_can( 'manage_options' );
-					},
+					'permission_callback' => array( __CLASS__, 'is_knowledge_editor_or_admin' ),
 				),
 			)
 		);
@@ -722,16 +791,12 @@ final class AISite_Search_Chatbot {
 				array(
 					'methods'             => 'GET',
 					'callback'            => array( __CLASS__, 'handle_knowledge_base_get_request' ),
-					'permission_callback' => function () {
-						return current_user_can( 'manage_options' );
-					},
+					'permission_callback' => array( __CLASS__, 'is_knowledge_editor_or_admin' ),
 				),
 				array(
 					'methods'             => 'POST,PUT,PATCH',
 					'callback'            => array( __CLASS__, 'handle_knowledge_base_update_request' ),
-					'permission_callback' => function () {
-						return current_user_can( 'manage_options' );
-					},
+					'permission_callback' => array( __CLASS__, 'is_knowledge_editor_or_admin' ),
 				),
 				array(
 					'methods'             => 'DELETE',

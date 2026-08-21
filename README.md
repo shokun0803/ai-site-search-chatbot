@@ -98,6 +98,12 @@ Display Location を Display only where the shortcode is placed に設定した�
 
 ## 変更履歴
 
+### 0.7.0
+
+- 管理者以外のユーザーに「保存済みナレッジベース」の作成・編集のみを許可する新しい権限（capability）`aiscb_manage_knowledge_base` を追加。設定タブの「ナレッジ編集者」欄からユーザーごとにチェックボックスで付与・解除できる
+- 権限を付与されたユーザー専用に、管理画面の独立したトップレベルメニュー「保存済みナレッジベース」を新設（`設定` メニュー自体が管理者専用のため）。このメニューではエントリの作成・編集・ステータス変更のみが可能で、削除・CSV インポート/エクスポートは引き続き管理者専用
+- 対応する REST エンドポイント（一覧・取得・作成・更新）の権限チェックを拡張し、上記の新しい capability を持つユーザーも利用できるように変更（削除・エクスポート・インポートは `manage_options` のまま）
+
 ### 0.6.0
 
 - AI プロバイダーの接続方式を、プラグイン独自の API キー保存から WordPress 7.0 の公式 Connectors API / AI Client（`設定 > コネクタ`、`wp_ai_client_prompt()`）経由に変更。対応プロバイダーは OpenAI / Claude (Anthropic) / Google Gemini の 3 つに統一

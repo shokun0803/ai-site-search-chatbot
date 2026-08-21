@@ -514,6 +514,21 @@
 	margin: 8px 0 0;
 }
 
+.aiscb-admin .aiscb-user-access-list {
+	overflow: auto;
+	max-height: 280px;
+	margin: 12px 0;
+	padding: 10px 12px;
+	background: #fff;
+	border: 1px solid #e5e7eb;
+	border-radius: 6px;
+}
+
+.aiscb-admin .aiscb-user-access-list__item {
+	display: block;
+	padding: 4px 0;
+}
+
 .aiscb-admin .aiscb-knowledge-layout {
 	display: flex;
 	flex-direction: column;

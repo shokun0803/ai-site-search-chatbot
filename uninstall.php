@@ -21,4 +21,5 @@ $cleanup_mode = is_array( $settings ) && isset( $settings['uninstall_cleanup_mod
 
 if ( 'delete_all' === $cleanup_mode ) {
 	AISite_Search_Chatbot::delete_plugin_data();
+	AISite_Search_Chatbot::remove_all_knowledge_editor_capabilities();
 }
