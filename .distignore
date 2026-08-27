@@ -1,0 +1,16 @@
+.git
+.github
+.gitignore
+.gitattributes
+.vscode
+.claude
+.wordpress-org
+.distignore
+README.md
+composer.json
+composer.lock
+node_modules
+tests
+phpunit.xml
+phpunit.xml.dist
+*.log

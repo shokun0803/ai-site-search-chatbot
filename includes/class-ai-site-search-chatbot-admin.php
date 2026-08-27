@@ -484,7 +484,8 @@ final class AISite_Search_Chatbot_Admin {
 	}
 
 	private static function get_current_tab(): string {
-		$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( (string) $_GET['tab'] ) ) : 'logs';
+		// Read-only display selector, not a state-changing action; no nonce needed.
+		$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( (string) $_GET['tab'] ) ) : 'logs'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
 		return in_array( $tab, array( 'logs', 'settings', 'knowledge-base' ), true ) ? $tab : 'logs';
 	}
@@ -570,7 +571,8 @@ final class AISite_Search_Chatbot_Admin {
 	}
 
 	private static function render_admin_notice(): void {
-		$notice_key = isset( $_GET['aiscb_notice'] ) ? sanitize_key( wp_unslash( (string) $_GET['aiscb_notice'] ) ) : '';
+		// Read-only display selector for which notice text to show; no state change, no nonce needed.
+		$notice_key = isset( $_GET['aiscb_notice'] ) ? sanitize_key( wp_unslash( (string) $_GET['aiscb_notice'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$notices = array(
 			'cache-cleared' => array( 'success', __( 'Plugin caches were cleared.', 'ai-site-search-chatbot' ) ),
 			'logs-deleted' => array( 'success', __( 'Chat logs were deleted.', 'ai-site-search-chatbot' ) ),
@@ -717,9 +719,9 @@ final class AISite_Search_Chatbot_Admin {
 			<div class="aiscb-log-panel__header">
 				<div>
 					<h2 class="aiscb-section-title"><?php echo esc_html( __( 'Recent Visitor Chat Logs', 'ai-site-search-chatbot' ) ); ?></h2>
-					<p class="description"><?php echo esc_html( sprintf( __( 'The latest %d public chat interactions are stored here so you can review visitor questions and how the chatbot responded.', 'ai-site-search-chatbot' ), AISite_Search_Chatbot::CHAT_LOG_LIMIT ) ); ?></p>
+					<p class="description"><?php echo esc_html( sprintf( /* translators: %d: number of stored chat interactions. */ __( 'The latest %d public chat interactions are stored here so you can review visitor questions and how the chatbot responded.', 'ai-site-search-chatbot' ), AISite_Search_Chatbot::CHAT_LOG_LIMIT ) ); ?></p>
 				</div>
-				<div class="aiscb-log-panel__count"><?php echo esc_html( sprintf( __( '%d entries', 'ai-site-search-chatbot' ), count( $chat_logs ) ) ); ?></div>
+				<div class="aiscb-log-panel__count"><?php echo esc_html( sprintf( /* translators: %d: number of chat log entries. */ __( '%d entries', 'ai-site-search-chatbot' ), count( $chat_logs ) ) ); ?></div>
 			</div>
 
 			<?php self::render_usage_overview_panel( $usage_overview ); ?>
@@ -767,14 +769,14 @@ final class AISite_Search_Chatbot_Admin {
 									</td>
 									<td class="aiscb-log-table__time">
 										<div><?php echo esc_html( $timestamp ? wp_date( 'Y-m-d H:i:s', $timestamp ) : '-' ); ?></div>
-										<div class="aiscb-log-meta"><?php echo esc_html( sprintf( __( 'IP: %s', 'ai-site-search-chatbot' ), self::mask_ip_address( isset( $log['ip'] ) ? (string) $log['ip'] : '' ) ) ); ?></div>
-										<div class="aiscb-log-meta"><?php echo esc_html( sprintf( __( 'Sources: %d', 'ai-site-search-chatbot' ), isset( $log['source_count'] ) ? absint( $log['source_count'] ) : 0 ) ); ?></div>
-										<div class="aiscb-log-meta"><?php echo esc_html( sprintf( __( 'Search Terms: %s', 'ai-site-search-chatbot' ), self::format_search_queries( isset( $log['search_queries'] ) && is_array( $log['search_queries'] ) ? $log['search_queries'] : array() ) ) ); ?></div>
+										<div class="aiscb-log-meta"><?php echo esc_html( sprintf( /* translators: %s: masked visitor IP address. */ __( 'IP: %s', 'ai-site-search-chatbot' ), self::mask_ip_address( isset( $log['ip'] ) ? (string) $log['ip'] : '' ) ) ); ?></div>
+										<div class="aiscb-log-meta"><?php echo esc_html( sprintf( /* translators: %d: number of referenced search result sources. */ __( 'Sources: %d', 'ai-site-search-chatbot' ), isset( $log['source_count'] ) ? absint( $log['source_count'] ) : 0 ) ); ?></div>
+										<div class="aiscb-log-meta"><?php echo esc_html( sprintf( /* translators: %s: search terms used for this chat request. */ __( 'Search Terms: %s', 'ai-site-search-chatbot' ), self::format_search_queries( isset( $log['search_queries'] ) && is_array( $log['search_queries'] ) ? $log['search_queries'] : array() ) ) ); ?></div>
 										<?php if ( ! empty( $log['knowledge_candidate_status'] ) ) : ?>
-											<div class="aiscb-log-meta"><?php echo esc_html( sprintf( __( 'Knowledge Draft: %s', 'ai-site-search-chatbot' ), self::format_knowledge_candidate_status( (string) $log['knowledge_candidate_status'] ) ) ); ?></div>
+											<div class="aiscb-log-meta"><?php echo esc_html( sprintf( /* translators: %s: saved knowledge base draft status. */ __( 'Knowledge Draft: %s', 'ai-site-search-chatbot' ), self::format_knowledge_candidate_status( (string) $log['knowledge_candidate_status'] ) ) ); ?></div>
 										<?php endif; ?>
 										<?php if ( ! empty( $log['knowledge_candidate_note'] ) ) : ?>
-											<div class="aiscb-log-meta"><?php echo esc_html( sprintf( __( 'Knowledge Note: %s', 'ai-site-search-chatbot' ), (string) $log['knowledge_candidate_note'] ) ); ?></div>
+											<div class="aiscb-log-meta"><?php echo esc_html( sprintf( /* translators: %s: internal note about the knowledge base draft. */ __( 'Knowledge Note: %s', 'ai-site-search-chatbot' ), (string) $log['knowledge_candidate_note'] ) ); ?></div>
 										<?php endif; ?>
 										<?php if ( ! empty( $log['knowledge_candidate_pii_flag'] ) ) : ?>
 											<div class="aiscb-log-meta"><?php echo esc_html( __( 'Knowledge candidate marked for privacy review.', 'ai-site-search-chatbot' ) ); ?></div>
@@ -803,14 +805,14 @@ final class AISite_Search_Chatbot_Admin {
 				<div class="aiscb-usage-card">
 					<div class="aiscb-usage-card__label"><?php echo esc_html( __( 'Today', 'ai-site-search-chatbot' ) ); ?></div>
 					<div class="aiscb-usage-card__value"><?php echo esc_html( number_format_i18n( isset( $today['total_tokens'] ) ? absint( $today['total_tokens'] ) : 0 ) ); ?></div>
-					<div class="aiscb-usage-card__meta"><?php echo esc_html( sprintf( __( 'Requests: %d', 'ai-site-search-chatbot' ), isset( $today['requests_count'] ) ? absint( $today['requests_count'] ) : 0 ) ); ?></div>
-					<div class="aiscb-usage-card__meta"><?php echo esc_html( sprintf( __( 'Input / Output: %1$d / %2$d', 'ai-site-search-chatbot' ), isset( $today['input_tokens'] ) ? absint( $today['input_tokens'] ) : 0, isset( $today['output_tokens'] ) ? absint( $today['output_tokens'] ) : 0 ) ); ?></div>
+					<div class="aiscb-usage-card__meta"><?php echo esc_html( sprintf( /* translators: %d: number of AI requests. */ __( 'Requests: %d', 'ai-site-search-chatbot' ), isset( $today['requests_count'] ) ? absint( $today['requests_count'] ) : 0 ) ); ?></div>
+					<div class="aiscb-usage-card__meta"><?php echo esc_html( sprintf( /* translators: %1$d: input token count, %2$d: output token count. */ __( 'Input / Output: %1$d / %2$d', 'ai-site-search-chatbot' ), isset( $today['input_tokens'] ) ? absint( $today['input_tokens'] ) : 0, isset( $today['output_tokens'] ) ? absint( $today['output_tokens'] ) : 0 ) ); ?></div>
 				</div>
 				<div class="aiscb-usage-card">
 					<div class="aiscb-usage-card__label"><?php echo esc_html( __( 'This Month', 'ai-site-search-chatbot' ) ); ?></div>
 					<div class="aiscb-usage-card__value"><?php echo esc_html( number_format_i18n( isset( $this_month['total_tokens'] ) ? absint( $this_month['total_tokens'] ) : 0 ) ); ?></div>
-					<div class="aiscb-usage-card__meta"><?php echo esc_html( sprintf( __( 'Requests: %d', 'ai-site-search-chatbot' ), isset( $this_month['requests_count'] ) ? absint( $this_month['requests_count'] ) : 0 ) ); ?></div>
-					<div class="aiscb-usage-card__meta"><?php echo esc_html( sprintf( __( 'Input / Output: %1$d / %2$d', 'ai-site-search-chatbot' ), isset( $this_month['input_tokens'] ) ? absint( $this_month['input_tokens'] ) : 0, isset( $this_month['output_tokens'] ) ? absint( $this_month['output_tokens'] ) : 0 ) ); ?></div>
+					<div class="aiscb-usage-card__meta"><?php echo esc_html( sprintf( /* translators: %d: number of AI requests. */ __( 'Requests: %d', 'ai-site-search-chatbot' ), isset( $this_month['requests_count'] ) ? absint( $this_month['requests_count'] ) : 0 ) ); ?></div>
+					<div class="aiscb-usage-card__meta"><?php echo esc_html( sprintf( /* translators: %1$d: input token count, %2$d: output token count. */ __( 'Input / Output: %1$d / %2$d', 'ai-site-search-chatbot' ), isset( $this_month['input_tokens'] ) ? absint( $this_month['input_tokens'] ) : 0, isset( $this_month['output_tokens'] ) ? absint( $this_month['output_tokens'] ) : 0 ) ); ?></div>
 				</div>
 			</div>
 
@@ -928,7 +930,7 @@ final class AISite_Search_Chatbot_Admin {
 		$total_cache_read_tokens = isset( $summary['total_cache_read_tokens'] ) ? absint( $summary['total_cache_read_tokens'] ) : 0;
 		$usage_sources = isset( $summary['usage_sources'] ) && is_array( $summary['usage_sources'] ) ? $summary['usage_sources'] : array();
 
-		echo '<div class="aiscb-log-meta">' . esc_html( sprintf( __( 'AI Requests: %d', 'ai-site-search-chatbot' ), $total_requests ) ) . '</div>';
+		echo '<div class="aiscb-log-meta">' . esc_html( sprintf( /* translators: %d: number of AI requests for this chat log entry. */ __( 'AI Requests: %d', 'ai-site-search-chatbot' ), $total_requests ) ) . '</div>';
 
 		if ( 0 === $total_requests ) {
 			return;
@@ -938,30 +940,32 @@ final class AISite_Search_Chatbot_Admin {
 		$estimated_count = isset( $usage_sources['estimated'] ) ? absint( $usage_sources['estimated'] ) : 0;
 		$unavailable_count = isset( $usage_sources['unavailable'] ) ? absint( $usage_sources['unavailable'] ) : 0;
 		$token_label = ( 0 === $actual_count && $estimated_count > 0 && 0 === $unavailable_count )
-			? __( 'Chat Token Estimate: in %1$d / out %2$d', 'ai-site-search-chatbot' )
-			: __( 'Chat Tokens: in %1$d / out %2$d', 'ai-site-search-chatbot' );
+			? /* translators: %1$d: estimated input token count, %2$d: estimated output token count. */
+				__( 'Chat Token Estimate: in %1$d / out %2$d', 'ai-site-search-chatbot' )
+			: /* translators: %1$d: input token count, %2$d: output token count. */
+				__( 'Chat Tokens: in %1$d / out %2$d', 'ai-site-search-chatbot' );
 
 		echo '<div class="aiscb-log-meta">' . esc_html( sprintf( $token_label, $total_input_tokens, $total_output_tokens ) ) . '</div>';
-		echo '<div class="aiscb-log-meta">' . esc_html( sprintf( __( 'Chat Characters: in %1$d / out %2$d', 'ai-site-search-chatbot' ), $total_request_characters, $total_response_characters ) ) . '</div>';
+		echo '<div class="aiscb-log-meta">' . esc_html( sprintf( /* translators: %1$d: input character count, %2$d: output character count. */ __( 'Chat Characters: in %1$d / out %2$d', 'ai-site-search-chatbot' ), $total_request_characters, $total_response_characters ) ) . '</div>';
 
 		if ( $total_thinking_tokens > 0 ) {
-			echo '<div class="aiscb-log-meta">' . esc_html( sprintf( __( 'Thinking Tokens: %d', 'ai-site-search-chatbot' ), $total_thinking_tokens ) ) . '</div>';
+			echo '<div class="aiscb-log-meta">' . esc_html( sprintf( /* translators: %d: number of thinking tokens used. */ __( 'Thinking Tokens: %d', 'ai-site-search-chatbot' ), $total_thinking_tokens ) ) . '</div>';
 		}
 
 		if ( $total_cache_creation_tokens > 0 || $total_cache_read_tokens > 0 ) {
-			echo '<div class="aiscb-log-meta">' . esc_html( sprintf( __( 'Cache Tokens: create %1$d / read %2$d', 'ai-site-search-chatbot' ), $total_cache_creation_tokens, $total_cache_read_tokens ) ) . '</div>';
+			echo '<div class="aiscb-log-meta">' . esc_html( sprintf( /* translators: %1$d: cache creation token count, %2$d: cache read token count. */ __( 'Cache Tokens: create %1$d / read %2$d', 'ai-site-search-chatbot' ), $total_cache_creation_tokens, $total_cache_read_tokens ) ) . '</div>';
 		}
 
-		echo '<div class="aiscb-log-meta">' . esc_html( sprintf( __( 'Usage Sources: %s', 'ai-site-search-chatbot' ), self::format_usage_source_breakdown( $usage_sources ) ) ) . '</div>';
+		echo '<div class="aiscb-log-meta">' . esc_html( sprintf( /* translators: %s: breakdown of actual vs. estimated usage sources. */ __( 'Usage Sources: %s', 'ai-site-search-chatbot' ), self::format_usage_source_breakdown( $usage_sources ) ) ) . '</div>';
 
 		$provider_breakdown = self::format_ai_usage_bucket_breakdown( isset( $summary['providers'] ) && is_array( $summary['providers'] ) ? $summary['providers'] : array(), 'provider' );
 		if ( '' !== $provider_breakdown ) {
-			echo '<div class="aiscb-log-meta">' . esc_html( sprintf( __( 'Providers: %s', 'ai-site-search-chatbot' ), $provider_breakdown ) ) . '</div>';
+			echo '<div class="aiscb-log-meta">' . esc_html( sprintf( /* translators: %s: list of AI providers used for this chat request. */ __( 'Providers: %s', 'ai-site-search-chatbot' ), $provider_breakdown ) ) . '</div>';
 		}
 
 		$purpose_breakdown = self::format_ai_usage_bucket_breakdown( isset( $summary['purposes'] ) && is_array( $summary['purposes'] ) ? $summary['purposes'] : array(), 'purpose' );
 		if ( '' !== $purpose_breakdown ) {
-			echo '<div class="aiscb-log-meta">' . esc_html( sprintf( __( 'AI Steps: %s', 'ai-site-search-chatbot' ), $purpose_breakdown ) ) . '</div>';
+			echo '<div class="aiscb-log-meta">' . esc_html( sprintf( /* translators: %s: list of internal AI processing steps used. */ __( 'AI Steps: %s', 'ai-site-search-chatbot' ), $purpose_breakdown ) ) . '</div>';
 		}
 	}
 

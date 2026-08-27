@@ -108,7 +108,7 @@ final class AISCB_AI_Usage_Accumulator {
 }
 
 final class AISite_Search_Chatbot {
-	const VERSION = '0.7.0';
+	const VERSION = '1.0.0';
 	const TOKEN_ESTIMATION_VERSION = 'char-mix-v1';
 	const OPTION_KEY = 'aiscb_settings';
 	const OPTION_GROUP = 'aiscb_settings_group';
@@ -382,6 +382,9 @@ final class AISite_Search_Chatbot {
 		delete_option( self::GLOBAL_AI_USAGE_OPTION );
 		delete_option( self::DAILY_USAGE_SCHEMA_OPTION );
 		delete_option( self::KNOWLEDGE_BASE_SCHEMA_OPTION );
+		delete_option( self::LEGACY_PROVIDER_MIGRATION_OPTION );
+		delete_option( self::LEGACY_PROVIDER_MIGRATION_NOTICE_OPTION );
+		delete_option( self::CAPABILITIES_SCHEMA_OPTION );
 
 		self::clear_usage_metrics_cache();
 
@@ -481,15 +484,8 @@ final class AISite_Search_Chatbot {
 	}
 
 	private static function get_legacy_default_system_prompts(): array {
-		$legacy_prompt = 'You are a public website assistant. Answer only from the provided site search results. If the answer is not present, say so clearly and suggest related pages.';
-
-		return array_unique(
-			array_filter(
-				array(
-					$legacy_prompt,
-					__( $legacy_prompt, 'ai-site-search-chatbot' ),
-				)
-			)
+		return array(
+			'You are a public website assistant. Answer only from the provided site search results. If the answer is not present, say so clearly and suggest related pages.',
 		);
 	}
 
@@ -951,8 +947,8 @@ final class AISite_Search_Chatbot {
 		}
 		$search = isset( $args['search'] ) ? self::trim_chat_log_text( (string) $args['search'], 200 ) : '';
 
-		$where_clauses = array( '1=1' );
-		$params = array();
+		$where_clauses = array( '1=%d' );
+		$params = array( 1 );
 
 		if ( '' !== $status ) {
 			$where_clauses[] = 'status = %s';
@@ -967,14 +963,14 @@ final class AISite_Search_Chatbot {
 		}
 
 		$where_sql = implode( ' AND ', $where_clauses );
-		$count_sql = "SELECT COUNT(*) FROM {$table_name} WHERE {$where_sql}";
-		$list_sql = "SELECT * FROM {$table_name} WHERE {$where_sql} ORDER BY updated_at DESC LIMIT %d OFFSET %d";
+		$count_sql = "SELECT COUNT(*) FROM {$table_name} WHERE {$where_sql}"; // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name only, always parameterized below.
+		$list_sql = "SELECT * FROM {$table_name} WHERE {$where_sql} ORDER BY updated_at DESC LIMIT %d OFFSET %d"; // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name only, always parameterized below.
 
-		$count_query = ! empty( $params ) ? $wpdb->prepare( $count_sql, $params ) : $count_sql;
+		$count_query = $wpdb->prepare( $count_sql, $params ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		$total = (int) $wpdb->get_var( $count_query ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		$params[] = $per_page;
 		$params[] = $offset;
-		$list_query = $wpdb->prepare( $list_sql, $params );
+		$list_query = $wpdb->prepare( $list_sql, $params ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		$rows = $wpdb->get_results( $list_query, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
 		return array(
@@ -1055,13 +1051,14 @@ final class AISite_Search_Chatbot {
 				'per_page' => 5000,
 			)
 		);
-		$stream = fopen( 'php://temp', 'r+' );
+		// php://temp is an in-memory stream, not real filesystem I/O, so WP_Filesystem does not apply here.
+		$stream = fopen( 'php://temp', 'r+' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen
 
 		if ( false === $stream ) {
 			return '';
 		}
 
-		fwrite( $stream, "\xEF\xBB\xBF" );
+		fwrite( $stream, "\xEF\xBB\xBF" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
 		fputcsv( $stream, array( 'export_uid', 'status', 'question_generalized', 'answer_generalized', 'source_post_ids', 'matching_method_hint', 'updated_at' ) );
 
 		foreach ( $entries['items'] as $entry ) {
@@ -1081,14 +1078,15 @@ final class AISite_Search_Chatbot {
 
 		rewind( $stream );
 		$content = stream_get_contents( $stream );
-		fclose( $stream );
+		fclose( $stream ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
 
 		return is_string( $content ) ? $content : '';
 	}
 
 	private static function import_knowledge_base_from_csv( string $csv_content ): array {
 		$csv_content = preg_replace( '/^\xEF\xBB\xBF/', '', $csv_content );
-		$stream = fopen( 'php://temp', 'r+' );
+		// php://temp is an in-memory stream, not real filesystem I/O, so WP_Filesystem does not apply here.
+		$stream = fopen( 'php://temp', 'r+' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen
 
 		if ( false === $stream ) {
 			return array(
@@ -1098,14 +1096,14 @@ final class AISite_Search_Chatbot {
 			);
 		}
 
-		fwrite( $stream, $csv_content );
+		fwrite( $stream, $csv_content ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
 		rewind( $stream );
 
 		$headers = fgetcsv( $stream );
 		$required_headers = array( 'export_uid', 'status', 'question_generalized', 'answer_generalized', 'source_post_ids', 'matching_method_hint', 'updated_at' );
 
 		if ( ! is_array( $headers ) || $required_headers !== array_values( $headers ) ) {
-			fclose( $stream );
+			fclose( $stream ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
 			return array(
 				'created' => 0,
 				'updated' => 0,
@@ -1146,7 +1144,7 @@ final class AISite_Search_Chatbot {
 					continue;
 				}
 
-				$errors[] = sprintf( __( 'Could not import entry %s.', 'ai-site-search-chatbot' ), $record['export_uid'] );
+				$errors[] = sprintf( /* translators: %s: CSV row export UID that failed to import. */ __( 'Could not import entry %s.', 'ai-site-search-chatbot' ), $record['export_uid'] );
 				continue;
 			}
 
@@ -1155,10 +1153,10 @@ final class AISite_Search_Chatbot {
 				continue;
 			}
 
-			$errors[] = sprintf( __( 'Could not update entry %s.', 'ai-site-search-chatbot' ), $record['export_uid'] );
+			$errors[] = sprintf( /* translators: %s: CSV row export UID that failed to update. */ __( 'Could not update entry %s.', 'ai-site-search-chatbot' ), $record['export_uid'] );
 		}
 
-		fclose( $stream );
+		fclose( $stream ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
 
 		return array(
 			'created' => $created,
@@ -2843,9 +2841,11 @@ final class AISite_Search_Chatbot {
 			$params[] = $like;
 		}
 
-		$sql = "SELECT ID, (" . implode( ' + ', $score_parts ) . ") AS relevance_score FROM {$wpdb->posts} WHERE post_type IN ({$type_placeholders}) AND post_status = 'publish' AND (" . implode( ' OR ', $where_parts ) . ") ORDER BY relevance_score DESC, post_modified_gmt DESC LIMIT 10";
-		$prepared_sql = $wpdb->prepare( $sql, $params );
-		$post_rows = $wpdb->get_results( $prepared_sql );
+		// Only placeholder scaffolding (%s tokens and the static structure below) is concatenated here;
+		// every actual value goes through $wpdb->prepare() via $params before the query runs.
+		$sql = "SELECT ID, (" . implode( ' + ', $score_parts ) . ") AS relevance_score FROM {$wpdb->posts} WHERE post_type IN ({$type_placeholders}) AND post_status = 'publish' AND (" . implode( ' OR ', $where_parts ) . ") ORDER BY relevance_score DESC, post_modified_gmt DESC LIMIT 10"; // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$prepared_sql = $wpdb->prepare( $sql, $params ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$post_rows = $wpdb->get_results( $prepared_sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
 
 		if ( empty( $post_rows ) ) {
 			return array();

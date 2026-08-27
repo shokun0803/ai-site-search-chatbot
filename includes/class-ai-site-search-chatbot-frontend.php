@@ -62,13 +62,15 @@ final class AISite_Search_Chatbot_Frontend {
 		self::enqueue_assets();
 		self::$floating_widget_rendered = true;
 
-		echo self::get_widget_markup(
+		$markup = self::get_widget_markup(
 			array(
 				'title'    => __( 'Ask about this site', 'ai-site-search-chatbot' ),
 				'greeting' => __( 'Hi, ask me about this site and I will search the content for you.', 'ai-site-search-chatbot' ),
 				'theme'    => AISite_Search_Chatbot::get_settings()['widget_theme'],
 			)
-		); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		);
+
+		echo $markup; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- get_widget_markup() escapes every dynamic value internally.
 	}
 
 	private static function enqueue_assets(): void {
