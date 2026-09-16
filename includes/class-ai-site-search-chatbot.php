@@ -108,7 +108,7 @@ final class AISCB_AI_Usage_Accumulator {
 }
 
 final class AISite_Search_Chatbot {
-	const VERSION = '1.0.0';
+	const VERSION = '1.1.0';
 	const TOKEN_ESTIMATION_VERSION = 'char-mix-v1';
 	const OPTION_KEY = 'aiscb_settings';
 	const OPTION_GROUP = 'aiscb_settings_group';
@@ -119,6 +119,14 @@ final class AISite_Search_Chatbot {
 	const SHORTCODE = 'ai_site_search_chatbot';
 	const CHAT_LOG_OPTION = 'aiscb_chat_logs';
 	const CHAT_LOG_LIMIT = 50;
+	const CHAT_LOG_RETRYABLE_STATUSES = array(
+		'fallback-no-config',
+		'fallback-no-results',
+		'fallback-provider-error',
+		'fallback-site-guidance-provider-error',
+		'ai-limited',
+		'ai-limited-site-guidance',
+	);
 	const DAILY_USAGE_TABLE = 'aiscb_daily_usage';
 	const DAILY_USAGE_SCHEMA_OPTION = 'aiscb_daily_usage_schema_version';
 	const DAILY_USAGE_SCHEMA_VERSION = '1.0.0';
@@ -801,6 +809,16 @@ final class AISite_Search_Chatbot {
 						return current_user_can( 'manage_options' );
 					},
 				),
+			)
+		);
+
+		register_rest_route(
+			self::REST_NAMESPACE,
+			'/chat-logs/(?P<log_id>[A-Za-z0-9-]+)/retry',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'handle_chat_log_retry_request' ),
+				'permission_callback' => array( __CLASS__, 'is_knowledge_editor_or_admin' ),
 			)
 		);
 
@@ -1645,6 +1663,66 @@ final class AISite_Search_Chatbot {
 		return $status;
 	}
 
+	/**
+	 * Seeds an empty-answer knowledge draft from a visitor question that the AI
+	 * still could not answer after a manual retry, so the question is not lost
+	 * even when no AI-generated answer is available to base a draft on. An
+	 * admin can then write the answer by hand from the "Saved Knowledge Base"
+	 * screen instead of the question simply staying stuck in the chat log.
+	 */
+	private static function maybe_store_manual_knowledge_stub( array $settings, string $message, array $results ): array {
+		$status = array(
+			'attempted' => false,
+			'status' => '',
+			'note' => '',
+			'pii_flag' => false,
+		);
+
+		if ( empty( $settings['knowledge_base_enabled'] ) || '' === trim( $message ) ) {
+			$status['status'] = 'disabled';
+			$status['note'] = __( 'The saved knowledge base is disabled, so no draft stub was created.', 'ai-site-search-chatbot' );
+			return $status;
+		}
+
+		$status['attempted'] = true;
+
+		$question = self::trim_chat_log_text( $message, 2000 );
+		$question_fingerprint = hash( 'sha256', self::normalize_message_for_cache( $question ) );
+		$existing = self::get_knowledge_base_entry_by_question_fingerprint( $question_fingerprint );
+
+		if ( ! empty( $existing ) ) {
+			$status['status'] = 'kept-existing';
+			$status['note'] = __( 'A saved knowledge entry for this question already exists, so no new draft stub was created.', 'ai-site-search-chatbot' );
+			return $status;
+		}
+
+		$pii_flag = self::contains_sensitive_pattern( $question );
+
+		$payload = array(
+			'status' => 'draft',
+			'question_generalized' => $question,
+			'answer_generalized' => '',
+			'source_post_ids' => self::get_result_ids( $results ),
+			'matching_method_hint' => 'manual_needed',
+			'confidence_note' => __( 'Created from a visitor question the AI could not answer. Review and write an answer before approving.', 'ai-site-search-chatbot' ),
+			'pii_flag' => $pii_flag ? 1 : 0,
+		);
+
+		$entry = self::insert_knowledge_base_entry( $payload );
+
+		if ( empty( $entry ) ) {
+			$status['status'] = 'provider-error';
+			$status['note'] = __( 'The knowledge draft stub could not be saved.', 'ai-site-search-chatbot' );
+			return $status;
+		}
+
+		$status['status'] = 'draft-stub-created';
+		$status['note'] = __( 'A draft knowledge entry was created from this unanswered question so it can be answered manually.', 'ai-site-search-chatbot' );
+		$status['pii_flag'] = $pii_flag;
+
+		return $status;
+	}
+
 	public static function handle_knowledge_base_list_request( WP_REST_Request $request ) {
 		return rest_ensure_response(
 			self::list_knowledge_base_entries(
@@ -1933,6 +2011,101 @@ final class AISite_Search_Chatbot {
 		);
 	}
 
+	/**
+	 * Re-runs a stored chat log question through the normal answer pipeline so
+	 * an admin can retry a visitor question that previously fell back to a
+	 * non-AI answer (missing config, provider error, no search results, or a
+	 * hit AI usage limit). Site content or provider availability may have
+	 * changed since the question was first logged, so a retry can succeed even
+	 * when the original attempt could not.
+	 */
+	public static function handle_chat_log_retry_request( WP_REST_Request $request ) {
+		$log_id = sanitize_text_field( (string) $request['log_id'] );
+		$logs = self::get_chat_logs();
+		$index = null;
+
+		foreach ( $logs as $i => $log ) {
+			if ( is_array( $log ) && isset( $log['log_id'] ) && hash_equals( (string) $log['log_id'], $log_id ) ) {
+				$index = $i;
+				break;
+			}
+		}
+
+		if ( null === $index ) {
+			return new WP_REST_Response(
+				array(
+					'message' => __( 'The chat log entry could not be found.', 'ai-site-search-chatbot' ),
+				),
+				404
+			);
+		}
+
+		$log_entry = $logs[ $index ];
+		$question = isset( $log_entry['question'] ) ? (string) $log_entry['question'] : '';
+
+		if ( '' === trim( $question ) ) {
+			return new WP_REST_Response(
+				array(
+					'message' => __( 'This log entry has no visitor question to retry.', 'ai-site-search-chatbot' ),
+				),
+				400
+			);
+		}
+
+		$logs[ $index ] = self::retry_chat_log_entry( $log_entry );
+		update_option( self::CHAT_LOG_OPTION, $logs, false );
+
+		return rest_ensure_response( $logs[ $index ] );
+	}
+
+	private static function retry_chat_log_entry( array $log_entry ): array {
+		$message = isset( $log_entry['question'] ) ? (string) $log_entry['question'] : '';
+		$settings = self::get_settings();
+		$usage_accumulator = new AISCB_AI_Usage_Accumulator();
+		$route = self::analyze_message_route( $message, $settings, $usage_accumulator );
+		$knowledge_stub = array();
+
+		if ( 'reject' === $route['intent'] ) {
+			$results = array();
+			$answer = array(
+				'answer'     => $route['message'],
+				'used_ai'    => false,
+				'sources'    => array(),
+				'log_status' => 'rejected-pre-ai',
+			);
+		} else {
+			$route['queries'] = self::resolve_search_queries( $message, $settings, $route );
+			$results = self::search_site_content( $message, $settings, $route, $usage_accumulator );
+			$answer = self::generate_answer( $message, $results, $route, $usage_accumulator );
+		}
+
+		$log_status = isset( $answer['log_status'] ) ? sanitize_key( (string) $answer['log_status'] ) : (string) ( $log_entry['status'] ?? 'unknown' );
+
+		if ( empty( $answer['used_ai'] ) && self::is_chat_log_status_retryable( $log_status ) ) {
+			$knowledge_stub = self::maybe_store_manual_knowledge_stub( $settings, $message, $results );
+		}
+
+		$log_entry['answer'] = self::trim_chat_log_text( (string) ( $answer['answer'] ?? '' ), 4000 );
+		$log_entry['status'] = $log_status;
+		$log_entry['used_ai'] = ! empty( $answer['used_ai'] );
+		$log_entry['source_count'] = isset( $answer['sources'] ) ? count( (array) $answer['sources'] ) : 0;
+		$log_entry['search_queries'] = self::sanitize_chat_log_search_queries( (array) ( $route['queries'] ?? array() ) );
+		$log_entry['knowledge_candidate_status'] = isset( $answer['knowledge_candidate']['status'] ) ? (string) $answer['knowledge_candidate']['status'] : (string) ( $knowledge_stub['status'] ?? '' );
+		$log_entry['knowledge_candidate_note'] = isset( $answer['knowledge_candidate']['note'] ) ? (string) $answer['knowledge_candidate']['note'] : (string) ( $knowledge_stub['note'] ?? '' );
+		$log_entry['knowledge_candidate_pii_flag'] = ! empty( $answer['knowledge_candidate']['pii_flag'] ) || ! empty( $knowledge_stub['pii_flag'] );
+		$log_entry['ai_usage_summary'] = self::sanitize_ai_usage_summary_for_log( $usage_accumulator->export_summary() );
+		$log_entry['retry_count'] = isset( $log_entry['retry_count'] ) ? absint( $log_entry['retry_count'] ) + 1 : 1;
+		$log_entry['retried_at'] = time();
+		$log_entry['retried_by'] = get_current_user_id();
+
+		self::record_daily_usage_from_log_entry( array( 'ai_usage_summary' => $log_entry['ai_usage_summary'] ) );
+
+		return $log_entry;
+	}
+
+	public static function is_chat_log_status_retryable( string $status ): bool {
+		return in_array( $status, self::CHAT_LOG_RETRYABLE_STATUSES, true );
+	}
 
 	private static function sanitize_message( string $message ): string {
 		$message = trim( wp_strip_all_tags( $message ) );
@@ -2403,7 +2576,11 @@ final class AISite_Search_Chatbot {
 		);
 
 		if ( is_string( $trimmed_question ) ) {
-			$trimmed_question = trim( $trimmed_question, " \t\n\r\0\x0B?？!！。.,、" );
+			// trim()'s character-mask argument strips individual bytes, not whole
+			// characters, so it corrupts multi-byte UTF-8 punctuation such as
+			// "。" or "、" here. Use a Unicode-aware regex trim instead.
+			$trimmed_question = preg_replace( '/^[\s\x00?？!！。.,、]+|[\s\x00?？!！。.,、]+$/u', '', $trimmed_question );
+			$trimmed_question = is_string( $trimmed_question ) ? $trimmed_question : '';
 
 			if ( '' !== $trimmed_question ) {
 				$queries[] = self::canonicalize_search_query( $trimmed_question );
@@ -3096,7 +3273,21 @@ final class AISite_Search_Chatbot {
 			return array();
 		}
 
-		return array_values( $logs );
+		$logs = array_values( $logs );
+		$needs_backfill = false;
+
+		foreach ( $logs as $index => $log ) {
+			if ( is_array( $log ) && empty( $log['log_id'] ) ) {
+				$logs[ $index ]['log_id'] = wp_generate_uuid4();
+				$needs_backfill = true;
+			}
+		}
+
+		if ( $needs_backfill ) {
+			update_option( self::CHAT_LOG_OPTION, $logs, false );
+		}
+
+		return $logs;
 	}
 
 	public static function delete_chat_logs(): void {
@@ -3200,6 +3391,7 @@ final class AISite_Search_Chatbot {
 		array_unshift(
 			$logs,
 			array(
+				'log_id'       => wp_generate_uuid4(),
 				'time'         => time(),
 				'question'     => $question,
 				'answer'       => isset( $entry['answer'] ) ? self::trim_chat_log_text( (string) $entry['answer'], 4000 ) : '',

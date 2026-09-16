@@ -474,6 +474,10 @@
 	word-break: break-word;
 }
 
+.aiscb-admin .aiscb-log-retry-cell {
+	margin: 8px 0 0;
+}
+
 .aiscb-admin .aiscb-log-text {
 	white-space: pre-wrap;
 	word-break: break-word;

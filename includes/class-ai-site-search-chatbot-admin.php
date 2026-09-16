@@ -88,6 +88,7 @@ final class AISite_Search_Chatbot_Admin {
 				'knowledgeBaseExportEndpoint' => rest_url( AISite_Search_Chatbot::REST_NAMESPACE . '/knowledge-base/export' ),
 				'knowledgeBaseImportEndpoint' => rest_url( AISite_Search_Chatbot::REST_NAMESPACE . '/knowledge-base/import' ),
 				'knowledgeBasePageUrl' => admin_url( 'options-general.php?page=ai-site-search-chatbot&tab=knowledge-base' ),
+				'chatLogRetryEndpointBase' => rest_url( AISite_Search_Chatbot::REST_NAMESPACE . '/chat-logs' ),
 				'knowledgeFullAccess' => current_user_can( 'manage_options' ),
 				'restNonce'        => wp_create_nonce( 'wp_rest' ),
 				'optionKey'        => AISite_Search_Chatbot::OPTION_KEY,
@@ -148,6 +149,11 @@ final class AISite_Search_Chatbot_Admin {
 					'knowledgeDelete'          => __( 'Delete', 'ai-site-search-chatbot' ),
 					'knowledgeApplyStatus'     => __( 'Apply status', 'ai-site-search-chatbot' ),
 					'knowledgeStatusUpdated'   => __( 'The knowledge status was updated.', 'ai-site-search-chatbot' ),
+					'logRetry'                 => __( 'Retry', 'ai-site-search-chatbot' ),
+					'logRetrying'              => __( 'Retrying...', 'ai-site-search-chatbot' ),
+					'logRetrySuccess'          => __( 'The question was retried and this log entry was updated.', 'ai-site-search-chatbot' ),
+					'logRetryFailed'           => __( 'The retry could not be completed.', 'ai-site-search-chatbot' ),
+					'logRetryRequestFail'      => __( 'The retry request failed. Please try again.', 'ai-site-search-chatbot' ),
 				),
 			)
 		);
@@ -728,6 +734,8 @@ final class AISite_Search_Chatbot_Admin {
 			<p class="description"><?php echo esc_html( __( 'Displayed token counts are estimates. Actual provider-side usage or billing may differ.', 'ai-site-search-chatbot' ) ); ?></p>
 			<?php self::render_delete_actions_panel(); ?>
 
+			<div id="aiscb_log_notice" class="aiscb-notice" hidden></div>
+
 			<div class="aiscb-log-legend" aria-label="<?php echo esc_attr__( 'Chat log status legend', 'ai-site-search-chatbot' ); ?>">
 				<?php foreach ( $status_map as $status ) : ?>
 					<span class="aiscb-log-pill aiscb-log-pill--<?php echo esc_attr( $status['tone'] ); ?>">
@@ -756,8 +764,11 @@ final class AISite_Search_Chatbot_Admin {
 								$status_key = isset( $log['status'] ) ? (string) $log['status'] : 'unknown';
 								$status = $status_map[ $status_key ] ?? $status_map['unknown'];
 								$timestamp = isset( $log['time'] ) ? absint( $log['time'] ) : 0;
+								$log_id = isset( $log['log_id'] ) ? (string) $log['log_id'] : '';
+								$is_retryable = '' !== $log_id && AISite_Search_Chatbot::is_chat_log_status_retryable( $status_key );
+								$retried_at = isset( $log['retried_at'] ) ? absint( $log['retried_at'] ) : 0;
 								?>
-								<tr>
+								<tr data-log-id="<?php echo esc_attr( $log_id ); ?>">
 									<td class="aiscb-log-table__status">
 										<span class="aiscb-log-pill aiscb-log-pill--<?php echo esc_attr( $status['tone'] ); ?>">
 											<span class="dashicons <?php echo esc_attr( $status['icon'] ); ?>" aria-hidden="true"></span>
@@ -780,6 +791,14 @@ final class AISite_Search_Chatbot_Admin {
 										<?php endif; ?>
 										<?php if ( ! empty( $log['knowledge_candidate_pii_flag'] ) ) : ?>
 											<div class="aiscb-log-meta"><?php echo esc_html( __( 'Knowledge candidate marked for privacy review.', 'ai-site-search-chatbot' ) ); ?></div>
+										<?php endif; ?>
+										<?php if ( $retried_at > 0 ) : ?>
+											<div class="aiscb-log-meta"><?php echo esc_html( sprintf( /* translators: 1: retry count, 2: date and time of the last retry. */ __( 'Retried %1$d time(s), last at %2$s', 'ai-site-search-chatbot' ), isset( $log['retry_count'] ) ? absint( $log['retry_count'] ) : 1, wp_date( 'Y-m-d H:i:s', $retried_at ) ) ); ?></div>
+										<?php endif; ?>
+										<?php if ( $is_retryable ) : ?>
+											<p class="aiscb-log-retry-cell">
+												<button type="button" class="button button-small aiscb-log-retry-button" data-log-id="<?php echo esc_attr( $log_id ); ?>"><?php echo esc_html( __( 'Retry', 'ai-site-search-chatbot' ) ); ?></button>
+											</p>
 										<?php endif; ?>
 									</td>
 									<td><?php self::render_log_text_block( isset( $log['question'] ) ? (string) $log['question'] : '' ); ?></td>
@@ -1057,9 +1076,11 @@ final class AISite_Search_Chatbot_Admin {
 			'saved' => __( 'Draft saved', 'ai-site-search-chatbot' ),
 			'updated' => __( 'Draft updated', 'ai-site-search-chatbot' ),
 			'kept-approved' => __( 'Approved entry kept', 'ai-site-search-chatbot' ),
+			'kept-existing' => __( 'Existing entry kept', 'ai-site-search-chatbot' ),
 			'rejected' => __( 'Draft not saved', 'ai-site-search-chatbot' ),
 			'provider-error' => __( 'Draft evaluation failed', 'ai-site-search-chatbot' ),
 			'disabled' => __( 'Draft saving disabled', 'ai-site-search-chatbot' ),
+			'draft-stub-created' => __( 'Draft created for manual answer', 'ai-site-search-chatbot' ),
 		);
 
 		return $labels[ $status ] ?? '';
@@ -1092,6 +1113,16 @@ final class AISite_Search_Chatbot_Admin {
 				'icon'  => 'dashicons-clock',
 				'tone'  => 'warning',
 			),
+			'ai-limited-site-guidance' => array(
+				'label' => __( 'AI Limit Hit', 'ai-site-search-chatbot' ),
+				'icon'  => 'dashicons-clock',
+				'tone'  => 'warning',
+			),
+			'rejected-pre-ai' => array(
+				'label' => __( 'Rejected Before AI', 'ai-site-search-chatbot' ),
+				'icon'  => 'dashicons-dismiss',
+				'tone'  => 'muted',
+			),
 			'request-blocked' => array(
 				'label' => __( 'Spam Blocked', 'ai-site-search-chatbot' ),
 				'icon'  => 'dashicons-shield-alt',
@@ -1103,6 +1134,11 @@ final class AISite_Search_Chatbot_Admin {
 				'tone'  => 'muted',
 			),
 			'fallback-provider-error' => array(
+				'label' => __( 'AI Error Fallback', 'ai-site-search-chatbot' ),
+				'icon'  => 'dashicons-warning',
+				'tone'  => 'warning',
+			),
+			'fallback-site-guidance-provider-error' => array(
 				'label' => __( 'AI Error Fallback', 'ai-site-search-chatbot' ),
 				'icon'  => 'dashicons-warning',
 				'tone'  => 'warning',

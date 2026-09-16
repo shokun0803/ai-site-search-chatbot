@@ -4,7 +4,7 @@ Tags: chatbot, ai, search, faq, gutenberg
 Requires at least: 7.0
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.0.0
+Stable tag: 1.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -29,6 +29,7 @@ Install and connect one of these provider plugins under **Settings > Connectors*
 * General site-guidance answers (using the site name, tagline, and a summary of public content) for questions that are not a direct content match
 * Choice of AI provider and model per site, with connection validation and an in-admin chat test
 * Saved Knowledge Base: review and approve generalized question/answer pairs so future matching questions can be answered without a new AI call; CSV export and import included
+* Retry button on chat log entries that fell back to a non-AI answer (missing config, provider error, no search results, or a hit usage limit); a successful retry can auto-generate a Saved Knowledge Base draft, and a retry that still fails seeds an empty draft entry so the question is not lost
 * Optional capability that lets non-administrator users manage the Saved Knowledge Base without full admin access
 * Three display modes: automatic on all pages, automatic on the front page only, or manual placement via shortcode or a Gutenberg block
 * Two built-in widget designs (Business and Cute)
@@ -84,6 +85,12 @@ Use the `[ai_site_search_chatbot]` shortcode, or add the AI Site Search Chatbot 
 3. Saved Knowledge Base review screen with approval status and CSV export/import.
 
 == Changelog ==
+
+= 1.1.0 =
+* Added a "Retry" button to chat log entries whose original answer fell back to a non-AI response (missing config, provider error, no search results, or a hit usage limit), so a visitor question can be re-run through search and AI answer generation on demand.
+* A successful retry reuses the existing auto-draft flow to save the new answer as a Saved Knowledge Base draft when enabled.
+* A retry that still cannot get an AI answer now seeds an empty-answer draft entry from the question, so a question that failed twice is queued for a manual answer instead of being lost in the log.
+* Fixed a bug in rule-based search query extraction where trimming a Japanese (or other multi-byte) question could corrupt its leading character, because `trim()`'s character-mask argument strips individual bytes rather than whole characters. This could silently degrade site search matching (and, since discovered, would have corrupted the question text saved into a knowledge draft) for affected questions.
 
 = 1.0.0 =
 * Initial public release on WordPress.org.

@@ -601,6 +601,44 @@
 			}
 		}
 
+		var logNotice = document.getElementById( 'aiscb_log_notice' );
+
+		async function retryChatLogEntry( button ) {
+			var logId = button.dataset.logId;
+
+			if ( ! logId || ! AISCBAdmin.chatLogRetryEndpointBase ) {
+				return;
+			}
+
+			var originalLabel = button.textContent;
+			button.disabled = true;
+			button.textContent = i18n.logRetrying;
+
+			try {
+				var response = await fetch( AISCBAdmin.chatLogRetryEndpointBase + '/' + encodeURIComponent( logId ) + '/retry', {
+					method: 'POST',
+					headers: {
+						'X-WP-Nonce': AISCBAdmin.restNonce
+					}
+				} );
+				var data = await response.json();
+
+				if ( ! response.ok ) {
+					showNotice( logNotice, 'error', data && data.message ? data.message : i18n.logRetryFailed );
+					button.disabled = false;
+					button.textContent = originalLabel;
+					return;
+				}
+
+				showNotice( logNotice, 'success', i18n.logRetrySuccess );
+				window.location.reload();
+			} catch ( error ) {
+				showNotice( logNotice, 'error', i18n.logRetryRequestFail );
+				button.disabled = false;
+				button.textContent = originalLabel;
+			}
+		}
+
 		if ( isSettingsUIAvailable() ) {
 			document.querySelectorAll( radioSelector ).forEach( function ( radio ) {
 				radio.addEventListener( 'change', updateModelOptions );
@@ -660,6 +698,18 @@
 
 		if ( isSettingsUIAvailable() ) {
 			updateModelOptions();
+		}
+
+		var logTable = document.querySelector( '.aiscb-log-table' );
+
+		if ( logTable ) {
+			logTable.addEventListener( 'click', function ( event ) {
+				var button = event.target.closest ? event.target.closest( '.aiscb-log-retry-button' ) : null;
+
+				if ( button ) {
+					retryChatLogEntry( button );
+				}
+			} );
 		}
 	} );
 } )();
