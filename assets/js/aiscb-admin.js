@@ -476,6 +476,7 @@
 					'<tr>' +
 						'<td>' +
 							'<div class="aiscb-knowledge-status-cell">' +
+								( item.matching_method_hint === AISCBAdmin.knowledgeDateReviewHint ? '<span class="aiscb-knowledge-date-review" title="' + escapeHtml( i18n.knowledgeDateReviewNote ) + '"><span class="dashicons dashicons-calendar-alt" aria-hidden="true"></span>' + escapeHtml( i18n.knowledgeDateReview ) + '</span>' : '' ) +
 								'<select class="aiscb-knowledge-status-select" data-knowledge-id="' + escapeHtml( String( item.id || '' ) ) + '">' + statusOptions + '</select>' +
 								'<button type="button" class="button button-small" data-knowledge-action="status" data-knowledge-id="' + escapeHtml( String( item.id || '' ) ) + '">' + escapeHtml( i18n.knowledgeApplyStatus ) + '</button>' +
 								'<div class="aiscb-knowledge-actions">' +

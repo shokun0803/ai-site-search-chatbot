@@ -1,6 +1,6 @@
 msgid ""
 msgstr ""
-"Project-Id-Version: AI Site Search Chatbot 1.0.0\n"
+"Project-Id-Version: AI Site Search Chatbot 1.2.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/ai-site-search-chatbot\n"
 "Last-Translator: \n"
 "Language-Team: Japanese\n"
@@ -8,7 +8,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "POT-Creation-Date: 2026-08-27T05:35:17+00:00\n"
-"PO-Revision-Date: 2026-08-27 00:00:00+0000\n"
+"PO-Revision-Date: 2026-09-30 00:00:00+0000\n"
 "Language: ja\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 "X-Generator: Poedit 3.0\n"
@@ -1135,8 +1135,8 @@ msgid "You decide whether a saved generalized knowledge entry matches a visitor 
 msgstr "あなたは、保存済みの一般化ナレッジが WordPress サイトアシスタント向けの訪問者質問に一致するかどうかを判定します。提供された訪問者の質問、現在の検索結果、保存済みナレッジ候補だけを使ってください。必ず JSON のみを返し、形式は {\"match\":true|false,\"entry_id\":123,\"reason\":\"short reason\"} とします。信頼できる保存済みエントリーがない場合は match を false、entry_id を 0 にしてください。ID を作り出してはいけません。"
 
 #: includes/class-ai-site-search-chatbot.php:1493
-msgid "You turn a visitor question and its answer into a reusable generalized knowledge entry for a WordPress site assistant. Remove personal information, company-specific private details, order numbers, contact details, account details, and one-off case facts. Keep only a general question and a general answer that would be safe to reuse for another visitor. Public facts that are explicitly stated on the current site pages may be saved even when they include named places, page titles, product names, character names, or pet names, as long as they are public site content and not private personal data. Do not reject an entry only because the original visitor phrasing was specific; rewrite it into a reusable fact-based question and answer when the fact is clearly stated in the provided public search results. Return JSON only in the form {\"should_save\":true|false,\"question_generalized\":\"...\",\"answer_generalized\":\"...\",\"confidence_note\":\"...\",\"pii_flag\":true|false}. Set should_save to false only when the exchange is truly private, one-off, unsafe, or not reusable."
-msgstr "あなたは、訪問者の質問とその回答を、WordPress サイトアシスタント向けに再利用可能な一般化ナレッジへ変換します。個人情報、企業固有の非公開情報、注文番号、連絡先、アカウント情報、一度限りの個別事案は削除してください。他の訪問者にも安全に再利用できる一般的な質問と一般的な回答だけを残します。現在のサイトページに明示的に記載されている公開情報であれば、場所の名称、ページタイトル、商品名、キャラクター名、ペットの名前などが含まれていても、非公開の個人情報でない限り保存して構いません。元の訪問者の言い回しが具体的だったという理由だけでエントリーを却下せず、提供された公開検索結果にその事実が明確に記載されている場合は、再利用可能な事実ベースの質問と回答に書き換えてください。必ず JSON のみを返し、形式は {\"should_save\":true|false,\"question_generalized\":\"...\",\"answer_generalized\":\"...\",\"confidence_note\":\"...\",\"pii_flag\":true|false} とします。やり取りが本当に個人的、一度限り、安全でない、または再利用に向かない場合にのみ should_save を false にしてください。"
+msgid "You turn a visitor question and its answer into a reusable generalized knowledge entry for a WordPress site assistant. Remove personal information, company-specific private details, order numbers, contact details, account details, and one-off case facts. Keep only a general question and a general answer that would be safe to reuse for another visitor. Public facts that are explicitly stated on the current site pages may be saved even when they include named places, page titles, product names, character names, or pet names, as long as they are public site content and not private personal data. Do not reject an entry only because the original visitor phrasing was specific; rewrite it into a reusable fact-based question and answer when the fact is clearly stated in the provided public search results. Return JSON only in the form {\"should_save\":true|false,\"question_generalized\":\"...\",\"answer_generalized\":\"...\",\"confidence_note\":\"...\",\"pii_flag\":true|false,\"time_sensitive\":true|false}. Set should_save to false only when the exchange is truly private, one-off, unsafe, or not reusable. Set time_sensitive to true when the answer describes temporary or time-limited information that will become outdated (announcements, events, campaigns, temporary schedule or price changes, deadlines); lasting facts that merely include a date, such as \"supported since 2020\", are not time-sensitive. Do not set should_save to false just because the answer is time-sensitive."
+msgstr "あなたは、訪問者の質問とその回答を、WordPress サイトアシスタント向けに再利用可能な一般化ナレッジへ変換します。個人情報、企業固有の非公開情報、注文番号、連絡先、アカウント情報、一度限りの個別事案は削除してください。他の訪問者にも安全に再利用できる一般的な質問と一般的な回答だけを残します。現在のサイトページに明示的に記載されている公開情報であれば、場所の名称、ページタイトル、商品名、キャラクター名、ペットの名前などが含まれていても、非公開の個人情報でない限り保存して構いません。元の訪問者の言い回しが具体的だったという理由だけでエントリーを却下せず、提供された公開検索結果にその事実が明確に記載されている場合は、再利用可能な事実ベースの質問と回答に書き換えてください。必ず JSON のみを返し、形式は {\"should_save\":true|false,\"question_generalized\":\"...\",\"answer_generalized\":\"...\",\"confidence_note\":\"...\",\"pii_flag\":true|false,\"time_sensitive\":true|false} とします。should_save を false にするのは、やり取りが本当に個人的、一度限り、安全でない、または再利用に向かない場合に限ってください。回答がいずれ古くなる一時的・期限付きの情報（お知らせ、イベント、キャンペーン、一時的な営業時間や料金の変更、締め切りなど）の場合は time_sensitive を true にしてください。「2020年から対応」のように日付を含むだけの継続的な事実は time_sensitive ではありません。time_sensitive であることだけを理由に should_save を false にしないでください。"
 
 #: includes/class-ai-site-search-chatbot.php:1579
 msgid "Knowledge candidate draft saving is disabled."
@@ -1414,3 +1414,15 @@ msgstr "AI へのリクエストが失敗したため、回答を再生成でき
 #, php-format
 msgid "Source posts %1$s are no longer public, so the entry was returned to draft. %2$s Update the answer and sources manually, or archive the entry."
 msgstr "参照元投稿 %1$s が公開されなくなったため、下書きに戻しました。%2$s 回答と参照元を手動で更新するか、アーカイブしてください。"
+
+msgid "An answer was found, but the AI judged it not reusable as saved knowledge (for example, it is private or one-off)."
+msgstr "回答は見つかりましたが、個人的・一度限りの内容などの理由で、AI がナレッジとして再利用できないと判断しました。"
+
+msgid "Needs review: this answer may contain dates or time-limited information. Check that it will stay valid before approving."
+msgstr "要確認: 日付や期限付きの情報を含む可能性があります。今後も有効な内容か確認してから承認してください。"
+
+msgid "Check dates"
+msgstr "日付を確認"
+
+msgid "This answer may contain dates or time-limited information. Check that it will stay valid before approving."
+msgstr "日付や期限付きの情報を含む可能性があります。今後も有効な内容か確認してから承認してください。"

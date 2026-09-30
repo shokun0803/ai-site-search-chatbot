@@ -91,6 +91,7 @@ final class AISite_Search_Chatbot_Admin {
 				'knowledgeBasePageUrl' => admin_url( 'options-general.php?page=ai-site-search-chatbot&tab=knowledge-base' ),
 				'chatLogRetryEndpointBase' => rest_url( AISite_Search_Chatbot::REST_NAMESPACE . '/chat-logs' ),
 				'knowledgeFullAccess' => current_user_can( 'manage_options' ),
+				'knowledgeDateReviewHint' => AISite_Search_Chatbot::KNOWLEDGE_DATE_REVIEW_HINT,
 				'restNonce'        => wp_create_nonce( 'wp_rest' ),
 				'optionKey'        => AISite_Search_Chatbot::OPTION_KEY,
 				'i18n'             => array(
@@ -152,6 +153,8 @@ final class AISite_Search_Chatbot_Admin {
 					'sourcePostModified'       => __( 'Modified:', 'ai-site-search-chatbot' ),
 					'sourcePostNotPublished'   => __( 'Not publicly available, so it is not used as a chat source or for reusing this entry.', 'ai-site-search-chatbot' ),
 					'sourcePostProtected'      => __( 'Password protected', 'ai-site-search-chatbot' ),
+					'knowledgeDateReview'      => __( 'Check dates', 'ai-site-search-chatbot' ),
+					'knowledgeDateReviewNote'  => __( 'This answer may contain dates or time-limited information. Check that it will stay valid before approving.', 'ai-site-search-chatbot' ),
 					'sourcePostUntitled'       => __( '(no title)', 'ai-site-search-chatbot' ),
 					'knowledgeMatchingHint'    => __( 'Matching hint', 'ai-site-search-chatbot' ),
 					'knowledgeConfidence'      => __( 'Confidence note', 'ai-site-search-chatbot' ),

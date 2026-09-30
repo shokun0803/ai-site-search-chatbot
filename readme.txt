@@ -4,7 +4,7 @@ Tags: chatbot, ai, search, faq, gutenberg
 Requires at least: 7.0
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.1.0
+Stable tag: 1.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -30,6 +30,8 @@ Install and connect one of these provider plugins under **Settings > Connectors*
 * Choice of AI provider and model per site, with connection validation and an in-admin chat test
 * Saved Knowledge Base: review and approve generalized question/answer pairs so future matching questions can be answered without a new AI call; CSV export and import included
 * Retry button on chat log entries that fell back to a non-AI answer (missing config, provider error, no search results, or a hit usage limit); a successful retry can auto-generate a Saved Knowledge Base draft, and a retry that still fails seeds an empty draft entry so the question is not lost
+* Source post previews in the Saved Knowledge Base editor, automatic handling of knowledge entries whose source posts are no longer public, and review marks on date-dependent drafts
+* Outdated versions of the same notice are dropped from search results so answers use the newest information
 * Optional capability that lets non-administrator users manage the Saved Knowledge Base without full admin access
 * Three display modes: automatic on all pages, automatic on the front page only, or manual placement via shortcode or a Gutenberg block
 * Two built-in widget designs (Business and Cute)
@@ -85,6 +87,13 @@ Use the `[ai_site_search_chatbot]` shortcode, or add the AI Site Search Chatbot 
 3. Saved Knowledge Base review screen with approval status and CSV export/import.
 
 == Changelog ==
+
+= 1.2.0 =
+* Saved Knowledge Base editor: each source post ID is now shown with its title (on hover), can be previewed in a popup showing its text content, and can be opened for viewing or editing in a new tab. Unpublished, password-protected, deleted, or unreadable posts are highlighted.
+* Approved knowledge entries no longer reuse source posts that stopped being public (unpublished, trashed, deleted, or password protected). An entry whose sources are all gone is skipped immediately, then re-checked in the background: a fresh site search regenerates its answer and sources when possible, and the entry is returned to draft for review either way. A daily sweep catches changes made outside the normal editor.
+* Outdated information is now dropped from site search results: when a newer result has the same title and opening text once dates and numbers are ignored (for example successive "business hours change" notices), only the newest is sent to the AI and listed as a source. Series posts and periodic reports with different content are kept. Publish dates and today's date are also passed to the AI so it prefers the newest information. This runs locally, without extra AI calls.
+* Approved knowledge entries whose source post has been superseded by a newer post in the current search results are no longer reused, so a fresh answer is generated instead.
+* Knowledge drafts that contain dates or temporary, time-limited information (announcements, events, campaigns, deadlines) are still saved, but are marked "Check dates" for review before approval. Lasting facts that merely include a date are saved normally.
 
 = 1.1.0 =
 * Added a "Retry" button to chat log entries whose original answer fell back to a non-AI response (missing config, provider error, no search results, or a hit usage limit), so a visitor question can be re-run through search and AI answer generation on demand.
@@ -157,6 +166,9 @@ Use the `[ai_site_search_chatbot]` shortcode, or add the AI Site Search Chatbot 
 * Added general site-guidance answers, an admin chat log viewer, AI reply rate limits, the Google Gemini provider, and Gutenberg block support.
 
 == Upgrade Notice ==
+
+= 1.2.0 =
+Improves how outdated information is handled in answers and saved knowledge. No settings changes are required.
 
 = 1.0.0 =
 Initial public release on WordPress.org.

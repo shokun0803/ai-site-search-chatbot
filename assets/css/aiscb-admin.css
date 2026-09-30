@@ -564,6 +564,25 @@
 	min-width: 148px;
 }
 
+.aiscb-admin .aiscb-knowledge-date-review {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	align-self: flex-start;
+	padding: 1px 8px 1px 4px;
+	font-size: 12px;
+	color: #6b5200;
+	background: #fcf9e8;
+	border: 1px solid #f0c33c;
+	border-radius: 999px;
+}
+
+.aiscb-admin .aiscb-knowledge-date-review .dashicons {
+	width: 16px;
+	height: 16px;
+	font-size: 16px;
+}
+
 .aiscb-admin .aiscb-knowledge-status-select {
 	width: 100%;
 }
