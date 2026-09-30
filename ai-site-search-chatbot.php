@@ -32,4 +32,5 @@ require_once AISCB_DIR . 'includes/class-ai-site-search-chatbot-block.php';
 require_once AISCB_DIR . 'includes/class-ai-site-search-chatbot-frontend.php';
 
 register_activation_hook( AISCB_FILE, array( 'AISite_Search_Chatbot', 'activate' ) );
+register_deactivation_hook( AISCB_FILE, array( 'AISite_Search_Chatbot', 'deactivate' ) );
 add_action( 'plugins_loaded', array( 'AISite_Search_Chatbot', 'init' ) );

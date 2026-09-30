@@ -202,6 +202,7 @@
 			document.getElementById( 'aiscb_knowledge_question' ).value = '';
 			document.getElementById( 'aiscb_knowledge_answer' ).value = '';
 			document.getElementById( 'aiscb_knowledge_source_post_ids' ).value = '';
+			refreshSourcePostChips();
 			document.getElementById( 'aiscb_knowledge_matching_method_hint' ).value = '';
 			document.getElementById( 'aiscb_knowledge_confidence_note' ).value = '';
 			document.getElementById( 'aiscb_knowledge_admin_notes' ).value = '';
@@ -227,6 +228,7 @@
 			document.getElementById( 'aiscb_knowledge_question' ).value = item.question_generalized || '';
 			document.getElementById( 'aiscb_knowledge_answer' ).value = item.answer_generalized || '';
 			document.getElementById( 'aiscb_knowledge_source_post_ids' ).value = Array.isArray( item.source_post_ids ) ? item.source_post_ids.join( ', ' ) : '';
+			refreshSourcePostChips();
 			document.getElementById( 'aiscb_knowledge_matching_method_hint' ).value = item.matching_method_hint || '';
 			document.getElementById( 'aiscb_knowledge_confidence_note' ).value = item.confidence_note || '';
 			document.getElementById( 'aiscb_knowledge_admin_notes' ).value = item.admin_notes || '';
@@ -237,6 +239,196 @@
 			}
 
 			focusKnowledgeForm();
+		}
+
+		var sourcePostCache = {};
+		var sourcePostTimer = null;
+		var sourcePostRequestSeq = 0;
+		var sourcePostList = document.getElementById( 'aiscb_knowledge_source_posts' );
+		var sourcePostField = document.getElementById( 'aiscb_knowledge_source_post_ids' );
+		var sourcePostDialog = document.getElementById( 'aiscb_source_post_dialog' );
+
+		function parseSourcePostIds( value ) {
+			var seen = {};
+
+			return String( value || '' ).split( ',' ).map( function ( part ) {
+				return parseInt( part.trim(), 10 );
+			} ).filter( function ( id ) {
+				if ( ! id || id < 1 || seen[ id ] ) {
+					return false;
+				}
+
+				seen[ id ] = true;
+				return true;
+			} );
+		}
+
+		function createSourcePostLink( url, label, icon ) {
+			var link = document.createElement( 'a' );
+			link.href = url;
+			link.target = '_blank';
+			link.rel = 'noopener noreferrer';
+			link.className = 'aiscb-source-post__link';
+			link.title = label;
+			link.setAttribute( 'aria-label', label );
+			link.innerHTML = '<span class="dashicons ' + icon + '" aria-hidden="true"></span>';
+
+			return link;
+		}
+
+		function renderSourcePostChips( ids ) {
+			if ( ! sourcePostList ) {
+				return;
+			}
+
+			sourcePostList.innerHTML = '';
+
+			ids.forEach( function ( id ) {
+				var post = sourcePostCache[ id ];
+				var chip = document.createElement( 'span' );
+				chip.className = 'aiscb-source-post';
+
+				if ( ! post ) {
+					return;
+				}
+
+				if ( ! post.found || ! post.accessible ) {
+					chip.className += ' aiscb-source-post--missing';
+					chip.textContent = '#' + id + ' ' + ( post.found ? i18n.sourcePostRestricted : i18n.sourcePostNotFound );
+					sourcePostList.appendChild( chip );
+					return;
+				}
+
+				var title = post.title || i18n.sourcePostUntitled;
+				var button = document.createElement( 'button' );
+				button.type = 'button';
+				button.className = 'button-link aiscb-source-post__title';
+				button.dataset.sourcePostId = String( id );
+				button.title = title + '\n' + post.post_type_label + ' / ' + post.status_label + '\n' + i18n.sourcePostPreview;
+				button.textContent = '#' + id + ' ' + title;
+				chip.appendChild( button );
+
+				if ( ! post.is_available ) {
+					chip.className += ' aiscb-source-post--unpublished';
+					var status = document.createElement( 'span' );
+					status.className = 'aiscb-source-post__status';
+					status.textContent = post.is_published && post.has_password ? i18n.sourcePostProtected : post.status_label;
+					chip.appendChild( status );
+				}
+
+				if ( post.view_url ) {
+					chip.appendChild( createSourcePostLink( post.view_url, i18n.sourcePostView, 'dashicons-external' ) );
+				}
+
+				if ( post.edit_url ) {
+					chip.appendChild( createSourcePostLink( post.edit_url, i18n.sourcePostEdit, 'dashicons-edit' ) );
+				}
+
+				sourcePostList.appendChild( chip );
+			} );
+		}
+
+		async function refreshSourcePostChips() {
+			if ( ! sourcePostList || ! sourcePostField || ! AISCBAdmin.knowledgeBaseSourcePostsEndpoint ) {
+				return;
+			}
+
+			var ids = parseSourcePostIds( sourcePostField.value ).slice( 0, 50 );
+			var missingIds = ids.filter( function ( id ) {
+				return ! sourcePostCache[ id ];
+			} );
+			var requestSeq = ++sourcePostRequestSeq;
+
+			if ( ! missingIds.length ) {
+				renderSourcePostChips( ids );
+				return;
+			}
+
+			sourcePostList.textContent = i18n.sourcePostLoading;
+
+			try {
+				var response = await fetch( AISCBAdmin.knowledgeBaseSourcePostsEndpoint + ( -1 === AISCBAdmin.knowledgeBaseSourcePostsEndpoint.indexOf( '?' ) ? '?' : '&' ) + 'ids=' + encodeURIComponent( missingIds.join( ',' ) ), {
+					method: 'GET',
+					headers: {
+						'X-WP-Nonce': AISCBAdmin.restNonce
+					}
+				} );
+				var data = await response.json();
+
+				if ( ! response.ok || ! data || ! Array.isArray( data.items ) ) {
+					throw new Error( 'source-posts' );
+				}
+
+				data.items.forEach( function ( item ) {
+					sourcePostCache[ item.id ] = item;
+				} );
+			} catch ( error ) {
+				if ( requestSeq === sourcePostRequestSeq ) {
+					sourcePostList.textContent = i18n.sourcePostLoadFailed;
+				}
+
+				return;
+			}
+
+			// Ignore stale responses when the field changed while the request was in flight.
+			if ( requestSeq === sourcePostRequestSeq ) {
+				renderSourcePostChips( ids );
+			}
+		}
+
+		function scheduleSourcePostRefresh() {
+			window.clearTimeout( sourcePostTimer );
+			sourcePostTimer = window.setTimeout( refreshSourcePostChips, 400 );
+		}
+
+		function openSourcePostDialog( id ) {
+			var post = sourcePostCache[ id ];
+
+			if ( ! post || ! post.accessible ) {
+				return;
+			}
+
+			if ( ! sourcePostDialog || 'function' !== typeof sourcePostDialog.showModal ) {
+				if ( post.view_url ) {
+					window.open( post.view_url, '_blank', 'noopener' );
+				}
+
+				return;
+			}
+
+			var meta = [ '#' + post.id, post.post_type_label, post.status_label ];
+
+			if ( post.date ) {
+				meta.push( i18n.sourcePostPublished + ' ' + post.date );
+			}
+
+			if ( post.modified && post.modified !== post.date ) {
+				meta.push( i18n.sourcePostModified + ' ' + post.modified );
+			}
+
+			document.getElementById( 'aiscb_source_post_dialog_title' ).textContent = post.title || i18n.sourcePostUntitled;
+			document.getElementById( 'aiscb_source_post_dialog_meta' ).textContent = meta.join( ' / ' ) + ( post.is_available ? '' : ' — ' + i18n.sourcePostNotPublished );
+			document.getElementById( 'aiscb_source_post_dialog_content' ).textContent = post.content || i18n.sourcePostNoContent;
+
+			var actions = document.getElementById( 'aiscb_source_post_dialog_actions' );
+			actions.innerHTML = '';
+
+			[ [ post.view_url, i18n.sourcePostView, 'button button-primary' ], [ post.edit_url, i18n.sourcePostEdit, 'button' ] ].forEach( function ( action ) {
+				if ( ! action[ 0 ] ) {
+					return;
+				}
+
+				var link = document.createElement( 'a' );
+				link.href = action[ 0 ];
+				link.target = '_blank';
+				link.rel = 'noopener noreferrer';
+				link.className = action[ 2 ];
+				link.textContent = action[ 1 ];
+				actions.appendChild( link );
+			} );
+
+			sourcePostDialog.showModal();
+			document.getElementById( 'aiscb_source_post_dialog_content' ).scrollTop = 0;
 		}
 
 		function getKnowledgePayload() {
@@ -675,6 +867,33 @@
 			} );
 
 			knowledgeForm.addEventListener( 'submit', saveKnowledgeEntry );
+
+			if ( sourcePostField ) {
+				sourcePostField.addEventListener( 'input', scheduleSourcePostRefresh );
+			}
+
+			if ( sourcePostList ) {
+				sourcePostList.addEventListener( 'click', function ( event ) {
+					var button = event.target.closest ? event.target.closest( '[data-source-post-id]' ) : null;
+
+					if ( button ) {
+						openSourcePostDialog( Number( button.dataset.sourcePostId ) );
+					}
+				} );
+			}
+
+			if ( sourcePostDialog ) {
+				document.getElementById( 'aiscb_source_post_dialog_close' ).addEventListener( 'click', function () {
+					sourcePostDialog.close();
+				} );
+
+				// Close when the backdrop (the dialog element itself, outside its content) is clicked.
+				sourcePostDialog.addEventListener( 'click', function ( event ) {
+					if ( event.target === sourcePostDialog ) {
+						sourcePostDialog.close();
+					}
+				} );
+			}
 			document.getElementById( 'aiscb_knowledge_cancel' ).addEventListener( 'click', resetKnowledgeForm );
 			document.getElementById( 'aiscb_knowledge_refresh' ).addEventListener( 'click', loadKnowledgeEntries );
 			document.getElementById( 'aiscb_knowledge_create' ).addEventListener( 'click', resetKnowledgeForm );

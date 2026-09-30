@@ -605,6 +605,128 @@
 	max-width: 100%;
 }
 
+.aiscb-admin .aiscb-source-posts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: 8px;
+}
+
+.aiscb-admin .aiscb-source-posts:empty {
+	display: none;
+}
+
+.aiscb-admin .aiscb-source-post {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	max-width: 100%;
+	padding: 3px 8px;
+	background: #f0f6fc;
+	border: 1px solid #c5d9ed;
+	border-radius: 999px;
+}
+
+.aiscb-admin .aiscb-source-post--unpublished {
+	background: #fcf9e8;
+	border-color: #f0c33c;
+}
+
+.aiscb-admin .aiscb-source-post--missing {
+	color: #8a2424;
+	background: #fcf0f1;
+	border-color: #f0b8bb;
+}
+
+.aiscb-admin .aiscb-source-post__title {
+	overflow: hidden;
+	max-width: 32em;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	text-decoration: none;
+}
+
+.aiscb-admin .aiscb-source-post__status {
+	font-size: 11px;
+	color: #6b5200;
+}
+
+.aiscb-admin .aiscb-source-post__link {
+	display: inline-flex;
+	color: #50575e;
+	text-decoration: none;
+}
+
+.aiscb-admin .aiscb-source-post__link:hover,
+.aiscb-admin .aiscb-source-post__link:focus {
+	color: #2271b1;
+}
+
+.aiscb-admin .aiscb-source-post__link .dashicons {
+	width: 16px;
+	height: 16px;
+	font-size: 16px;
+}
+
+.aiscb-admin .aiscb-source-post-dialog {
+	width: min( 760px, calc( 100vw - 32px ) );
+	max-height: calc( 100vh - 64px );
+	padding: 0;
+	border: 0;
+	border-radius: 8px;
+	box-shadow: 0 12px 32px rgba( 16, 24, 40, 0.24 );
+}
+
+.aiscb-admin .aiscb-source-post-dialog::backdrop {
+	background: rgba( 0, 0, 0, 0.5 );
+}
+
+.aiscb-admin .aiscb-source-post-dialog__inner {
+	display: flex;
+	flex-direction: column;
+	max-height: calc( 100vh - 64px );
+	padding: 20px;
+	box-sizing: border-box;
+}
+
+.aiscb-admin .aiscb-source-post-dialog__header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.aiscb-admin .aiscb-source-post-dialog__header h2 {
+	margin: 0;
+}
+
+.aiscb-admin .aiscb-source-post-dialog__close {
+	color: #50575e;
+}
+
+.aiscb-admin .aiscb-source-post-dialog__meta {
+	margin: 8px 0 12px;
+	color: #646970;
+}
+
+.aiscb-admin .aiscb-source-post-dialog__content {
+	flex: 1 1 auto;
+	overflow: auto;
+	padding: 12px;
+	white-space: pre-wrap;
+	line-height: 1.7;
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	border-radius: 6px;
+}
+
+.aiscb-admin .aiscb-source-post-dialog__actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 16px;
+}
+
 @media (max-width: 960px) {
 	.aiscb-admin .aiscb-usage-card__value {
 		font-size: 24px;

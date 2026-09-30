@@ -141,6 +141,10 @@ final class AISite_Search_Chatbot {
 	const KNOWLEDGE_EDITOR_CAP = 'aiscb_manage_knowledge_base';
 	const CAPABILITIES_SCHEMA_OPTION = 'aiscb_capabilities_schema_version';
 	const CAPABILITIES_SCHEMA_VERSION = '1.0.0';
+	const KNOWLEDGE_SOURCE_REFRESH_HOOK = 'aiscb_refresh_orphaned_knowledge_entry';
+	const KNOWLEDGE_SOURCE_SWEEP_HOOK = 'aiscb_sweep_orphaned_knowledge_entries';
+	const KNOWLEDGE_SOURCE_REFRESH_DELAY = 5 * MINUTE_IN_SECONDS;
+	const KNOWLEDGE_SOURCE_REFRESH_MAX_ATTEMPTS = 24;
 
 	public static function activate(): void {
 		self::grant_default_capabilities();
@@ -156,6 +160,11 @@ final class AISite_Search_Chatbot {
 		self::create_knowledge_base_table();
 	}
 
+	public static function deactivate(): void {
+		wp_clear_scheduled_hook( self::KNOWLEDGE_SOURCE_SWEEP_HOOK );
+		wp_unschedule_hook( self::KNOWLEDGE_SOURCE_REFRESH_HOOK );
+	}
+
 	public static function init(): void {
 		self::maybe_upgrade_daily_usage_schema();
 		self::maybe_upgrade_knowledge_base_schema();
@@ -164,6 +173,15 @@ final class AISite_Search_Chatbot {
 		self::load_textdomain();
 		add_action( 'admin_init', array( __CLASS__, 'register_settings' ) );
 		add_action( 'rest_api_init', array( __CLASS__, 'register_rest_routes' ) );
+		add_action( 'transition_post_status', array( __CLASS__, 'handle_source_post_status_transition' ), 10, 3 );
+		add_action( 'post_updated', array( __CLASS__, 'handle_source_post_updated' ), 10, 3 );
+		add_action( 'deleted_post', array( __CLASS__, 'handle_source_post_deleted' ), 10, 2 );
+		add_action( self::KNOWLEDGE_SOURCE_REFRESH_HOOK, array( __CLASS__, 'refresh_orphaned_knowledge_entry' ), 10, 2 );
+		add_action( self::KNOWLEDGE_SOURCE_SWEEP_HOOK, array( __CLASS__, 'sweep_orphaned_knowledge_entries' ) );
+
+		if ( ! wp_next_scheduled( self::KNOWLEDGE_SOURCE_SWEEP_HOOK ) ) {
+			wp_schedule_event( time() + HOUR_IN_SECONDS, 'daily', self::KNOWLEDGE_SOURCE_SWEEP_HOOK );
+		}
 		AISite_Search_Chatbot_Admin::init();
 		AISite_Search_Chatbot_Block::init();
 		AISite_Search_Chatbot_Frontend::init();
@@ -814,6 +832,16 @@ final class AISite_Search_Chatbot {
 
 		register_rest_route(
 			self::REST_NAMESPACE,
+			'/knowledge-base/source-posts',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'handle_knowledge_base_source_posts_request' ),
+				'permission_callback' => array( __CLASS__, 'is_knowledge_editor_or_admin' ),
+			)
+		);
+
+		register_rest_route(
+			self::REST_NAMESPACE,
 			'/chat-logs/(?P<log_id>[A-Za-z0-9-]+)/retry',
 			array(
 				'methods'             => 'POST',
@@ -1308,10 +1336,30 @@ final class AISite_Search_Chatbot {
 		);
 		$current_result_ids = self::get_result_ids( $results );
 		$candidates = array();
+		$all_source_ids = array();
+
+		foreach ( $entries['items'] as $entry ) {
+			$all_source_ids = array_merge( $all_source_ids, $entry['source_post_ids'] );
+		}
+
+		if ( ! empty( $all_source_ids ) ) {
+			_prime_post_caches( array_values( array_unique( $all_source_ids ) ), false, false );
+		}
 
 		foreach ( $entries['items'] as $entry ) {
 			if ( ! empty( $entry['pii_flag'] ) ) {
 				continue;
+			}
+
+			// Entries whose source posts are no longer public must not be reused:
+			// drop the unavailable sources, and skip the entry once none remain.
+			// Entries written without any source posts are left as they are.
+			if ( ! empty( $entry['source_post_ids'] ) ) {
+				$entry['source_post_ids'] = self::get_available_source_post_ids( $entry['source_post_ids'] );
+
+				if ( empty( $entry['source_post_ids'] ) ) {
+					continue;
+				}
 			}
 
 			$text_score = self::calculate_question_similarity_score( $message, (string) $entry['question_generalized'] );
@@ -1342,6 +1390,265 @@ final class AISite_Search_Chatbot {
 		);
 
 		return array_slice( $candidates, 0, $limit );
+	}
+
+	/**
+	 * A source post is available only while it could still be returned by the
+	 * public site search: published, not password protected, and of a public,
+	 * searchable post type.
+	 */
+	private static function is_source_post_available( int $post_id ): bool {
+		$post = get_post( $post_id );
+
+		return $post instanceof WP_Post
+			&& 'publish' === $post->post_status
+			&& '' === (string) $post->post_password
+			&& in_array( $post->post_type, self::get_searchable_post_types(), true );
+	}
+
+	private static function get_available_source_post_ids( array $ids ): array {
+		return array_values(
+			array_filter(
+				array_map( 'absint', $ids ),
+				array( __CLASS__, 'is_source_post_available' )
+			)
+		);
+	}
+
+	private static function get_approved_knowledge_entry_ids_by_source_post( int $post_id ): array {
+		global $wpdb;
+
+		if ( $post_id <= 0 ) {
+			return array();
+		}
+
+		$table_name = self::get_knowledge_base_table_name();
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id, source_post_ids FROM {$table_name} WHERE status = %s AND source_post_ids LIKE %s", 'approved', '%' . $wpdb->esc_like( (string) $post_id ) . '%' ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$ids = array();
+
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			$source_ids = json_decode( (string) $row['source_post_ids'], true );
+
+			// The LIKE prefilter also matches e.g. 12 inside 123, so confirm exactly.
+			if ( is_array( $source_ids ) && in_array( $post_id, array_map( 'absint', $source_ids ), true ) ) {
+				$ids[] = absint( $row['id'] );
+			}
+		}
+
+		return $ids;
+	}
+
+	private static function schedule_knowledge_source_refresh( int $entry_id, int $delay, int $attempt = 0 ): void {
+		$args = array( $entry_id, $attempt );
+
+		if ( ! wp_next_scheduled( self::KNOWLEDGE_SOURCE_REFRESH_HOOK, $args ) ) {
+			wp_schedule_single_event( time() + $delay, self::KNOWLEDGE_SOURCE_REFRESH_HOOK, $args );
+		}
+	}
+
+	private static function queue_knowledge_source_checks_for_post( int $post_id ): void {
+		foreach ( self::get_approved_knowledge_entry_ids_by_source_post( $post_id ) as $entry_id ) {
+			self::schedule_knowledge_source_refresh( $entry_id, self::KNOWLEDGE_SOURCE_REFRESH_DELAY );
+		}
+	}
+
+	public static function handle_source_post_status_transition( $new_status, $old_status, $post ): void {
+		if ( 'publish' === $old_status && 'publish' !== $new_status && $post instanceof WP_Post ) {
+			self::queue_knowledge_source_checks_for_post( (int) $post->ID );
+		}
+	}
+
+	public static function handle_source_post_updated( $post_id, $post_after, $post_before ): void {
+		if ( ! $post_after instanceof WP_Post || ! $post_before instanceof WP_Post || 'publish' !== $post_after->post_status ) {
+			return;
+		}
+
+		$password_added = '' === (string) $post_before->post_password && '' !== (string) $post_after->post_password;
+		$type_changed = $post_before->post_type !== $post_after->post_type;
+
+		if ( $password_added || $type_changed ) {
+			self::queue_knowledge_source_checks_for_post( (int) $post_id );
+		}
+	}
+
+	public static function handle_source_post_deleted( $post_id, $post = null ): void {
+		// Trashing already went through the status transition; only a direct
+		// delete of a still-published post needs handling here.
+		if ( $post instanceof WP_Post && 'publish' === $post->post_status && 'revision' !== $post->post_type ) {
+			self::queue_knowledge_source_checks_for_post( (int) $post_id );
+		}
+	}
+
+	/**
+	 * Daily safety net for sources that became unavailable without a hook we
+	 * listen to (direct database edits, changed post type visibility, or
+	 * changes made before this check existed).
+	 */
+	public static function sweep_orphaned_knowledge_entries(): void {
+		$page = 1;
+		$scheduled = 0;
+
+		do {
+			$entries = self::list_knowledge_base_entries(
+				array(
+					'status' => 'approved',
+					'page' => $page,
+					'per_page' => 100,
+				)
+			);
+
+			foreach ( $entries['items'] as $entry ) {
+				if ( empty( $entry['source_post_ids'] ) || ! empty( self::get_available_source_post_ids( $entry['source_post_ids'] ) ) ) {
+					continue;
+				}
+
+				// Stagger the refreshes so a large sweep does not fire many AI requests at once.
+				self::schedule_knowledge_source_refresh( (int) $entry['id'], MINUTE_IN_SECONDS * ( 1 + $scheduled ) );
+				++$scheduled;
+			}
+
+			++$page;
+		} while ( count( $entries['items'] ) === 100 );
+	}
+
+	/**
+	 * Runs after an approved entry may have lost its source posts. When at least
+	 * one source is still public nothing is done (unavailable sources are already
+	 * ignored at match time). When none remain, the entry is demoted to draft,
+	 * and if a fresh site search finds content, its answer and sources are
+	 * rewritten from that content so an admin can review and re-approve it.
+	 */
+	public static function refresh_orphaned_knowledge_entry( $entry_id, $attempt = 0 ): void {
+		$entry_id = absint( $entry_id );
+		$attempt = absint( $attempt );
+		$entry = self::get_knowledge_base_entry( $entry_id );
+
+		if ( empty( $entry ) || 'approved' !== $entry['status'] || empty( $entry['source_post_ids'] ) ) {
+			return;
+		}
+
+		if ( ! empty( self::get_available_source_post_ids( $entry['source_post_ids'] ) ) ) {
+			return;
+		}
+
+		$settings = self::get_settings();
+		$can_use_ai = self::has_active_provider_credential( $settings ) && '' !== trim( (string) ( $settings['model'] ?? '' ) );
+
+		// Wait for the site-wide daily AI budget to reset rather than giving up.
+		// Matching already ignores this entry, so waiting is safe.
+		if ( $can_use_ai && self::is_ai_usage_globally_limited() && $attempt < self::KNOWLEDGE_SOURCE_REFRESH_MAX_ATTEMPTS ) {
+			self::schedule_knowledge_source_refresh( $entry_id, HOUR_IN_SECONDS, $attempt + 1 );
+			return;
+		}
+
+		$lost_ids = implode( ', ', array_map( static function ( int $id ): string {
+			return '#' . $id;
+		}, $entry['source_post_ids'] ) );
+		$regenerated = $can_use_ai ? self::regenerate_knowledge_answer_from_site_search( $settings, (string) $entry['question_generalized'] ) : array( 'status' => 'no-ai' );
+		$timestamp = wp_date( 'Y-m-d H:i' );
+
+		if ( 'answered' === $regenerated['status'] ) {
+			$previous_answer = self::trim_chat_log_text( (string) $entry['answer_generalized'], 1500 );
+			/* translators: 1: date and time, 2: list of source post IDs, 3: previous answer. */
+			$history = sprintf( __( '[%1$s] Source posts %2$s are no longer public, so the answer was regenerated from a new site search. Previous answer: %3$s', 'ai-site-search-chatbot' ), $timestamp, $lost_ids, $previous_answer );
+
+			self::update_knowledge_base_entry(
+				$entry_id,
+				array(
+					'status' => 'draft',
+					'answer_generalized' => $regenerated['answer'],
+					'source_post_ids' => $regenerated['source_post_ids'],
+					'matching_method_hint' => 'source_refreshed',
+					/* translators: %s: list of source post IDs. */
+					'confidence_note' => sprintf( __( 'Source posts %s are no longer public. The answer and sources were regenerated from a new site search and the entry was returned to draft. Review it before approving again.', 'ai-site-search-chatbot' ), $lost_ids ),
+					'admin_notes' => trim( $history . ' ' . (string) $entry['admin_notes'] ),
+					'pii_flag' => ( ! empty( $entry['pii_flag'] ) || ! empty( $regenerated['pii_flag'] ) ) ? 1 : 0,
+				)
+			);
+
+			return;
+		}
+
+		$reasons = array(
+			'no-results' => __( 'A new site search found no matching public content.', 'ai-site-search-chatbot' ),
+			'no-ai' => __( 'The answer could not be regenerated because no AI provider is configured.', 'ai-site-search-chatbot' ),
+			'provider-error' => __( 'The answer could not be regenerated because the AI request failed.', 'ai-site-search-chatbot' ),
+		);
+		$reason = $reasons[ $regenerated['status'] ] ?? $reasons['provider-error'];
+
+		self::update_knowledge_base_entry(
+			$entry_id,
+			array(
+				'status' => 'draft',
+				'matching_method_hint' => 'source_lost',
+				/* translators: 1: list of source post IDs, 2: reason the answer was not regenerated. */
+				'confidence_note' => sprintf( __( 'Source posts %1$s are no longer public, so the entry was returned to draft. %2$s Update the answer and sources manually, or archive the entry.', 'ai-site-search-chatbot' ), $lost_ids, $reason ),
+			)
+		);
+	}
+
+	private static function regenerate_knowledge_answer_from_site_search( array $settings, string $question ): array {
+		$usage_accumulator = new AISCB_AI_Usage_Accumulator();
+		$result = self::run_knowledge_regeneration( $settings, $question, $usage_accumulator );
+
+		self::record_daily_usage_from_log_entry( array( 'ai_usage_summary' => $usage_accumulator->export_summary() ) );
+
+		return $result;
+	}
+
+	private static function run_knowledge_regeneration( array $settings, string $question, AISCB_AI_Usage_Accumulator $usage_accumulator ): array {
+		if ( '' === trim( $question ) ) {
+			return array( 'status' => 'no-results' );
+		}
+
+		$route = array(
+			'intent' => 'site-search',
+			'queries' => self::resolve_search_queries( $question, $settings, array(), $usage_accumulator ),
+		);
+		$results = self::search_site_content( $question, $settings, $route, $usage_accumulator );
+
+		if ( empty( $results ) ) {
+			return array( 'status' => 'no-results' );
+		}
+
+		$response = self::request_ai_answer( $settings, $question, $results, array(), $usage_accumulator );
+
+		if ( is_wp_error( $response ) || empty( $response['success'] ) || '' === trim( (string) $response['content'] ) ) {
+			return array( 'status' => 'provider-error' );
+		}
+
+		$answer = self::trim_chat_log_text( (string) $response['content'], 8000 );
+
+		// Generalize the fresh answer the same way new drafts are generated; fall
+		// back to the raw answer when the generalization step does not return one.
+		$generalized = self::request_ai_answer(
+			$settings,
+			$question,
+			$results,
+			array(
+				'purpose' => 'knowledge_candidate_generation',
+				'system_prompt' => self::build_knowledge_candidate_generation_system_prompt(),
+				'user_prompt' => self::build_knowledge_candidate_generation_prompt( $question, $answer, $results ),
+			),
+			$usage_accumulator
+		);
+		$pii_flag = false;
+
+		if ( ! is_wp_error( $generalized ) && ! empty( $generalized['success'] ) && ! empty( $generalized['content'] ) ) {
+			$candidate = self::parse_knowledge_candidate_generation_response( (string) $generalized['content'] );
+
+			if ( ! empty( $candidate['should_save'] ) && '' !== $candidate['answer_generalized'] ) {
+				$answer = $candidate['answer_generalized'];
+				$pii_flag = ! empty( $candidate['pii_flag'] );
+			}
+		}
+
+		return array(
+			'status' => 'answered',
+			'answer' => $answer,
+			'source_post_ids' => self::get_result_ids( $results ),
+			'pii_flag' => $pii_flag || self::contains_sensitive_pattern( $answer ),
+		);
 	}
 
 	private static function build_knowledge_base_match_system_prompt(): string {
@@ -1733,6 +2040,67 @@ final class AISite_Search_Chatbot {
 					'search' => $request->get_param( 'search' ),
 				)
 			)
+		);
+	}
+
+	public static function handle_knowledge_base_source_posts_request( WP_REST_Request $request ) {
+		$ids = array_slice( self::normalize_source_post_ids( (string) $request->get_param( 'ids' ) ), 0, 50 );
+		$items = array();
+
+		foreach ( $ids as $id ) {
+			$items[] = self::describe_knowledge_source_post( $id );
+		}
+
+		return rest_ensure_response( array( 'items' => $items ) );
+	}
+
+	private static function describe_knowledge_source_post( int $id ): array {
+		$post = get_post( $id );
+
+		if ( ! $post instanceof WP_Post || 'trash' === $post->post_status ) {
+			return array(
+				'id'    => $id,
+				'found' => false,
+			);
+		}
+
+		// Only reveal details of posts the current user is allowed to read.
+		if ( ! current_user_can( 'read_post', $id ) ) {
+			return array(
+				'id'         => $id,
+				'found'      => true,
+				'accessible' => false,
+			);
+		}
+
+		$post_type_object = get_post_type_object( $post->post_type );
+		$status_object    = get_post_status_object( $post->post_status );
+		$is_published     = 'publish' === $post->post_status;
+		$view_url         = $is_published ? get_permalink( $post ) : get_preview_post_link( $post );
+		$edit_url         = current_user_can( 'edit_post', $id ) ? get_edit_post_link( $post, 'raw' ) : '';
+		$content          = trim( preg_replace( '/\s+/u', ' ', wp_strip_all_tags( do_shortcode( (string) $post->post_content ) ) ) );
+		$content_limit    = 2000;
+
+		if ( self::unicode_length( $content ) > $content_limit ) {
+			$content = ( function_exists( 'mb_substr' ) ? mb_substr( $content, 0, $content_limit, 'UTF-8' ) : substr( $content, 0, $content_limit ) ) . '...';
+		}
+
+		return array(
+			'id'              => $id,
+			'found'           => true,
+			'accessible'      => true,
+			'title'           => wp_strip_all_tags( get_the_title( $post ) ),
+			'post_type_label' => $post_type_object ? (string) $post_type_object->labels->singular_name : $post->post_type,
+			'status'          => $post->post_status,
+			'status_label'    => $status_object ? (string) $status_object->label : $post->post_status,
+			'is_published'    => $is_published,
+			'is_available'    => self::is_source_post_available( $id ),
+			'has_password'    => '' !== (string) $post->post_password,
+			'date'            => get_the_date( '', $post ),
+			'modified'        => get_the_modified_date( '', $post ),
+			'view_url'        => $view_url ? (string) $view_url : '',
+			'edit_url'        => $edit_url ? (string) $edit_url : '',
+			'content'         => $content,
 		);
 	}
 
@@ -2396,10 +2764,15 @@ final class AISite_Search_Chatbot {
 		return function_exists( 'mb_strtolower' ) ? mb_strtolower( $message, 'UTF-8' ) : strtolower( $message );
 	}
 
-	private static function search_site_content( string $message, array $settings = array(), array $route = array(), ?AISCB_AI_Usage_Accumulator $usage_accumulator = null ): array {
+	private static function get_searchable_post_types(): array {
 		$post_types = get_post_types( array( 'public' => true ), 'names' );
 		unset( $post_types['attachment'] );
-		$post_types = array_values( $post_types );
+
+		return array_values( $post_types );
+	}
+
+	private static function search_site_content( string $message, array $settings = array(), array $route = array(), ?AISCB_AI_Usage_Accumulator $usage_accumulator = null ): array {
+		$post_types = self::get_searchable_post_types();
 		$queries = self::resolve_search_queries( $message, $settings, $route, $usage_accumulator );
 		$results = self::search_site_content_by_queries( $queries, $post_types );
 

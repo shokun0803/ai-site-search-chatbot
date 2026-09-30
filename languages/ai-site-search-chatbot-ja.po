@@ -1334,3 +1334,83 @@ msgstr "対象のチャットログが見つかりませんでした。"
 #: includes/class-ai-site-search-chatbot.php:2049
 msgid "This log entry has no visitor question to retry."
 msgstr "このログには再取得できる訪問者の質問がありません。"
+
+#: includes/class-ai-site-search-chatbot-admin.php
+msgid "Separate multiple IDs with commas. Hover a post to see its title, or click it to preview the content."
+msgstr "複数の ID はカンマで区切ります。投稿にマウスを重ねるとタイトルを、クリックすると本文をプレビューできます。"
+
+#: includes/class-ai-site-search-chatbot-admin.php
+msgid "Close"
+msgstr "閉じる"
+
+#: includes/class-ai-site-search-chatbot-admin.php
+msgid "Post not found (deleted or invalid ID)"
+msgstr "投稿が見つかりません（削除済みまたは無効な ID）"
+
+#: includes/class-ai-site-search-chatbot-admin.php
+msgid "You do not have permission to view this post"
+msgstr "この投稿を閲覧する権限がありません"
+
+#: includes/class-ai-site-search-chatbot-admin.php
+msgid "Loading post titles…"
+msgstr "投稿タイトルを読み込み中…"
+
+#: includes/class-ai-site-search-chatbot-admin.php
+msgid "The source post details could not be loaded."
+msgstr "参照元投稿の情報を読み込めませんでした。"
+
+#: includes/class-ai-site-search-chatbot-admin.php
+msgid "Click to preview"
+msgstr "クリックでプレビュー"
+
+#: includes/class-ai-site-search-chatbot-admin.php
+msgid "View in new tab"
+msgstr "新しいタブで表示"
+
+#: includes/class-ai-site-search-chatbot-admin.php
+msgid "Edit in new tab"
+msgstr "新しいタブで編集"
+
+#: includes/class-ai-site-search-chatbot-admin.php
+msgid "This post has no text content."
+msgstr "この投稿には本文テキストがありません。"
+
+#: includes/class-ai-site-search-chatbot-admin.php
+msgid "Published:"
+msgstr "公開日:"
+
+#: includes/class-ai-site-search-chatbot-admin.php
+msgid "Modified:"
+msgstr "更新日:"
+
+
+#: includes/class-ai-site-search-chatbot-admin.php
+msgid "(no title)"
+msgstr "（タイトルなし）"
+
+msgid "Not publicly available, so it is not used as a chat source or for reusing this entry."
+msgstr "公開されていないため、チャットの参照元にもこのナレッジの再利用判定にも使われません。"
+
+msgid "Password protected"
+msgstr "パスワード保護"
+
+#, php-format
+msgid "[%1$s] Source posts %2$s are no longer public, so the answer was regenerated from a new site search. Previous answer: %3$s"
+msgstr "[%1$s] 参照元投稿 %2$s が公開されなくなったため、サイト内検索をやり直して回答を再生成しました。以前の回答: %3$s"
+
+#, php-format
+msgid "Source posts %s are no longer public. The answer and sources were regenerated from a new site search and the entry was returned to draft. Review it before approving again."
+msgstr "参照元投稿 %s が公開されなくなりました。サイト内検索をやり直して回答と参照元を再生成し、下書きに戻しました。内容を確認してから再度承認してください。"
+
+msgid "A new site search found no matching public content."
+msgstr "サイト内検索をやり直しましたが、該当する公開コンテンツが見つかりませんでした。"
+
+msgid "The answer could not be regenerated because no AI provider is configured."
+msgstr "AI プロバイダーが設定されていないため、回答を再生成できませんでした。"
+
+msgid "The answer could not be regenerated because the AI request failed."
+msgstr "AI へのリクエストが失敗したため、回答を再生成できませんでした。"
+
+#, php-format
+msgid "Source posts %1$s are no longer public, so the entry was returned to draft. %2$s Update the answer and sources manually, or archive the entry."
+msgstr "参照元投稿 %1$s が公開されなくなったため、下書きに戻しました。%2$s 回答と参照元を手動で更新するか、アーカイブしてください。"

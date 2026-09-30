@@ -86,6 +86,7 @@ final class AISite_Search_Chatbot_Admin {
 				'testChatEndpoint' => rest_url( AISite_Search_Chatbot::REST_NAMESPACE . '/test-chat' ),
 				'knowledgeBaseEndpoint' => rest_url( AISite_Search_Chatbot::REST_NAMESPACE . '/knowledge-base' ),
 				'knowledgeBaseExportEndpoint' => rest_url( AISite_Search_Chatbot::REST_NAMESPACE . '/knowledge-base/export' ),
+				'knowledgeBaseSourcePostsEndpoint' => rest_url( AISite_Search_Chatbot::REST_NAMESPACE . '/knowledge-base/source-posts' ),
 				'knowledgeBaseImportEndpoint' => rest_url( AISite_Search_Chatbot::REST_NAMESPACE . '/knowledge-base/import' ),
 				'knowledgeBasePageUrl' => admin_url( 'options-general.php?page=ai-site-search-chatbot&tab=knowledge-base' ),
 				'chatLogRetryEndpointBase' => rest_url( AISite_Search_Chatbot::REST_NAMESPACE . '/chat-logs' ),
@@ -139,6 +140,19 @@ final class AISite_Search_Chatbot_Admin {
 					'knowledgeAnswer'          => __( 'Generalized answer', 'ai-site-search-chatbot' ),
 					'knowledgeStatus'          => __( 'Status', 'ai-site-search-chatbot' ),
 					'knowledgeSources'         => __( 'Source post IDs', 'ai-site-search-chatbot' ),
+					'sourcePostNotFound'       => __( 'Post not found (deleted or invalid ID)', 'ai-site-search-chatbot' ),
+					'sourcePostRestricted'     => __( 'You do not have permission to view this post', 'ai-site-search-chatbot' ),
+					'sourcePostLoading'        => __( 'Loading post titles…', 'ai-site-search-chatbot' ),
+					'sourcePostLoadFailed'     => __( 'The source post details could not be loaded.', 'ai-site-search-chatbot' ),
+					'sourcePostPreview'        => __( 'Click to preview', 'ai-site-search-chatbot' ),
+					'sourcePostView'           => __( 'View in new tab', 'ai-site-search-chatbot' ),
+					'sourcePostEdit'           => __( 'Edit in new tab', 'ai-site-search-chatbot' ),
+					'sourcePostNoContent'      => __( 'This post has no text content.', 'ai-site-search-chatbot' ),
+					'sourcePostPublished'      => __( 'Published:', 'ai-site-search-chatbot' ),
+					'sourcePostModified'       => __( 'Modified:', 'ai-site-search-chatbot' ),
+					'sourcePostNotPublished'   => __( 'Not publicly available, so it is not used as a chat source or for reusing this entry.', 'ai-site-search-chatbot' ),
+					'sourcePostProtected'      => __( 'Password protected', 'ai-site-search-chatbot' ),
+					'sourcePostUntitled'       => __( '(no title)', 'ai-site-search-chatbot' ),
 					'knowledgeMatchingHint'    => __( 'Matching hint', 'ai-site-search-chatbot' ),
 					'knowledgeConfidence'      => __( 'Confidence note', 'ai-site-search-chatbot' ),
 					'knowledgeAdminNotes'      => __( 'Admin notes', 'ai-site-search-chatbot' ),
@@ -688,7 +702,9 @@ final class AISite_Search_Chatbot_Admin {
 						</p>
 						<p>
 							<label for="aiscb_knowledge_source_post_ids"><strong><?php echo esc_html( __( 'Source post IDs', 'ai-site-search-chatbot' ) ); ?></strong></label>
-							<input type="text" id="aiscb_knowledge_source_post_ids" class="regular-text" />
+							<input type="text" id="aiscb_knowledge_source_post_ids" class="regular-text" aria-describedby="aiscb_knowledge_source_posts_help" />
+							<span id="aiscb_knowledge_source_posts_help" class="description"><?php echo esc_html( __( 'Separate multiple IDs with commas. Hover a post to see its title, or click it to preview the content.', 'ai-site-search-chatbot' ) ); ?></span>
+							<span id="aiscb_knowledge_source_posts" class="aiscb-source-posts" aria-live="polite"></span>
 						</p>
 						<p>
 							<label for="aiscb_knowledge_matching_method_hint"><strong><?php echo esc_html( __( 'Matching hint', 'ai-site-search-chatbot' ) ); ?></strong></label>
@@ -715,6 +731,18 @@ final class AISite_Search_Chatbot_Admin {
 					</form>
 				</div>
 			</div>
+
+			<dialog id="aiscb_source_post_dialog" class="aiscb-source-post-dialog" aria-labelledby="aiscb_source_post_dialog_title">
+				<div class="aiscb-source-post-dialog__inner">
+				<div class="aiscb-source-post-dialog__header">
+					<h2 id="aiscb_source_post_dialog_title"></h2>
+					<button type="button" class="button-link aiscb-source-post-dialog__close" id="aiscb_source_post_dialog_close" aria-label="<?php echo esc_attr( __( 'Close', 'ai-site-search-chatbot' ) ); ?>"><span class="dashicons dashicons-no-alt" aria-hidden="true"></span></button>
+				</div>
+				<p class="aiscb-source-post-dialog__meta" id="aiscb_source_post_dialog_meta"></p>
+				<div class="aiscb-source-post-dialog__content" id="aiscb_source_post_dialog_content"></div>
+				<div class="aiscb-source-post-dialog__actions" id="aiscb_source_post_dialog_actions"></div>
+				</div>
+			</dialog>
 		<?php
 	}
 
