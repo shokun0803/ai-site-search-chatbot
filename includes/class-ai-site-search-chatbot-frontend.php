@@ -133,6 +133,7 @@ final class AISite_Search_Chatbot_Frontend {
 			data-greeting="<?php echo esc_attr( (string) $args['greeting'] ); ?>"
 			data-thinking-label="<?php echo esc_attr__( 'Thinking...', 'ai-site-search-chatbot' ); ?>"
 			data-source-label="<?php echo esc_attr__( 'Sources', 'ai-site-search-chatbot' ); ?>"
+			data-history-limit="<?php echo esc_attr( (string) AISite_Search_Chatbot::get_conversation_history_limit() ); ?>"
 			data-error-label="<?php echo esc_attr__( 'The chatbot is temporarily unavailable. Please try again later.', 'ai-site-search-chatbot' ); ?>"
 		>
 			<button type="button" class="aiscb-widget__launcher" aria-label="<?php echo esc_attr__( 'Open chat', 'ai-site-search-chatbot' ); ?>" aria-expanded="false" aria-controls="<?php echo esc_attr( $panel_id ); ?>">

@@ -1,6 +1,5 @@
 ( function () {
 	var HISTORY_TTL = 3 * 60 * 60 * 1000; // 3 hours
-	var CONTEXT_TURNS = 6;
 	var CONTEXT_TEXT_LIMIT = 500;
 
 	function saveHistory( key, msgs ) {
@@ -28,12 +27,12 @@
 
 	// Recent turns sent with each question so the server can treat a reply
 	// such as "the Tokyo one" as a follow-up to the previous question.
-	function buildConversationContext( msgs ) {
+	function buildConversationContext( msgs, limit ) {
 		return msgs
 			.filter( function ( msg ) {
 				return ! msg.greeting && ( 'user' === msg.role || 'assistant' === msg.role ) && msg.text;
 			} )
-			.slice( -CONTEXT_TURNS )
+			.slice( -limit )
 			.map( function ( msg ) {
 				return {
 					role: msg.role,
@@ -107,6 +106,7 @@
 			var hasGreeting = false;
 			var historyMessages = [];
 			var storageKey = 'aiscb_chat_' + endpoint;
+			var historyLimit = parseInt( widget.dataset.historyLimit, 10 ) || 4;
 
 			function restoreOrGreet() {
 				var saved = loadHistory( storageKey );
@@ -183,7 +183,7 @@
 					return;
 				}
 
-				var context = buildConversationContext( historyMessages );
+				var context = buildConversationContext( historyMessages, historyLimit );
 				addMessage( messages, 'user', value );
 				historyMessages.push( { role: 'user', text: value, sources: [] } );
 				saveHistory( storageKey, historyMessages );

@@ -313,6 +313,13 @@ final class AISite_Search_Chatbot_Admin {
 						</td>
 					</tr>
 					<tr>
+						<th scope="row"><label for="aiscb_conversation_history_messages"><?php echo esc_html( __( 'Conversation History', 'ai-site-search-chatbot' ) ); ?></label></th>
+						<td>
+							<input type="number" min="<?php echo esc_attr( (string) AISite_Search_Chatbot::CONVERSATION_HISTORY_MIN ); ?>" max="<?php echo esc_attr( (string) AISite_Search_Chatbot::CONVERSATION_HISTORY_MAX ); ?>" id="aiscb_conversation_history_messages" name="<?php echo esc_attr( AISite_Search_Chatbot::OPTION_KEY ); ?>[conversation_history_messages]" value="<?php echo esc_attr( (string) AISite_Search_Chatbot::clamp_conversation_history_messages( (int) $settings['conversation_history_messages'] ) ); ?>" />
+							<p class="description"><?php echo esc_html( sprintf( /* translators: 1: minimum number of messages, 2: maximum number of messages. */ __( 'Number of earlier chat messages sent to the AI so follow-up questions keep their context. A visitor question and an assistant answer each count as one message, so 4 covers the last two exchanges. Allowed range: %1$d to %2$d. Each message can add up to about 650 input tokens to a follow-up question because it is sent to both the search and the answer requests, so higher values cost more.', 'ai-site-search-chatbot' ), AISite_Search_Chatbot::CONVERSATION_HISTORY_MIN, AISite_Search_Chatbot::CONVERSATION_HISTORY_MAX ) ); ?></p>
+						</td>
+					</tr>
+					<tr>
 						<th scope="row"><?php echo esc_html( __( 'Shortcode and Block Output', 'ai-site-search-chatbot' ) ); ?></th>
 						<td>
 							<label for="aiscb_search_shortcode_output">

@@ -119,7 +119,11 @@ final class AISite_Search_Chatbot {
 	const SHORTCODE = 'ai_site_search_chatbot';
 	const CHAT_LOG_OPTION = 'aiscb_chat_logs';
 	const CHAT_LOG_LIMIT = 50;
-	const CONVERSATION_HISTORY_LIMIT = 6;
+	// Number of earlier chat messages (visitor questions and assistant answers
+	// each count as one) sent as context. The minimum keeps follow-ups to a
+	// clarifying question working; the maximum caps token use.
+	const CONVERSATION_HISTORY_MIN = 2;
+	const CONVERSATION_HISTORY_MAX = 10;
 	const CONVERSATION_HISTORY_TEXT_LIMIT = 500;
 	const SEARCH_SUGGESTION_POOL_TRANSIENT = 'aiscb_search_suggestion_pool';
 	const META_TEXT_LIMIT = 2000;
@@ -482,6 +486,7 @@ final class AISite_Search_Chatbot {
 			'max_sources'         => 5,
 			'search_meta_keys'    => array(),
 			'search_shortcode_output' => 1,
+			'conversation_history_messages' => 4,
 			'ai_limit_window_10m' => 8,
 			'ai_limit_window_1h'  => 24,
 			'ai_limit_global_daily' => 500,
@@ -668,6 +673,7 @@ final class AISite_Search_Chatbot {
 			'max_sources'         => isset( $input['max_sources'] ) ? max( 1, min( 10, absint( $input['max_sources'] ) ) ) : $defaults['max_sources'],
 			'search_meta_keys'    => isset( $input['search_meta_keys'] ) ? self::sanitize_search_meta_keys( wp_unslash( $input['search_meta_keys'] ) ) : $defaults['search_meta_keys'],
 			'search_shortcode_output' => isset( $input['search_shortcode_output'] ) ? 1 : 0,
+			'conversation_history_messages' => isset( $input['conversation_history_messages'] ) ? self::clamp_conversation_history_messages( absint( $input['conversation_history_messages'] ) ) : $defaults['conversation_history_messages'],
 			'ai_limit_window_10m' => isset( $input['ai_limit_window_10m'] ) ? max( 1, min( 30, absint( $input['ai_limit_window_10m'] ) ) ) : $defaults['ai_limit_window_10m'],
 			'ai_limit_window_1h'  => isset( $input['ai_limit_window_1h'] ) ? max( 1, min( 100, absint( $input['ai_limit_window_1h'] ) ) ) : $defaults['ai_limit_window_1h'],
 			'ai_limit_global_daily' => isset( $input['ai_limit_global_daily'] ) ? max( 0, min( 100000, absint( $input['ai_limit_global_daily'] ) ) ) : $defaults['ai_limit_global_daily'],
@@ -707,6 +713,16 @@ final class AISite_Search_Chatbot {
 		}
 
 		return array_keys( $keys );
+	}
+
+	public static function clamp_conversation_history_messages( int $count ): int {
+		return max( self::CONVERSATION_HISTORY_MIN, min( self::CONVERSATION_HISTORY_MAX, $count ) );
+	}
+
+	public static function get_conversation_history_limit(): int {
+		$settings = self::get_settings();
+
+		return self::clamp_conversation_history_messages( (int) ( $settings['conversation_history_messages'] ?? 4 ) );
 	}
 
 	public static function is_internal_meta_key( string $key ): bool {
@@ -2615,7 +2631,9 @@ final class AISite_Search_Chatbot {
 
 		$sanitized = array();
 
-		foreach ( array_slice( array_values( $history ), -self::CONVERSATION_HISTORY_LIMIT ) as $turn ) {
+		// The widget already trims to this limit, but the request comes from the
+		// browser, so the cap is enforced again here to bound token use.
+		foreach ( array_slice( array_values( $history ), -self::get_conversation_history_limit() ) as $turn ) {
 			if ( ! is_array( $turn ) || ! isset( $turn['role'], $turn['text'] ) || ! is_string( $turn['text'] ) ) {
 				continue;
 			}
