@@ -1452,3 +1452,13 @@ msgstr ""
 "%2$s\n"
 "\n"
 "最新のメッセージは、アシスタントが尋ねた確認事項への回答など、前の質問を絞り込んだり続けたりする追加の質問である可能性があります。その場合は、これまでの文脈と組み合わせてください。新しい無関係な質問であれば、これまでの会話は無視してください。最新のメッセージを分類し、組み合わせた意図に対する検索語を抽出してください。さらに standalone_question というキーを追加してください。これは訪問者がいま知りたいことを表す、それ単体で意味が通じる 1 つの質問で、訪問者の言語で書きます（最新のメッセージがすでに単体で意味が通じる場合は、そのまま繰り返してください）。JSON のみを返してください。出力例: {\"intent\":\"site_search\",\"queries\":[\"営業時間\",\"東京店\"],\"standalone_question\":\"東京店の営業時間を教えてください\"}"
+
+#. translators: %s: comma-separated list of search keywords that return results on this site.
+#: includes/class-ai-site-search-chatbot.php:4964
+#, php-format
+msgid "Keywords that find pages on this site: %s"
+msgstr "このサイトで見つかるキーワード: %s"
+
+#: includes/class-ai-site-search-chatbot.php:4965
+msgid ", "
+msgstr "、"
