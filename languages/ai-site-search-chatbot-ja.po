@@ -1462,3 +1462,22 @@ msgstr "このサイトで見つかるキーワード: %s"
 #: includes/class-ai-site-search-chatbot.php:4965
 msgid ", "
 msgstr "、"
+
+#: includes/class-ai-site-search-chatbot-admin.php:298
+msgid "Custom Fields to Search"
+msgstr "検索対象のカスタムフィールド"
+
+#: includes/class-ai-site-search-chatbot-admin.php:301
+msgid "Custom field keys whose values are searched and passed to the AI, one per line. End a key with * to match every key with that prefix (for example product_*). Values are visible to every visitor through chatbot answers, so list only fields that hold public information such as product names, prices, or descriptions."
+msgstr "値を検索し、AI に渡すカスタムフィールドのキーを 1 行に 1 つずつ入力します。キーの末尾を * にすると、その文字列で始まるすべてのキーが対象になります（例: product_*）。値はチャットボットの回答を通じてすべての訪問者に見える可能性があるため、商品名・価格・説明など公開してよい情報を持つフィールドだけを指定してください。"
+
+#: includes/class-ai-site-search-chatbot-admin.php:305
+msgid "Custom field keys used on this site"
+msgstr "このサイトで使われているカスタムフィールドのキー"
+
+#. translators: %d: number of published posts that use the custom field.
+#: includes/class-ai-site-search-chatbot-admin.php:308
+#, php-format
+msgid "(%d post)"
+msgid_plural "(%d posts)"
+msgstr[0] "（%d 件）"

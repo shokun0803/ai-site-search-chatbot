@@ -122,6 +122,7 @@ final class AISite_Search_Chatbot {
 	const CONVERSATION_HISTORY_LIMIT = 6;
 	const CONVERSATION_HISTORY_TEXT_LIMIT = 500;
 	const SEARCH_SUGGESTION_POOL_TRANSIENT = 'aiscb_search_suggestion_pool';
+	const META_TEXT_LIMIT = 2000;
 	const CHAT_LOG_RETRYABLE_STATUSES = array(
 		'fallback-no-config',
 		'fallback-no-results',
@@ -473,6 +474,7 @@ final class AISite_Search_Chatbot {
 			'model'               => '',
 			'system_prompt'       => self::get_default_system_prompt(),
 			'max_sources'         => 5,
+			'search_meta_keys'    => array(),
 			'ai_limit_window_10m' => 8,
 			'ai_limit_window_1h'  => 24,
 			'ai_limit_global_daily' => 500,
@@ -657,6 +659,7 @@ final class AISite_Search_Chatbot {
 			'model'               => isset( $input['model'] ) ? sanitize_text_field( wp_unslash( $input['model'] ) ) : $defaults['model'],
 			'system_prompt'       => isset( $input['system_prompt'] ) ? sanitize_textarea_field( wp_unslash( $input['system_prompt'] ) ) : $defaults['system_prompt'],
 			'max_sources'         => isset( $input['max_sources'] ) ? max( 1, min( 10, absint( $input['max_sources'] ) ) ) : $defaults['max_sources'],
+			'search_meta_keys'    => isset( $input['search_meta_keys'] ) ? self::sanitize_search_meta_keys( wp_unslash( $input['search_meta_keys'] ) ) : $defaults['search_meta_keys'],
 			'ai_limit_window_10m' => isset( $input['ai_limit_window_10m'] ) ? max( 1, min( 30, absint( $input['ai_limit_window_10m'] ) ) ) : $defaults['ai_limit_window_10m'],
 			'ai_limit_window_1h'  => isset( $input['ai_limit_window_1h'] ) ? max( 1, min( 100, absint( $input['ai_limit_window_1h'] ) ) ) : $defaults['ai_limit_window_1h'],
 			'ai_limit_global_daily' => isset( $input['ai_limit_global_daily'] ) ? max( 0, min( 100000, absint( $input['ai_limit_global_daily'] ) ) ) : $defaults['ai_limit_global_daily'],
@@ -670,6 +673,72 @@ final class AISite_Search_Chatbot {
 			'knowledge_base_candidate_ttl_hours' => isset( $input['knowledge_base_candidate_ttl_hours'] ) ? max( 1, min( 720, absint( $input['knowledge_base_candidate_ttl_hours'] ) ) ) : $defaults['knowledge_base_candidate_ttl_hours'],
 			'uninstall_cleanup_mode' => $uninstall_cleanup_mode,
 		);
+	}
+
+	/**
+	 * Custom field keys to search, one per line or comma-separated. A trailing
+	 * "*" matches every key with that prefix. WordPress core bookkeeping keys
+	 * are never searched because they hold no visitor-facing content.
+	 */
+	public static function sanitize_search_meta_keys( $value ): array {
+		$raw = is_array( $value ) ? $value : preg_split( '/[\r\n,]+/', (string) $value );
+		$keys = array();
+
+		foreach ( (array) $raw as $key ) {
+			$key = trim( sanitize_text_field( (string) $key ) );
+
+			if ( '' === $key || ! preg_match( '/^[A-Za-z0-9_\-:.]+\*?$/', $key ) || self::is_internal_meta_key( rtrim( $key, '*' ) ) ) {
+				continue;
+			}
+
+			$keys[ $key ] = true;
+
+			if ( count( $keys ) >= 50 ) {
+				break;
+			}
+		}
+
+		return array_keys( $keys );
+	}
+
+	public static function is_internal_meta_key( string $key ): bool {
+		return '' === $key || (bool) preg_match( '/^_(wp_|edit_|oembed_|thumbnail_id$|pingme$|encloseme$)/', $key ) || 0 === strpos( $key, '_aiscb_' );
+	}
+
+	/**
+	 * Lists custom field keys used by published posts of searchable types so
+	 * administrators can pick which ones to search.
+	 */
+	public static function get_detected_meta_keys( int $limit = 60 ): array {
+		global $wpdb;
+
+		$post_types = self::get_searchable_post_types();
+
+		if ( empty( $post_types ) ) {
+			return array();
+		}
+
+		$type_placeholders = implode( ', ', array_fill( 0, count( $post_types ), '%s' ) );
+		$sql = "SELECT pm.meta_key, COUNT(DISTINCT pm.post_id) AS post_count FROM {$wpdb->postmeta} pm INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id WHERE p.post_type IN ({$type_placeholders}) AND p.post_status = 'publish' AND pm.meta_value <> '' GROUP BY pm.meta_key ORDER BY post_count DESC, pm.meta_key ASC LIMIT 200"; // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows = $wpdb->get_results( $wpdb->prepare( $sql, $post_types ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery
+		$keys = array();
+
+		foreach ( (array) $rows as $row ) {
+			if ( self::is_internal_meta_key( (string) $row->meta_key ) ) {
+				continue;
+			}
+
+			$keys[] = array(
+				'key'   => (string) $row->meta_key,
+				'count' => (int) $row->post_count,
+			);
+
+			if ( count( $keys ) >= $limit ) {
+				break;
+			}
+		}
+
+		return $keys;
 	}
 
 	public static function register_settings(): void {
@@ -3207,7 +3276,9 @@ final class AISite_Search_Chatbot {
 				)
 			);
 
-			foreach ( $query->posts as $post ) {
+			$posts = array_merge( $query->posts, array_map( 'get_post', self::search_post_ids_by_meta( $query_string, $post_types ) ) );
+
+			foreach ( $posts as $post ) {
 				if ( ! $post instanceof WP_Post ) {
 					continue;
 				}
@@ -3695,7 +3766,7 @@ final class AISite_Search_Chatbot {
 
 	private static function canonicalize_search_query( string $query ): string {
 		$query = trim( preg_replace( '/\s+/u', ' ', wp_strip_all_tags( $query ) ) );
-		$query = trim( preg_replace( '/[?？!！。．、,，]+/u', ' ', $query ) );
+		$query = trim( preg_replace( '/[?？!！。．、,，「」『』“”"]+/u', ' ', $query ) );
 		$query = trim( preg_replace( '/^(query|queries|keyword|keywords|search|search terms?)\s*[:：-]\s*/iu', '', $query ) );
 		$query = trim( preg_replace( '/\s*(を教えてください|を教えて|について教えてください|について教えて|について知りたい|知りたい|ください|教えて|はありますか|ありますか|でしょうか|ですか|とは何ですか|とは|って何ですか|って何|はどこですか|はどこ|は何ですか|の名前は何ですか|名前は何ですか|何ですか)\s*$/u', '', $query ) );
 
@@ -3782,6 +3853,153 @@ final class AISite_Search_Chatbot {
 		return $score;
 	}
 
+	private static function get_search_meta_key_conditions( string $column ): array {
+		global $wpdb;
+
+		$settings = self::get_settings();
+		$sql_parts = array();
+		$params = array();
+
+		foreach ( (array) ( $settings['search_meta_keys'] ?? array() ) as $key ) {
+			$key = (string) $key;
+
+			if ( '*' === substr( $key, -1 ) ) {
+				$sql_parts[] = "{$column} LIKE %s";
+				$params[] = $wpdb->esc_like( substr( $key, 0, -1 ) ) . '%';
+			} else {
+				$sql_parts[] = "{$column} = %s";
+				$params[] = $key;
+			}
+		}
+
+		return array(
+			'sql'    => empty( $sql_parts ) ? '' : '(' . implode( ' OR ', $sql_parts ) . ')',
+			'params' => $params,
+		);
+	}
+
+	/**
+	 * Finds published, non-password-protected posts whose configured custom
+	 * fields contain the query. Values are matched as stored, which covers
+	 * plain text as well as serialized arrays and JSON saved with unescaped
+	 * Unicode.
+	 */
+	private static function search_post_ids_by_meta( string $query_string, array $post_types, int $limit = 10 ): array {
+		global $wpdb;
+
+		$key_conditions = self::get_search_meta_key_conditions( 'pm.meta_key' );
+
+		if ( '' === $key_conditions['sql'] || '' === trim( $query_string ) || empty( $post_types ) ) {
+			return array();
+		}
+
+		$type_placeholders = implode( ', ', array_fill( 0, count( $post_types ), '%s' ) );
+		$params = array_merge( $post_types, $key_conditions['params'], array( '%' . $wpdb->esc_like( $query_string ) . '%', $limit ) );
+		// Only placeholder scaffolding is concatenated; every value is passed through prepare().
+		$sql = "SELECT DISTINCT p.ID FROM {$wpdb->posts} p INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID WHERE p.post_type IN ({$type_placeholders}) AND p.post_status = 'publish' AND p.post_password = '' AND {$key_conditions['sql']} AND pm.meta_value LIKE %s ORDER BY p.post_date_gmt DESC LIMIT %d"; // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		return array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( $sql, $params ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery
+	}
+
+	/**
+	 * Collects the readable text of a post's configured custom fields. Arrays,
+	 * serialized values, and JSON are flattened; URLs and empty values are
+	 * dropped. Each field is labelled with its key so values such as prices
+	 * keep their meaning.
+	 */
+	private static function get_post_meta_search_text( int $post_id ): string {
+		$settings = self::get_settings();
+		$patterns = (array) ( $settings['search_meta_keys'] ?? array() );
+
+		if ( empty( $patterns ) ) {
+			return '';
+		}
+
+		$lines = array();
+
+		foreach ( get_post_meta( $post_id ) as $key => $values ) {
+			$key = (string) $key;
+
+			if ( self::is_internal_meta_key( $key ) || ! self::meta_key_matches_patterns( $key, $patterns ) ) {
+				continue;
+			}
+
+			$texts = array();
+
+			foreach ( (array) $values as $value ) {
+				$texts = array_merge( $texts, self::flatten_meta_value( $value ) );
+			}
+
+			$texts = array_values( array_unique( array_filter( $texts ) ) );
+
+			if ( ! empty( $texts ) ) {
+				$lines[] = sprintf( '%s: %s', trim( str_replace( array( '_', '-' ), ' ', $key ) ), implode( ' / ', $texts ) );
+			}
+		}
+
+		$text = implode( "\n", $lines );
+
+		if ( self::unicode_length( $text ) > self::META_TEXT_LIMIT ) {
+			$text = function_exists( 'mb_substr' ) ? mb_substr( $text, 0, self::META_TEXT_LIMIT, 'UTF-8' ) : substr( $text, 0, self::META_TEXT_LIMIT );
+		}
+
+		return $text;
+	}
+
+	private static function meta_key_matches_patterns( string $key, array $patterns ): bool {
+		foreach ( $patterns as $pattern ) {
+			$pattern = (string) $pattern;
+
+			if ( '*' === substr( $pattern, -1 ) ? 0 === strpos( $key, substr( $pattern, 0, -1 ) ) : $key === $pattern ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	private static function flatten_meta_value( $value, int $depth = 0 ): array {
+		if ( $depth > 5 ) {
+			return array();
+		}
+
+		if ( is_string( $value ) ) {
+			$value = maybe_unserialize( $value );
+		}
+
+		if ( is_string( $value ) ) {
+			$trimmed = trim( $value );
+
+			if ( '' !== $trimmed && in_array( $trimmed[0], array( '[', '{' ), true ) ) {
+				$decoded = json_decode( $trimmed, true );
+
+				if ( is_array( $decoded ) ) {
+					return self::flatten_meta_value( $decoded, $depth + 1 );
+				}
+			}
+
+			$text = trim( preg_replace( '/\s+/u', ' ', wp_strip_all_tags( $trimmed ) ) );
+
+			return ( '' === $text || preg_match( '#^(https?:)?//\S+$#i', $text ) ) ? array() : array( $text );
+		}
+
+		if ( is_int( $value ) || is_float( $value ) ) {
+			return array( (string) $value );
+		}
+
+		if ( is_array( $value ) ) {
+			$texts = array();
+
+			foreach ( $value as $item ) {
+				$texts = array_merge( $texts, self::flatten_meta_value( $item, $depth + 1 ) );
+			}
+
+			return $texts;
+		}
+
+		return array();
+	}
+
 	private static function search_site_content_by_like_matching( array $queries, array $post_types ): array {
 		global $wpdb;
 
@@ -3792,25 +4010,40 @@ final class AISite_Search_Chatbot {
 		$type_placeholders = implode( ', ', array_fill( 0, count( $post_types ), '%s' ) );
 		$score_parts = array();
 		$where_parts = array();
-		$params = $post_types;
+		// Values must follow the placeholder order in the SQL below: the score
+		// expressions in SELECT come first, then the post types, then WHERE.
+		$score_params = array();
+		$where_params = array();
 
 		foreach ( $queries as $query_string ) {
 			$like = '%' . $wpdb->esc_like( $query_string ) . '%';
 
 			$score_parts[] = '(CASE WHEN post_title LIKE %s THEN 12 ELSE 0 END + CASE WHEN post_excerpt LIKE %s THEN 6 ELSE 0 END + CASE WHEN post_content LIKE %s THEN 3 ELSE 0 END)';
-			$params[] = $like;
-			$params[] = $like;
-			$params[] = $like;
+			array_push( $score_params, $like, $like, $like );
 
 			$where_parts[] = '(post_title LIKE %s OR post_excerpt LIKE %s OR post_content LIKE %s)';
-			$params[] = $like;
-			$params[] = $like;
-			$params[] = $like;
+			array_push( $where_params, $like, $like, $like );
 		}
+
+		$meta_conditions = self::get_search_meta_key_conditions( 'meta_key' );
+
+		if ( '' !== $meta_conditions['sql'] ) {
+			$meta_like_parts = array();
+
+			foreach ( $queries as $query_string ) {
+				$meta_like_parts[] = 'meta_value LIKE %s';
+				$meta_conditions['params'][] = '%' . $wpdb->esc_like( $query_string ) . '%';
+			}
+
+			$where_parts[] = "ID IN (SELECT post_id FROM {$wpdb->postmeta} WHERE {$meta_conditions['sql']} AND (" . implode( ' OR ', $meta_like_parts ) . '))';
+			$where_params = array_merge( $where_params, $meta_conditions['params'] );
+		}
+
+		$params = array_merge( $score_params, $post_types, $where_params );
 
 		// Only placeholder scaffolding (%s tokens and the static structure below) is concatenated here;
 		// every actual value goes through $wpdb->prepare() via $params before the query runs.
-		$sql = "SELECT ID, (" . implode( ' + ', $score_parts ) . ") AS relevance_score FROM {$wpdb->posts} WHERE post_type IN ({$type_placeholders}) AND post_status = 'publish' AND (" . implode( ' OR ', $where_parts ) . ") ORDER BY relevance_score DESC, post_modified_gmt DESC LIMIT 10"; // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$sql = "SELECT ID, (" . implode( ' + ', $score_parts ) . ") AS relevance_score FROM {$wpdb->posts} WHERE post_type IN ({$type_placeholders}) AND post_status = 'publish' AND post_password = '' AND (" . implode( ' OR ', $where_parts ) . ") ORDER BY relevance_score DESC, post_modified_gmt DESC LIMIT 10"; // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$prepared_sql = $wpdb->prepare( $sql, $params ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		$post_rows = $wpdb->get_results( $prepared_sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
 
@@ -3842,8 +4075,8 @@ final class AISite_Search_Chatbot {
 	}
 
 	private static function build_search_result_item( WP_Post $post, array $queries = array() ): array {
-		$rendered_content = do_shortcode( (string) $post->post_content );
-		$content          = wp_strip_all_tags( $rendered_content );
+		$rendered_content = self::render_post_content_text( $post );
+		$content          = trim( $rendered_content . "\n" . self::get_post_meta_search_text( (int) $post->ID ) );
 		$excerpt          = wp_strip_all_tags( do_shortcode( get_the_excerpt( $post ) ) );
 		$content_snippet  = self::build_matching_content_snippet( $content, $queries, 320 );
 
@@ -3859,6 +4092,36 @@ final class AISite_Search_Chatbot {
 			'excerpt' => $excerpt,
 			'content_snippet' => $content_snippet,
 		);
+	}
+
+	/**
+	 * Renders dynamic blocks and shortcodes so text produced by plugins is part
+	 * of the content the AI sees, then strips it to plain text.
+	 */
+	private static function render_post_content_text( WP_Post $post ): string {
+		$content = (string) $post->post_content;
+
+		if ( '' === trim( $content ) ) {
+			return '';
+		}
+
+		// Blocks and shortcodes that read the current post must see this one.
+		$previous_post = $GLOBALS['post'] ?? null;
+		$GLOBALS['post'] = $post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		setup_postdata( $post );
+
+		if ( function_exists( 'has_blocks' ) && has_blocks( $content ) ) {
+			$content = do_blocks( $content );
+		}
+
+		$content = wp_strip_all_tags( do_shortcode( $content ) );
+		$GLOBALS['post'] = $previous_post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+
+		if ( $previous_post instanceof WP_Post ) {
+			setup_postdata( $previous_post );
+		}
+
+		return $content;
 	}
 
 	private static function build_matching_content_snippet( string $content, array $queries, int $limit = 320 ): string {

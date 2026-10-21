@@ -295,6 +295,24 @@ final class AISite_Search_Chatbot_Admin {
 						</td>
 					</tr>
 					<tr>
+						<th scope="row"><label for="aiscb_search_meta_keys"><?php echo esc_html( __( 'Custom Fields to Search', 'ai-site-search-chatbot' ) ); ?></label></th>
+						<td>
+							<textarea class="large-text code" rows="4" id="aiscb_search_meta_keys" name="<?php echo esc_attr( AISite_Search_Chatbot::OPTION_KEY ); ?>[search_meta_keys]"><?php echo esc_textarea( implode( "\n", (array) $settings['search_meta_keys'] ) ); ?></textarea>
+							<p class="description"><?php echo esc_html( __( 'Custom field keys whose values are searched and passed to the AI, one per line. End a key with * to match every key with that prefix (for example product_*). Values are visible to every visitor through chatbot answers, so list only fields that hold public information such as product names, prices, or descriptions.', 'ai-site-search-chatbot' ) ); ?></p>
+							<?php $detected_meta_keys = AISite_Search_Chatbot::get_detected_meta_keys(); ?>
+							<?php if ( ! empty( $detected_meta_keys ) ) : ?>
+								<details class="aiscb-detected-meta-keys">
+									<summary><?php echo esc_html( __( 'Custom field keys used on this site', 'ai-site-search-chatbot' ) ); ?></summary>
+									<p>
+										<?php foreach ( $detected_meta_keys as $detected_meta_key ) : ?>
+											<code><?php echo esc_html( $detected_meta_key['key'] ); ?></code> <span class="aiscb-log-meta"><?php echo esc_html( sprintf( /* translators: %d: number of published posts that use the custom field. */ _n( '(%d post)', '(%d posts)', $detected_meta_key['count'], 'ai-site-search-chatbot' ), $detected_meta_key['count'] ) ); ?></span><br />
+										<?php endforeach; ?>
+									</p>
+								</details>
+							<?php endif; ?>
+						</td>
+					</tr>
+					<tr>
 						<th scope="row"><label for="aiscb_ai_limit_window_10m"><?php echo esc_html( __( 'AI Reply Limit (10 minutes)', 'ai-site-search-chatbot' ) ); ?></label></th>
 						<td>
 							<input type="number" min="1" max="30" id="aiscb_ai_limit_window_10m" name="<?php echo esc_attr( AISite_Search_Chatbot::OPTION_KEY ); ?>[ai_limit_window_10m]" value="<?php echo esc_attr( (string) absint( $settings['ai_limit_window_10m'] ) ); ?>" />
