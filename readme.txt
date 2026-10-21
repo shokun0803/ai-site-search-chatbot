@@ -4,7 +4,7 @@ Tags: chatbot, ai, search, faq, gutenberg
 Requires at least: 7.0
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.2.0
+Stable tag: 1.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -26,6 +26,9 @@ Install and connect one of these provider plugins under **Settings > Connectors*
 
 * Public REST endpoint that powers the chat widget (`POST /wp-json/ai-site-search-chatbot/v1/chat`)
 * Site search across public post types, with AI-generated answers grounded in the matching content
+* Follow-up questions keep the earlier conversation, so a reply such as "the August one" narrows down the previous question (the number of earlier messages sent is configurable)
+* Optional search of selected custom fields, and search of text output by shortcodes and plugin dynamic blocks
+* When nothing relevant is found, suggested re-search keywords are limited to terms that actually return pages on the site
 * General site-guidance answers (using the site name, tagline, and a summary of public content) for questions that are not a direct content match
 * Choice of AI provider and model per site, with connection validation and an in-admin chat test
 * Saved Knowledge Base: review and approve generalized question/answer pairs so future matching questions can be answered without a new AI call; CSV export and import included
@@ -76,6 +79,14 @@ Yes. The settings screen includes per-connection limits (per 10 minutes and per 
 
 You choose. The **Uninstall Data Policy** setting lets you keep or remove the plugin's settings, chat logs, and saved knowledge base when the plugin is deleted.
 
+= Will a plugin update overwrite my custom system prompt? =
+
+No. If you have never changed the system prompt, it follows the bundled default and picks up improvements automatically with each update. If you have customized it, your text is kept; when the bundled default changes, the settings screen shows the new default with buttons to switch to it or keep your own.
+
+= Can the chatbot search custom fields? =
+
+Yes, but only the custom field keys you list under **Custom Fields to Search** (none by default). Custom fields may contain non-public data, and anything searched can appear in answers to any visitor, so list only fields that hold public information such as product names or prices.
+
 = Where can I place the chat widget manually? =
 
 Use the `[ai_site_search_chatbot]` shortcode, or add the AI Site Search Chatbot block in the block editor. Both support an optional `theme` attribute (`business` or `cute`), and the shortcode also supports `title` and `greeting` attributes.
@@ -87,6 +98,17 @@ Use the `[ai_site_search_chatbot]` shortcode, or add the AI Site Search Chatbot 
 3. Saved Knowledge Base review screen with approval status and CSV export/import.
 
 == Changelog ==
+
+= 1.3.0 =
+* Follow-up questions now keep the conversation. The widget sends the most recent messages with each question, and the existing AI routing call decides whether the message continues the earlier question (for example answering "which month?") and rewrites it into a standalone question used for search, caching, saved knowledge, and logs. The admin log shows the visitor's original input as "Follow-up input". No extra AI calls are made.
+* New "Conversation History" setting for the number of earlier messages sent as context: default 4 (the last two exchanges), allowed range 2-10, enforced on the server as well.
+* When no relevant page is found, the AI now suggests only re-search keywords that are verified to return results on the site. Candidates come from post titles (including series names) and taxonomy terms, are labelled with their custom post type, are checked with a real search, and are cached for an hour. The no-result fallback answer lists a few of them too.
+* New "Custom Fields to Search" setting: listed meta keys (with optional trailing * wildcard) are searched and their values, including serialized and JSON data, are passed to the AI. Empty by default; the settings screen lists the keys your posts use.
+* Text output by shortcodes and by plugin dynamic blocks can now be found by search. Expanded text is cached per post (refreshed when the post changes or after 12 hours), at most 10 posts are expanded per search, and the newest 100 such posts are considered. Can be turned off with the new "Shortcode and Block Output" setting.
+* Search result content now renders dynamic blocks before shortcodes.
+* The default system prompt now follows plugin updates. It is stored only when customized; saved copies of earlier defaults (in any language) are switched to the current default automatically. Customized prompts are never changed, but a notice offers the new default when it changes, and the screen shows whether the prompt is default or customized with a reset button.
+* Fixed the partial-match fallback search, which never returned results because its query values were passed in the wrong order.
+* Search terms no longer keep Japanese quotation brackets.
 
 = 1.2.0 =
 * Saved Knowledge Base editor: each source post ID is now shown with its title (on hover), can be previewed in a popup showing its text content, and can be opened for viewing or editing in a new tab. Unpublished, password-protected, deleted, or unreadable posts are highlighted.
@@ -166,6 +188,9 @@ Use the `[ai_site_search_chatbot]` shortcode, or add the AI Site Search Chatbot 
 * Added general site-guidance answers, an admin chat log viewer, AI reply rate limits, the Google Gemini provider, and Gutenberg block support.
 
 == Upgrade Notice ==
+
+= 1.3.0 =
+Adds follow-up questions, verified re-search suggestions, custom field and shortcode search, and makes the default system prompt follow updates. Custom field search is off until you list field keys; existing customized system prompts are kept.
 
 = 1.2.0 =
 Improves how outdated information is handled in answers and saved knowledge. No settings changes are required.
