@@ -1,5 +1,7 @@
 ( function () {
 	var HISTORY_TTL = 3 * 60 * 60 * 1000; // 3 hours
+	var CONTEXT_TURNS = 6;
+	var CONTEXT_TEXT_LIMIT = 500;
 
 	function saveHistory( key, msgs ) {
 		try {
@@ -22,6 +24,22 @@
 		} catch ( e ) {
 			return null;
 		}
+	}
+
+	// Recent turns sent with each question so the server can treat a reply
+	// such as "the Tokyo one" as a follow-up to the previous question.
+	function buildConversationContext( msgs ) {
+		return msgs
+			.filter( function ( msg ) {
+				return ! msg.greeting && ( 'user' === msg.role || 'assistant' === msg.role ) && msg.text;
+			} )
+			.slice( -CONTEXT_TURNS )
+			.map( function ( msg ) {
+				return {
+					role: msg.role,
+					text: String( msg.text ).slice( 0, CONTEXT_TEXT_LIMIT )
+				};
+			} );
 	}
 
 	function openWidget( widget, shouldOpen ) {
@@ -96,10 +114,17 @@
 					saved.forEach( function ( msg ) {
 						addMessage( messages, msg.role, msg.text, msg.sources || [] );
 					} );
-					historyMessages = saved.slice();
+					historyMessages = saved.map( function ( msg, index ) {
+						// Histories saved before the greeting flag existed start with the greeting.
+						if ( 0 === index && 'assistant' === msg.role && msg.text === greeting ) {
+							msg.greeting = true;
+						}
+
+						return msg;
+					} );
 				} else {
 					addMessage( messages, 'assistant', greeting );
-					historyMessages.push( { role: 'assistant', text: greeting, sources: [] } );
+					historyMessages.push( { role: 'assistant', text: greeting, sources: [], greeting: true } );
 					saveHistory( storageKey, historyMessages );
 				}
 				hasGreeting = true;
@@ -158,6 +183,7 @@
 					return;
 				}
 
+				var context = buildConversationContext( historyMessages );
 				addMessage( messages, 'user', value );
 				historyMessages.push( { role: 'user', text: value, sources: [] } );
 				saveHistory( storageKey, historyMessages );
@@ -177,7 +203,8 @@
 							'Content-Type': 'application/json'
 						},
 						body: JSON.stringify( {
-							message: value
+							message: value,
+							history: context
 						} )
 					} );
 

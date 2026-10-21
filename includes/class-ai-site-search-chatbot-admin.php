@@ -832,7 +832,12 @@ final class AISite_Search_Chatbot_Admin {
 											</p>
 										<?php endif; ?>
 									</td>
-									<td><?php self::render_log_text_block( isset( $log['question'] ) ? (string) $log['question'] : '' ); ?></td>
+									<td>
+										<?php self::render_log_text_block( isset( $log['question'] ) ? (string) $log['question'] : '' ); ?>
+										<?php if ( ! empty( $log['original_question'] ) ) : ?>
+											<div class="aiscb-log-meta"><?php echo esc_html( sprintf( /* translators: %s: the follow-up message exactly as the visitor typed it. */ __( 'Follow-up input: %s', 'ai-site-search-chatbot' ), (string) $log['original_question'] ) ); ?></div>
+										<?php endif; ?>
+									</td>
 									<td><?php self::render_log_text_block( isset( $log['answer'] ) ? (string) $log['answer'] : '' ); ?></td>
 								</tr>
 							<?php endforeach; ?>
