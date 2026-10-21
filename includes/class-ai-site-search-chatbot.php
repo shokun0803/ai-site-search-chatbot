@@ -441,10 +441,10 @@ final class AISite_Search_Chatbot {
 		self::clear_usage_metrics_cache();
 
 		$daily_usage_table = self::get_daily_usage_table_name();
-		$wpdb->query( "DROP TABLE IF EXISTS {$daily_usage_table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$wpdb->query( $wpdb->prepare( 'DROP TABLE IF EXISTS %i', $daily_usage_table ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange -- removes the plugin's own table when its data is deleted.
 
 		$table_name = self::get_knowledge_base_table_name();
-		$wpdb->query( "DROP TABLE IF EXISTS {$table_name}" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$wpdb->query( $wpdb->prepare( 'DROP TABLE IF EXISTS %i', $table_name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange -- removes the plugin's own table when its data is deleted.
 
 		self::delete_plugin_transient_options();
 		delete_post_meta_by_key( self::SHORTCODE_TEXT_META_KEY );
@@ -971,9 +971,24 @@ final class AISite_Search_Chatbot {
 						},
 					),
 					'history' => array(
-						'required' => false,
-						'type'     => 'array',
-						'default'  => array(),
+						'required'          => false,
+						'type'              => 'array',
+						'default'           => array(),
+						'maxItems'          => 50,
+						'items'             => array(
+							'type'       => 'object',
+							'properties' => array(
+								'role' => array(
+									'type' => 'string',
+									'enum' => array( 'user', 'assistant' ),
+								),
+								'text' => array(
+									'type' => 'string',
+								),
+							),
+						),
+						'validate_callback' => 'rest_validate_request_arg',
+						'sanitize_callback' => array( __CLASS__, 'sanitize_conversation_history_arg' ),
 					),
 				),
 			)
@@ -1185,7 +1200,7 @@ final class AISite_Search_Chatbot {
 		global $wpdb;
 
 		$table_name = self::get_knowledge_base_table_name();
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table_name} WHERE id = %d", $id ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id = %d', $table_name, $id ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		if ( ! is_array( $row ) ) {
 			return array();
@@ -1223,15 +1238,15 @@ final class AISite_Search_Chatbot {
 		}
 
 		$where_sql = implode( ' AND ', $where_clauses );
-		$count_sql = "SELECT COUNT(*) FROM {$table_name} WHERE {$where_sql}"; // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name only, always parameterized below.
-		$list_sql = "SELECT * FROM {$table_name} WHERE {$where_sql} ORDER BY updated_at DESC LIMIT %d OFFSET %d"; // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name only, always parameterized below.
+		// $where_sql holds only fixed placeholder clauses; every value is in $params.
+		$count_sql = "SELECT COUNT(*) FROM %i WHERE {$where_sql}";
+		$list_sql = "SELECT * FROM %i WHERE {$where_sql} ORDER BY updated_at DESC LIMIT %d OFFSET %d";
+		$params = array_merge( array( $table_name ), $params );
 
-		$count_query = $wpdb->prepare( $count_sql, $params ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$total = (int) $wpdb->get_var( $count_query ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$total = (int) $wpdb->get_var( $wpdb->prepare( $count_sql, $params ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$params[] = $per_page;
 		$params[] = $offset;
-		$list_query = $wpdb->prepare( $list_sql, $params ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$rows = $wpdb->get_results( $list_query, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$rows = $wpdb->get_results( $wpdb->prepare( $list_sql, $params ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		return array(
 			'items' => array_map( array( __CLASS__, 'map_knowledge_base_row' ), is_array( $rows ) ? $rows : array() ),
@@ -1429,7 +1444,7 @@ final class AISite_Search_Chatbot {
 		global $wpdb;
 
 		$table_name = self::get_knowledge_base_table_name();
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table_name} WHERE export_uid = %s", sanitize_text_field( $export_uid ) ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE export_uid = %s', $table_name, sanitize_text_field( $export_uid ) ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		if ( ! is_array( $row ) ) {
 			return array();
@@ -1442,7 +1457,7 @@ final class AISite_Search_Chatbot {
 		global $wpdb;
 
 		$table_name = self::get_knowledge_base_table_name();
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table_name} WHERE question_fingerprint = %s ORDER BY updated_at DESC LIMIT 1", sanitize_text_field( $question_fingerprint ) ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE question_fingerprint = %s ORDER BY updated_at DESC LIMIT 1', $table_name, sanitize_text_field( $question_fingerprint ) ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		if ( ! is_array( $row ) ) {
 			return array();
@@ -1645,7 +1660,7 @@ final class AISite_Search_Chatbot {
 		}
 
 		$table_name = self::get_knowledge_base_table_name();
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id, source_post_ids FROM {$table_name} WHERE status = %s AND source_post_ids LIKE %s", 'approved', '%' . $wpdb->esc_like( (string) $post_id ) . '%' ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT id, source_post_ids FROM %i WHERE status = %s AND source_post_ids LIKE %s', $table_name, 'approved', '%' . $wpdb->esc_like( (string) $post_id ) . '%' ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$ids = array();
 
 		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
@@ -1982,7 +1997,7 @@ final class AISite_Search_Chatbot {
 		}
 
 		$table_name = self::get_knowledge_base_table_name();
-		$wpdb->query( $wpdb->prepare( "UPDATE {$table_name} SET use_count = use_count + 1, last_used_at = %s WHERE id = %d", current_time( 'mysql', true ), $id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query( $wpdb->prepare( 'UPDATE %i SET use_count = use_count + 1, last_used_at = %s WHERE id = %d', $table_name, current_time( 'mysql', true ), $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	}
 
 	private static function maybe_get_reusable_knowledge_base_entry( array $settings, string $message, array $results, ?AISCB_AI_Usage_Accumulator $usage_accumulator = null ): array {
@@ -2731,6 +2746,10 @@ final class AISite_Search_Chatbot {
 	 * context: only the latest few user/assistant turns are kept, each one is
 	 * stripped to plain text and capped in length.
 	 */
+	public static function sanitize_conversation_history_arg( $history ): array {
+		return self::sanitize_conversation_history( $history );
+	}
+
 	private static function sanitize_conversation_history( $history ): array {
 		if ( ! is_array( $history ) ) {
 			return array();
@@ -3162,14 +3181,16 @@ final class AISite_Search_Chatbot {
 					'hide_empty' => true,
 					'orderby'    => 'count',
 					'order'      => 'DESC',
-					'number'     => 50,
-					'exclude'    => array( (int) get_option( 'default_category' ) ),
+					'number'     => 51,
 				)
 			);
 
 			if ( is_array( $terms ) ) {
+				$default_category = (int) get_option( 'default_category' );
+
 				foreach ( $terms as $term ) {
-					if ( $term instanceof WP_Term ) {
+					// "Uncategorized" says nothing about the content.
+					if ( $term instanceof WP_Term && (int) $term->term_id !== $default_category ) {
 						$add_candidate( $term->name, 1 + (int) $term->count );
 					}
 				}
@@ -4035,7 +4056,7 @@ final class AISite_Search_Chatbot {
 		// Only placeholder scaffolding is concatenated; every value is passed through prepare().
 		$sql = "SELECT DISTINCT p.ID FROM {$wpdb->posts} p INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID WHERE p.post_type IN ({$type_placeholders}) AND p.post_status = 'publish' AND p.post_password = '' AND {$key_conditions['sql']} AND pm.meta_value LIKE %s ORDER BY p.post_date_gmt DESC LIMIT %d"; // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
-		return array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( $sql, $params ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery
+		return array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( $sql, $params ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery, PluginCheck.Security.DirectDB.UnescapedDBParameter
 	}
 
 	/**
@@ -4633,7 +4654,7 @@ final class AISite_Search_Chatbot {
 		self::clear_usage_metrics_cache();
 
 		$table_name = self::get_daily_usage_table_name();
-		$wpdb->query( "TRUNCATE TABLE {$table_name}" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$wpdb->query( $wpdb->prepare( 'TRUNCATE TABLE %i', $table_name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange -- clears the plugin's own usage table.
 	}
 
 	public static function maybe_flush_daily_usage_rollup(): void {
@@ -4853,7 +4874,8 @@ final class AISite_Search_Chatbot {
 		$now = current_time( 'mysql', true );
 		$existing_id = (int) $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT id FROM {$table_name} WHERE local_day_key = %s LIMIT 1",
+				'SELECT id FROM %i WHERE local_day_key = %s LIMIT 1',
+				$table_name,
 				$buffer['local_day_key']
 			)
 		);
@@ -4861,13 +4883,14 @@ final class AISite_Search_Chatbot {
 		if ( $existing_id > 0 ) {
 			$wpdb->query(
 				$wpdb->prepare(
-					"UPDATE {$table_name}
+					'UPDATE %i
 					SET requests_count = requests_count + %d,
 						input_tokens = input_tokens + %d,
 						output_tokens = output_tokens + %d,
 						total_tokens = total_tokens + %d,
 						updated_at = %s
-					WHERE id = %d",
+					WHERE id = %d',
+					$table_name,
 					$buffer['requests_count'],
 					$buffer['input_tokens'],
 					$buffer['output_tokens'],
@@ -4909,10 +4932,11 @@ final class AISite_Search_Chatbot {
 
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT local_day_key, day_start_utc, day_end_utc, requests_count, input_tokens, output_tokens, total_tokens
-				FROM {$table_name}
+				'SELECT local_day_key, day_start_utc, day_end_utc, requests_count, input_tokens, output_tokens, total_tokens
+				FROM %i
 				ORDER BY local_day_key DESC
-				LIMIT %d",
+				LIMIT %d',
+				$table_name,
 				$limit
 			),
 			ARRAY_A

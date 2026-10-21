@@ -44,7 +44,16 @@ Install and connect one of these provider plugins under **Settings > Connectors*
 
 = External services =
 
-This plugin does not call any third-party service directly. It sends chat requests to WordPress core's AI Client, which in turn calls the AI provider you have connected under **Settings > Connectors** (OpenAI, Anthropic, or Google), using the official provider plugin's own connection and API key. No API keys are stored or transmitted by this plugin. See the relevant provider's terms of service and privacy policy for details on how your visitors' questions are processed once sent to that provider:
+This plugin does not call any third-party service directly. It sends chat requests to WordPress core's AI Client, which in turn calls the AI provider you have connected under **Settings > Connectors** (OpenAI, Anthropic, or Google), using the official provider plugin's own connection and API key. No API keys are stored or transmitted by this plugin.
+
+Data is sent only when a visitor submits a question in the chat widget, or when an administrator runs the connection check, the admin chat test, or a chat log retry, and when a background check (WP-Cron) regenerates a Saved Knowledge Base entry whose source posts are no longer public. Each request can include:
+
+* The visitor's question and, for follow-up questions, the most recent earlier messages of the same conversation (up to the number set under Conversation History, 4 by default). The conversation is kept in the visitor's browser (localStorage) for up to 3 hours.
+* Titles, excerpts, and short text snippets of matching public posts, including text output by shortcodes and blocks and the values of any custom fields an administrator chose under Custom Fields to Search.
+* The site name, tagline, and a few public post titles, for general questions about the site.
+* For the Saved Knowledge Base, the question, the generated answer, and the matching search results, used to create or select reusable entries.
+
+Visitor IP addresses, cookies, and account details are not sent to the provider. See the relevant provider's terms of service and privacy policy for details on how your visitors' questions are processed once sent to that provider:
 
 * OpenAI: [https://openai.com/policies/](https://openai.com/policies/)
 * Anthropic: [https://www.anthropic.com/legal](https://www.anthropic.com/legal)
