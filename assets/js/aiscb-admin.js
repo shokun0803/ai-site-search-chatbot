@@ -91,6 +91,21 @@
 	}
 
 	document.addEventListener( 'DOMContentLoaded', function () {
+		// Reset/keep actions for the system prompt are plain buttons, not submit
+		// buttons, so pressing Enter in another field never triggers them.
+		document.querySelectorAll( '.aiscb-system-prompt-action' ).forEach( function ( button ) {
+			button.addEventListener( 'click', function () {
+				var form = button.closest( 'form' );
+				var flag = document.createElement( 'input' );
+
+				flag.type = 'hidden';
+				flag.name = 'aiscb_settings[' + button.dataset.action + ']';
+				flag.value = '1';
+				form.appendChild( flag );
+				form.requestSubmit();
+			} );
+		} );
+
 		if ( 'undefined' === typeof AISCBAdmin ) {
 			return;
 		}

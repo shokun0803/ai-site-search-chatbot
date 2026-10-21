@@ -1505,3 +1505,43 @@ msgstr "会話履歴"
 #, php-format
 msgid "Number of earlier chat messages sent to the AI so follow-up questions keep their context. A visitor question and an assistant answer each count as one message, so 4 covers the last two exchanges. Allowed range: %1$d to %2$d. Each message can add up to about 650 input tokens to a follow-up question because it is sent to both the search and the answer requests, so higher values cost more."
 msgstr "続けての質問で前の内容を引き継ぐために、AI に送る直前の会話のメッセージ数です。訪問者の質問とアシスタントの回答をそれぞれ 1 件と数えるため、4 で直近 2 往復分になります。設定できる範囲は %1$d〜%2$d です。1 件ごとに、続けての質問 1 回あたり最大で約 650 入力トークン増えます（検索用と回答用の両方のリクエストに送られるため）。大きくするほど費用がかかります。"
+
+#: includes/class-ai-site-search-chatbot.php:552
+msgid "You are a public website assistant. Answer only from the provided site search results. If the answer is not present, say so clearly and suggest related pages."
+msgstr "あなたは公開ウェブサイトのアシスタントです。提供されたサイト検索結果からのみ回答してください。答えが存在しない場合は、明確にそう伝え、関連ページを案内してください。"
+
+#: includes/class-ai-site-search-chatbot.php:553
+msgid "You are a WordPress site search assistant. Answer the visitor using only the provided site search results. Give a concise, helpful answer based on the most relevant result snippets. If the answer is not clearly present in the results, say that you could not find enough information in the site search results, do not guess, and suggest a relevant page or search keyword."
+msgstr "あなたは WordPress サイト内検索アシスタントです。提供されたサイト検索結果だけを使って利用者に回答してください。最も関連性の高い結果の抜粋をもとに、簡潔で分かりやすい回答を返してください。結果内に答えが明確に見つからない場合は、サイト内検索結果だけでは十分な情報が見つからなかったと明示し、推測で補わず、関連するページや検索キーワードを案内してください。"
+
+#: includes/class-ai-site-search-chatbot-admin.php:289
+msgid "The default system prompt was improved in a plugin update. Your customized prompt has been kept unchanged. Review the new default below and choose whether to switch to it."
+msgstr "プラグインの更新でデフォルトのシステムプロンプトが改善されました。カスタマイズしたプロンプトはそのまま保持しています。新しいデフォルトを確認し、切り替えるかどうかを選んでください。"
+
+#: includes/class-ai-site-search-chatbot-admin.php:291
+msgid "Show the new default prompt"
+msgstr "新しいデフォルトのプロンプトを表示"
+
+#: includes/class-ai-site-search-chatbot-admin.php:295
+msgid "Switch to the new default"
+msgstr "新しいデフォルトに切り替える"
+
+#: includes/class-ai-site-search-chatbot-admin.php:296
+msgid "Keep my prompt"
+msgstr "今のプロンプトを使い続ける"
+
+#: includes/class-ai-site-search-chatbot-admin.php:298
+msgid "Either button also saves the other settings on this screen."
+msgstr "どちらのボタンを押しても、この画面のほかの設定も一緒に保存されます。"
+
+#: includes/class-ai-site-search-chatbot-admin.php:305
+msgid "Status: customized. Plugin updates do not change this prompt."
+msgstr "状態: カスタマイズ済み。プラグインを更新してもこのプロンプトは変わりません。"
+
+#: includes/class-ai-site-search-chatbot-admin.php:306
+msgid "Reset to default"
+msgstr "デフォルトに戻す"
+
+#: includes/class-ai-site-search-chatbot-admin.php:309
+msgid "Status: default. The prompt is updated automatically when the plugin improves it. Editing the text above makes it a customized prompt."
+msgstr "状態: デフォルト。プラグインの更新でプロンプトが改善されると自動的に反映されます。上の文章を編集するとカスタマイズしたプロンプトになります。"

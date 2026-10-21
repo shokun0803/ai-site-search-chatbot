@@ -283,8 +283,31 @@ final class AISite_Search_Chatbot_Admin {
 					<tr>
 						<th scope="row"><label for="aiscb_system_prompt"><?php echo esc_html( __( 'System Prompt', 'ai-site-search-chatbot' ) ); ?></label></th>
 						<td>
+							<?php $is_custom_system_prompt = '' !== AISite_Search_Chatbot::get_custom_system_prompt(); ?>
+							<?php if ( AISite_Search_Chatbot::should_notify_system_prompt_update() ) : ?>
+								<div class="notice notice-info inline aiscb-system-prompt-update">
+									<p><?php echo esc_html( __( 'The default system prompt was improved in a plugin update. Your customized prompt has been kept unchanged. Review the new default below and choose whether to switch to it.', 'ai-site-search-chatbot' ) ); ?></p>
+									<details>
+										<summary><?php echo esc_html( __( 'Show the new default prompt', 'ai-site-search-chatbot' ) ); ?></summary>
+										<p class="aiscb-system-prompt-default"><?php echo esc_html( AISite_Search_Chatbot::get_default_system_prompt() ); ?></p>
+									</details>
+									<p>
+										<button type="button" class="button button-primary aiscb-system-prompt-action" data-action="system_prompt_reset"><?php echo esc_html( __( 'Switch to the new default', 'ai-site-search-chatbot' ) ); ?></button>
+										<button type="button" class="button aiscb-system-prompt-action" data-action="system_prompt_keep"><?php echo esc_html( __( 'Keep my prompt', 'ai-site-search-chatbot' ) ); ?></button>
+									</p>
+									<p class="description"><?php echo esc_html( __( 'Either button also saves the other settings on this screen.', 'ai-site-search-chatbot' ) ); ?></p>
+								</div>
+							<?php endif; ?>
 							<textarea class="large-text" rows="7" id="aiscb_system_prompt" name="<?php echo esc_attr( AISite_Search_Chatbot::OPTION_KEY ); ?>[system_prompt]"><?php echo esc_textarea( $settings['system_prompt'] ); ?></textarea>
 							<p class="description"><?php echo esc_html( __( 'The system prompt that instructs the AI on how to behave.', 'ai-site-search-chatbot' ) ); ?></p>
+							<?php if ( $is_custom_system_prompt ) : ?>
+								<p class="description">
+									<?php echo esc_html( __( 'Status: customized. Plugin updates do not change this prompt.', 'ai-site-search-chatbot' ) ); ?>
+									<button type="button" class="button button-small aiscb-system-prompt-action" data-action="system_prompt_reset"><?php echo esc_html( __( 'Reset to default', 'ai-site-search-chatbot' ) ); ?></button>
+								</p>
+							<?php else : ?>
+								<p class="description"><?php echo esc_html( __( 'Status: default. The prompt is updated automatically when the plugin improves it. Editing the text above makes it a customized prompt.', 'ai-site-search-chatbot' ) ); ?></p>
+							<?php endif; ?>
 						</td>
 					</tr>
 					<tr>
