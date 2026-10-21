@@ -5,7 +5,7 @@
  * Version: 1.3.0
  * Requires at least: 7.0
  * Requires PHP: 8.1
- * Author: GitHub Copilot, shokun0803
+ * Author: shokun0803
  * Text Domain: ai-site-search-chatbot
  * Domain Path: /languages
  * License: GPLv2 or later

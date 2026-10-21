@@ -31,8 +31,8 @@ msgstr "サイト内を検索し、WordPress の設定 > コネクタで接続�
 
 #. Author of the plugin
 #: ai-site-search-chatbot.php
-msgid "GitHub Copilot, shokun0803"
-msgstr "GitHub Copilot, shokun0803"
+msgid "shokun0803"
+msgstr "shokun0803"
 
 #: includes/class-ai-site-search-chatbot-admin.php:29
 msgid "AI Site Search Chatbot - Saved Knowledge Base"
