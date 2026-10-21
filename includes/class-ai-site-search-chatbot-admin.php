@@ -313,6 +313,16 @@ final class AISite_Search_Chatbot_Admin {
 						</td>
 					</tr>
 					<tr>
+						<th scope="row"><?php echo esc_html( __( 'Shortcode and Block Output', 'ai-site-search-chatbot' ) ); ?></th>
+						<td>
+							<label for="aiscb_search_shortcode_output">
+								<input type="checkbox" id="aiscb_search_shortcode_output" name="<?php echo esc_attr( AISite_Search_Chatbot::OPTION_KEY ); ?>[search_shortcode_output]" value="1" <?php checked( ! empty( $settings['search_shortcode_output'] ) ); ?> />
+								<?php echo esc_html( __( 'Search the text that shortcodes and plugin dynamic blocks output', 'ai-site-search-chatbot' ) ); ?>
+							</label>
+							<p class="description"><?php echo esc_html( sprintf( /* translators: 1: number of posts checked, 2: number of posts expanded per search, 3: cache lifetime in hours. */ __( 'The standard WordPress search only sees the shortcode tag or block markup itself, so text that a shortcode or a plugin block outputs cannot be found. When enabled, the newest %1$d published posts that contain shortcodes or plugin dynamic blocks are expanded and searched. To keep searches fast, at most %2$d posts are expanded per search and the expanded text is cached for up to %3$d hours or until the post is updated. Turn this off if your site uses many heavy shortcodes or blocks and chatbot replies become slow.', 'ai-site-search-chatbot' ), AISite_Search_Chatbot::SHORTCODE_SEARCH_CANDIDATE_LIMIT, AISite_Search_Chatbot::SHORTCODE_RENDERS_PER_REQUEST, (int) ( AISite_Search_Chatbot::SHORTCODE_TEXT_TTL / HOUR_IN_SECONDS ) ) ); ?></p>
+						</td>
+					</tr>
+					<tr>
 						<th scope="row"><label for="aiscb_ai_limit_window_10m"><?php echo esc_html( __( 'AI Reply Limit (10 minutes)', 'ai-site-search-chatbot' ) ); ?></label></th>
 						<td>
 							<input type="number" min="1" max="30" id="aiscb_ai_limit_window_10m" name="<?php echo esc_attr( AISite_Search_Chatbot::OPTION_KEY ); ?>[ai_limit_window_10m]" value="<?php echo esc_attr( (string) absint( $settings['ai_limit_window_10m'] ) ); ?>" />

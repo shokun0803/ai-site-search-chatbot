@@ -123,6 +123,11 @@ final class AISite_Search_Chatbot {
 	const CONVERSATION_HISTORY_TEXT_LIMIT = 500;
 	const SEARCH_SUGGESTION_POOL_TRANSIENT = 'aiscb_search_suggestion_pool';
 	const META_TEXT_LIMIT = 2000;
+	const SHORTCODE_TEXT_META_KEY = '_aiscb_shortcode_text';
+	const SHORTCODE_TEXT_TTL = 12 * HOUR_IN_SECONDS;
+	const SHORTCODE_TEXT_LIMIT = 20000;
+	const SHORTCODE_SEARCH_CANDIDATE_LIMIT = 100;
+	const SHORTCODE_RENDERS_PER_REQUEST = 10;
 	const CHAT_LOG_RETRYABLE_STATUSES = array(
 		'fallback-no-config',
 		'fallback-no-results',
@@ -431,6 +436,7 @@ final class AISite_Search_Chatbot {
 		$wpdb->query( "DROP TABLE IF EXISTS {$table_name}" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
 		self::delete_plugin_transient_options();
+		delete_post_meta_by_key( self::SHORTCODE_TEXT_META_KEY );
 	}
 
 	public static function clear_plugin_transients(): void {
@@ -475,6 +481,7 @@ final class AISite_Search_Chatbot {
 			'system_prompt'       => self::get_default_system_prompt(),
 			'max_sources'         => 5,
 			'search_meta_keys'    => array(),
+			'search_shortcode_output' => 1,
 			'ai_limit_window_10m' => 8,
 			'ai_limit_window_1h'  => 24,
 			'ai_limit_global_daily' => 500,
@@ -660,6 +667,7 @@ final class AISite_Search_Chatbot {
 			'system_prompt'       => isset( $input['system_prompt'] ) ? sanitize_textarea_field( wp_unslash( $input['system_prompt'] ) ) : $defaults['system_prompt'],
 			'max_sources'         => isset( $input['max_sources'] ) ? max( 1, min( 10, absint( $input['max_sources'] ) ) ) : $defaults['max_sources'],
 			'search_meta_keys'    => isset( $input['search_meta_keys'] ) ? self::sanitize_search_meta_keys( wp_unslash( $input['search_meta_keys'] ) ) : $defaults['search_meta_keys'],
+			'search_shortcode_output' => isset( $input['search_shortcode_output'] ) ? 1 : 0,
 			'ai_limit_window_10m' => isset( $input['ai_limit_window_10m'] ) ? max( 1, min( 30, absint( $input['ai_limit_window_10m'] ) ) ) : $defaults['ai_limit_window_10m'],
 			'ai_limit_window_1h'  => isset( $input['ai_limit_window_1h'] ) ? max( 1, min( 100, absint( $input['ai_limit_window_1h'] ) ) ) : $defaults['ai_limit_window_1h'],
 			'ai_limit_global_daily' => isset( $input['ai_limit_global_daily'] ) ? max( 0, min( 100000, absint( $input['ai_limit_global_daily'] ) ) ) : $defaults['ai_limit_global_daily'],
@@ -3276,7 +3284,11 @@ final class AISite_Search_Chatbot {
 				)
 			);
 
-			$posts = array_merge( $query->posts, array_map( 'get_post', self::search_post_ids_by_meta( $query_string, $post_types ) ) );
+			$posts = array_merge(
+				$query->posts,
+				array_map( 'get_post', self::search_post_ids_by_meta( $query_string, $post_types ) ),
+				array_map( 'get_post', self::search_post_ids_by_shortcode_output( $query_string, $post_types ) )
+			);
 
 			foreach ( $posts as $post ) {
 				if ( ! $post instanceof WP_Post ) {
@@ -3998,6 +4010,139 @@ final class AISite_Search_Chatbot {
 		}
 
 		return array();
+	}
+
+	/**
+	 * WordPress search only sees the raw "[shortcode]" tag or block comment,
+	 * so text that a shortcode or a plugin's dynamic block outputs cannot be
+	 * found by it. Posts containing a registered shortcode or a dynamic block
+	 * from a plugin are expanded and matched here instead.
+	 *
+	 * To keep searches fast, the expanded text is cached in post meta and only
+	 * re-rendered when the post changes or the cache is older than
+	 * SHORTCODE_TEXT_TTL, at most SHORTCODE_RENDERS_PER_REQUEST posts are
+	 * rendered per request, and only the newest SHORTCODE_SEARCH_CANDIDATE_LIMIT
+	 * posts with shortcodes are considered.
+	 */
+	private static function search_post_ids_by_shortcode_output( string $query_string, array $post_types ): array {
+		$terms = array_filter( (array) preg_split( '/\s+/u', trim( $query_string ) ) );
+
+		if ( empty( $terms ) ) {
+			return array();
+		}
+
+		$matched = array();
+
+		foreach ( self::get_shortcode_search_texts( $post_types ) as $post_id => $text ) {
+			foreach ( $terms as $term ) {
+				if ( false === ( function_exists( 'mb_stripos' ) ? mb_stripos( $text, $term, 0, 'UTF-8' ) : stripos( $text, $term ) ) ) {
+					continue 2;
+				}
+			}
+
+			$matched[] = (int) $post_id;
+
+			if ( count( $matched ) >= 10 ) {
+				break;
+			}
+		}
+
+		return $matched;
+	}
+
+	private static function get_shortcode_search_texts( array $post_types ): array {
+		static $texts_by_types = array();
+
+		$settings = self::get_settings();
+
+		if ( empty( $settings['search_shortcode_output'] ) || empty( $post_types ) ) {
+			return array();
+		}
+
+		$cache_key = implode( ',', $post_types );
+
+		if ( isset( $texts_by_types[ $cache_key ] ) ) {
+			return $texts_by_types[ $cache_key ];
+		}
+
+		global $wpdb;
+
+		$type_placeholders = implode( ', ', array_fill( 0, count( $post_types ), '%s' ) );
+		// Core blocks are serialized without a namespace ("<!-- wp:paragraph"),
+		// so a "namespace/name" block comment identifies a plugin block.
+		$params = array_merge( $post_types, array( '%' . $wpdb->esc_like( '[' ) . '%', '<!-- wp:[a-z0-9-]+/[a-z0-9-]+', self::SHORTCODE_SEARCH_CANDIDATE_LIMIT ) );
+		// Only placeholder scaffolding is concatenated; every value is passed through prepare().
+		$sql = "SELECT ID FROM {$wpdb->posts} WHERE post_type IN ({$type_placeholders}) AND post_status = 'publish' AND post_password = '' AND ( post_content LIKE %s OR post_content REGEXP %s ) ORDER BY post_date_gmt DESC LIMIT %d"; // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$post_ids = array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( $sql, $params ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery
+
+		if ( ! empty( $post_ids ) ) {
+			_prime_post_caches( $post_ids, false, true );
+		}
+
+		$texts = array();
+		$renders_left = self::SHORTCODE_RENDERS_PER_REQUEST;
+
+		foreach ( $post_ids as $post_id ) {
+			$post = get_post( $post_id );
+
+			if ( ! $post instanceof WP_Post || ! self::content_has_dynamic_output( (string) $post->post_content ) ) {
+				continue;
+			}
+
+			$cached = get_post_meta( $post_id, self::SHORTCODE_TEXT_META_KEY, true );
+			$is_fresh = is_array( $cached )
+				&& isset( $cached['modified'], $cached['rendered_at'], $cached['text'] )
+				&& $cached['modified'] === $post->post_modified_gmt
+				&& ( time() - (int) $cached['rendered_at'] ) < self::SHORTCODE_TEXT_TTL;
+
+			if ( ! $is_fresh && $renders_left > 0 ) {
+				$renders_left--;
+				$text = trim( preg_replace( '/\s+/u', ' ', self::render_post_content_text( $post ) ) );
+
+				if ( self::unicode_length( $text ) > self::SHORTCODE_TEXT_LIMIT ) {
+					$text = function_exists( 'mb_substr' ) ? mb_substr( $text, 0, self::SHORTCODE_TEXT_LIMIT, 'UTF-8' ) : substr( $text, 0, self::SHORTCODE_TEXT_LIMIT );
+				}
+
+				$cached = array(
+					'modified'    => $post->post_modified_gmt,
+					'rendered_at' => time(),
+					'text'        => $text,
+				);
+				update_post_meta( $post_id, self::SHORTCODE_TEXT_META_KEY, $cached );
+			}
+
+			// A stale copy is still better than skipping the post; it is
+			// refreshed on a later request once the render budget allows.
+			if ( is_array( $cached ) && ! empty( $cached['text'] ) ) {
+				$texts[ $post_id ] = (string) $cached['text'];
+			}
+		}
+
+		$texts_by_types[ $cache_key ] = $texts;
+
+		return $texts;
+	}
+
+	private static function content_has_dynamic_output( string $content ): bool {
+		if ( false !== strpos( $content, '[' ) && preg_match( '/' . get_shortcode_regex() . '/', $content ) ) {
+			return true;
+		}
+
+		if ( ! preg_match_all( '#<!-- wp:([a-z0-9-]+/[a-z0-9-]+)#', $content, $matches ) ) {
+			return false;
+		}
+
+		$registry = WP_Block_Type_Registry::get_instance();
+
+		foreach ( array_unique( $matches[1] ) as $block_name ) {
+			$block_type = $registry->get_registered( $block_name );
+
+			if ( $block_type && $block_type->is_dynamic() ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	private static function search_site_content_by_like_matching( array $queries, array $post_types ): array {

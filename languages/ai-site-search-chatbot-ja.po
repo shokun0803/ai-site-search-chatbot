@@ -1481,3 +1481,17 @@ msgstr "このサイトで使われているカスタムフィールドのキー
 msgid "(%d post)"
 msgid_plural "(%d posts)"
 msgstr[0] "（%d 件）"
+
+#: includes/class-ai-site-search-chatbot-admin.php:316
+msgid "Shortcode and Block Output"
+msgstr "ショートコードとブロックの出力"
+
+#: includes/class-ai-site-search-chatbot-admin.php:320
+msgid "Search the text that shortcodes and plugin dynamic blocks output"
+msgstr "ショートコードとプラグインの動的ブロックが出力する文章も検索する"
+
+#. translators: 1: number of posts checked, 2: number of posts expanded per search, 3: cache lifetime in hours.
+#: includes/class-ai-site-search-chatbot-admin.php:322
+#, php-format
+msgid "The standard WordPress search only sees the shortcode tag or block markup itself, so text that a shortcode or a plugin block outputs cannot be found. When enabled, the newest %1$d published posts that contain shortcodes or plugin dynamic blocks are expanded and searched. To keep searches fast, at most %2$d posts are expanded per search and the expanded text is cached for up to %3$d hours or until the post is updated. Turn this off if your site uses many heavy shortcodes or blocks and chatbot replies become slow."
+msgstr "WordPress 標準の検索はショートコードのタグやブロックの記述そのものしか見ないため、ショートコードやプラグインのブロックが出力する文章では見つかりません。有効にすると、ショートコードまたはプラグインの動的ブロックを含む公開済みの投稿のうち新しい順に %1$d 件を展開して検索します。検索が重くならないよう、1 回の検索で展開するのは最大 %2$d 件までで、展開した文章は最大 %3$d 時間、または投稿が更新されるまでキャッシュします。重いショートコードやブロックを多用していて回答が遅くなる場合はオフにしてください。"
