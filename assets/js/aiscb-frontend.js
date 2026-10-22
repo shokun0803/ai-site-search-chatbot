@@ -2,21 +2,28 @@
 	var HISTORY_TTL = 3 * 60 * 60 * 1000; // 3 hours
 	var CONTEXT_TEXT_LIMIT = 500;
 
+	// sessionStorage keeps the conversation across page navigation in the same
+	// tab but drops it when the tab or browser is closed.
 	function saveHistory( key, msgs ) {
 		try {
-			localStorage.setItem( key, JSON.stringify( { ts: Date.now(), messages: msgs } ) );
+			sessionStorage.setItem( key, JSON.stringify( { ts: Date.now(), messages: msgs } ) );
 		} catch ( e ) {}
 	}
 
 	function loadHistory( key ) {
 		try {
-			var raw = localStorage.getItem( key );
+			// Histories saved by earlier versions in localStorage outlived the browser session.
+			localStorage.removeItem( key );
+		} catch ( e ) {}
+
+		try {
+			var raw = sessionStorage.getItem( key );
 			if ( ! raw ) {
 				return null;
 			}
 			var data = JSON.parse( raw );
 			if ( Date.now() - data.ts > HISTORY_TTL ) {
-				localStorage.removeItem( key );
+				sessionStorage.removeItem( key );
 				return null;
 			}
 			return data.messages;

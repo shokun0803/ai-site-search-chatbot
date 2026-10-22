@@ -19,16 +19,26 @@ final class AISite_Search_Chatbot_Frontend {
 			'aiscb-frontend',
 			plugins_url( 'assets/css/aiscb-frontend.css', AISCB_FILE ),
 			array(),
-			AISite_Search_Chatbot::VERSION
+			self::asset_version( 'assets/css/aiscb-frontend.css' )
 		);
 
 		wp_register_script(
 			'aiscb-frontend',
 			plugins_url( 'assets/js/aiscb-frontend.js', AISCB_FILE ),
 			array(),
-			AISite_Search_Chatbot::VERSION,
+			self::asset_version( 'assets/js/aiscb-frontend.js' ),
 			true
 		);
+	}
+
+	/**
+	 * Adds the file's modification time to the plugin version so browsers
+	 * fetch an edited asset instead of reusing a cached copy.
+	 */
+	private static function asset_version( string $relative_path ): string {
+		$mtime = filemtime( plugin_dir_path( AISCB_FILE ) . $relative_path );
+
+		return false === $mtime ? AISite_Search_Chatbot::VERSION : AISite_Search_Chatbot::VERSION . '.' . $mtime;
 	}
 
 	public static function render_shortcode( $atts = array() ): string {
