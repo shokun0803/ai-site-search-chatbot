@@ -108,7 +108,7 @@ final class AISCB_AI_Usage_Accumulator {
 }
 
 final class AISite_Search_Chatbot {
-	const VERSION = '1.3.0';
+	const VERSION = '1.3.1';
 	const TOKEN_ESTIMATION_VERSION = 'char-mix-v1';
 	const OPTION_KEY = 'aiscb_settings';
 	const OPTION_GROUP = 'aiscb_settings_group';

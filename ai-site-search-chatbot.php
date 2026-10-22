@@ -2,7 +2,7 @@
 /**
  * Plugin Name: AI Site Search Chatbot
  * Description: Provides a public chatbot that searches site content and can answer visitors with an AI provider connected through WordPress Settings > Connectors.
- * Version: 1.3.0
+ * Version: 1.3.1
  * Requires at least: 7.0
  * Requires PHP: 8.1
  * Author: shokun0803

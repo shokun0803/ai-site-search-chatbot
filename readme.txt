@@ -4,7 +4,7 @@ Tags: chatbot, ai, search, faq, gutenberg
 Requires at least: 7.0
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.3.0
+Stable tag: 1.3.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -48,7 +48,7 @@ This plugin does not call any third-party service directly. It sends chat reques
 
 Data is sent only when a visitor submits a question in the chat widget, or when an administrator runs the connection check, the admin chat test, or a chat log retry, and when a background check (WP-Cron) regenerates a Saved Knowledge Base entry whose source posts are no longer public. Each request can include:
 
-* The visitor's question and, for follow-up questions, the most recent earlier messages of the same conversation (up to the number set under Conversation History, 4 by default). The conversation is kept in the visitor's browser (localStorage) for up to 3 hours.
+* The visitor's question and, for follow-up questions, the most recent earlier messages of the same conversation (up to the number set under Conversation History, 4 by default). The conversation is kept in the visitor's browser tab (sessionStorage) for up to 3 hours and is removed when the tab or browser is closed.
 * Titles, excerpts, and short text snippets of matching public posts, including text output by shortcodes and blocks and the values of any custom fields an administrator chose under Custom Fields to Search.
 * The site name, tagline, and a few public post titles, for general questions about the site.
 * For the Saved Knowledge Base, the question, the generated answer, and the matching search results, used to create or select reusable entries.
@@ -107,6 +107,14 @@ Use the `[ai_site_search_chatbot]` shortcode, or add the AI Site Search Chatbot 
 3. Saved Knowledge Base review screen with approval status and CSV export/import.
 
 == Changelog ==
+
+= 1.3.1 =
+* Chat history is now kept in sessionStorage instead of localStorage, so a conversation is no longer restored after the browser is closed and reopened or in a new tab. It is still restored when moving between pages in the same tab. Histories left in localStorage by earlier versions are removed.
+* The frontend script and stylesheet URLs now include the file modification time, so browsers load updated files instead of cached copies.
+* Custom table names in SQL queries now use the %i identifier placeholder, including in uninstall.
+* The chat endpoint now validates the conversation history argument with a schema and rejects malformed values.
+* The External services section now explains in more detail when data is sent and what it includes.
+* The plugin author is now listed as shokun0803.
 
 = 1.3.0 =
 * Follow-up questions now keep the conversation. The widget sends the most recent messages with each question, and the existing AI routing call decides whether the message continues the earlier question (for example answering "which month?") and rewrites it into a standalone question used for search, caching, saved knowledge, and logs. The admin log shows the visitor's original input as "Follow-up input". No extra AI calls are made.
@@ -197,6 +205,9 @@ Use the `[ai_site_search_chatbot]` shortcode, or add the AI Site Search Chatbot 
 * Added general site-guidance answers, an admin chat log viewer, AI reply rate limits, the Google Gemini provider, and Gutenberg block support.
 
 == Upgrade Notice ==
+
+= 1.3.1 =
+Chat conversations are no longer restored after the browser is closed. No settings changes are required.
 
 = 1.3.0 =
 Adds follow-up questions, verified re-search suggestions, custom field and shortcode search, and makes the default system prompt follow updates. Custom field search is off until you list field keys; existing customized system prompts are kept.
